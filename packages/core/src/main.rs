@@ -11,8 +11,8 @@ async fn main() {
         .route("/", get(|| async { "Hello, Stellar Explain!" }))
         .route("/health", get(health_check));
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.expect("Failed to bind to address");
+    axum::serve(listener, app).await.expect("Server error"); 
 }
 
 async fn health_check() -> Json<Value> {
