@@ -1,7 +1,8 @@
 use serde::Deserialize;
+use schemars::JsonSchema;
 
 /// Base transaction type
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct Transaction {
     pub id: String,
     pub successful: bool,
@@ -12,7 +13,7 @@ pub struct Transaction {
 }
 
 /// Payment operation
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct Payment {
     #[serde(rename = "type")]
     pub kind: String,
@@ -23,7 +24,7 @@ pub struct Payment {
 }
 
 /// Account creation operation
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct AccountCreation {
     #[serde(rename = "type")]
     pub kind: String,
