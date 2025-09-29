@@ -1,4 +1,4 @@
-use crate::models::transaction::{Operation, Transaction};
+use crate::models::transaction::{Operation, TransactionWithOperations, Transaction};
 use serde::Serialize;
 
 impl Operation {
@@ -20,9 +20,17 @@ pub struct TxResponse {
     pub explained: Vec<String>,
 }
 
-impl From<Transaction> for TxResponse {
-    fn from(tx: Transaction) -> Self {
+impl From<TransactionWithOperations> for TxResponse {
+    fn from(tx: TransactionWithOperations) -> Self {
         let explained = tx.operations.iter().map(|op| op.explain()).collect();
-        TxResponse { raw: tx, explained }
+        let raw = Transaction {
+            id: tx.id,
+            successful: tx.successful,
+            source_account: tx.source_account,
+            fee_charged: tx.fee_charged,
+            operation_count: tx.operation_count,
+            envelope_xdr: tx.envelope_xdr,
+        };
+        TxResponse { raw, explained }
     }
 }
