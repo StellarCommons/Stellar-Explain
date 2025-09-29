@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "type")]
 pub enum Operation {
     #[serde(rename = "payment")]
@@ -15,6 +15,28 @@ pub enum Operation {
         funder: String,
         new_account: String,
         starting_balance: String,
+    },
+    #[serde(rename = "change_trust")]
+    ChangeTrust {
+        account: String,
+        asset: String,
+        limit: String,
+    },
+    #[serde(rename = "manage_offer")]
+    ManageOffer {
+        seller: String,
+        selling: String,
+        buying: String,
+        amount: String,
+        price: String,
+    },
+    #[serde(rename = "path_payment")]
+    PathPayment {
+        from: String,
+        to: String,
+        dest_asset: String,
+        dest_amount: String,
+        path: Vec<String>,
     },
 }
 
