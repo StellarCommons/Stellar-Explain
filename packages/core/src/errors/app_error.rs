@@ -14,6 +14,8 @@ pub struct ErrorResponse {
 pub enum AppError {
     NotFound(String),
     Internal(String),
+    InvalidInput(String),
+    HorizonError,
 }
 
 impl IntoResponse for AppError {
@@ -26,6 +28,18 @@ impl IntoResponse for AppError {
             AppError::Internal(msg) => {
                 let body = Json(ErrorResponse { error: msg });
                 (StatusCode::INTERNAL_SERVER_ERROR, body).into_response()
+            }
+            AppError::InvalidInput(msg) => {
+                let body = Json(ErrorResponse {
+                    error: format!("Invalid Transaction Hash: {msg}"),
+                });
+                (StatusCode::BAD_REQUEST, body).into_response()
+            }
+            AppError::HorizonError => {
+                let body = Json(ErrorResponse {
+                    error: "The transaction failed when submitted to the stellar network.",
+                });
+                (StatusCode::BAD_REQUEST, body).into_response()
             }
         }
     }

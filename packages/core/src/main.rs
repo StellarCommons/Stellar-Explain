@@ -12,6 +12,13 @@ use std::env;
 use log::info;
 use env_logger;
 
+// Import the models module to access Transaction and explanation types
+mod models;
+// Import Transaction struct for deserializing Horizon API responses
+use models::transaction::Transaction;
+// Import TxResponse struct that contains both raw transaction and human-readable explanations
+use models::explain::TxResponse;
+
 #[tokio::main]
 async fn main() {
     // Initialize logger
@@ -105,7 +112,6 @@ async fn fetch_account(account_id: &str) -> Result<Value, reqwest::Error> {
     let ops_resp = client.get(&ops_url).send().await?;
     let ops_json: Value = ops_resp.json().await?;
 
-    // Build response JSON
     let result = json!({
         "balances": account_json.get("balances").unwrap_or(&json!([])),
         "recent_operations": ops_json.get("_embedded").and_then(|e| e.get("records")).unwrap_or(&json!([])),
@@ -176,8 +182,7 @@ async fn fetch_transaction(hash: &str) -> Result<Value, reqwest::Error> {
     let url = format!("{}/transactions/{}", horizon_url, hash);
     let client = Client::builder().build()?;
     let resp = client.get(&url).send().await?;
-    // Forward the JSON body as-is
-    let json_val = resp.json::<Value>().await?;
-    Ok(json_val)
+    // Deserialize response directly into Transaction struct instead of generic Value
+    let tx = resp.json::<Transaction>().await?;
+    Ok(tx)
 }
-
