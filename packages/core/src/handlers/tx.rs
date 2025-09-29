@@ -1,9 +1,15 @@
 use axum::{extract::Path, Json};
 use crate::models::transaction::{Operation, Transaction};
 use crate::services::explain::TxResponse;
+use crate::errors::AppError;
 
-pub async fn get_transaction(Path(hash): Path<String>) -> Json<TxResponse> {
-    // Mocked data for now (later you can fetch from Horizon API)
+pub async fn get_transaction(Path(hash): Path<String>) -> Result<Json<TxResponse>, AppError> {
+    // Simulated fetch
+    if hash == "invalid" {
+        return Err(AppError::NotFound("Transaction not found".into()));
+    }
+
+    // Example mock transaction (replace with Horizon API later)
     let tx = Transaction {
         hash: hash.clone(),
         source_account: "Alice".into(),
@@ -17,5 +23,5 @@ pub async fn get_transaction(Path(hash): Path<String>) -> Json<TxResponse> {
         ],
     };
 
-    Json(TxResponse::from(tx))
+    Ok(Json(TxResponse::from(tx)))
 }
