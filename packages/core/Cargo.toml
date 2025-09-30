@@ -16,3 +16,6 @@ schemars = "0.8"
 jsonschema = "0.16"
 jsonschema = "0.16"
 
+# Per-IP rate limiting middleware for Tower/Axum
+tower-governor = { version = "0.5", default-features = false, features = ["axum"] }
+

@@ -5,6 +5,7 @@ use axum::{
     Router,
     Json,
 };
+use tower_governor::{GovernorLayer, governor::GovernorConfigBuilder};
 use serde_json::{json, Value};
 use reqwest::Client;
 
@@ -17,11 +18,18 @@ use models::explain::TxResponse;
 
 #[tokio::main]
 async fn main() {
+    // Configure per-IP rate limiting: 60 requests per minute
+    let governor_conf = GovernorConfigBuilder::default()
+        .per_minute(60)
+        .finish()
+        .expect("invalid governor config");
+
     let app = Router::new()
         .route("/", get(|| async { "Hello, Stellar Explain!" }))
         .route("/health", get(health_check))
         .route("/account/:id", get(account_handler))
-        .route("/tx/:hash", get(tx_handler)); // Added route for transaction explanations
+        .route("/tx/:hash", get(tx_handler)) // Added route for transaction explanations
+        .layer(GovernorLayer::new(&governor_conf));
     
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000")
         .await
