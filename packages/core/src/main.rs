@@ -35,11 +35,11 @@ async fn main() {
 
     info!("Starting server on port {}", port);
 
+
     let app = Router::new()
-        .route("/", get(|| async { "Hello, Stellar Explain!" }))
         .route("/health", get(health_check))
-        .route("/account/:id", get(account_handler))
-        .route("/tx/:hash", get(tx_handler));
+        .nest("/api/v1", v1_routes());
+
 
     let addr = format!("0.0.0.0:{}", port);
     let listener = tokio::net::TcpListener::bind(&addr)
@@ -49,6 +49,15 @@ async fn main() {
     println!("Listening on http://{}", addr);
     axum::serve(listener, app).await.expect("Server error");
 }
+
+fn v1_routes() -> Router {
+    Router::new()
+        .route("/", get(|| async { "Hello, Stellar Explain v1!" }))
+        .route("/account/:id", get(account_handler))
+        .route("/tx/:hash", get(tx_handler))
+}
+
+
 
 async fn health_check() -> Json<Value> {
     Json(json!({ "status": "ok" }))
@@ -121,6 +130,18 @@ async fn fetch_account(account_id: &str) -> Result<Value, reqwest::Error> {
     Ok(result)
 }
 
+
+async fn fetch_transaction(hash: &str) -> Result<Value, reqwest::Error> {
+    let horizon_url = env::var("HORIZON_URL")
+        .unwrap_or_else(|_| "https://horizon-testnet.stellar.org".to_string());
+
+    let url = format!("{}/transactions/{}", horizon_url, hash);
+    let client = Client::builder().build()?;
+    let resp = client.get(&url).send().await?;
+    let tx = resp.json::<Transaction>().await?;
+    Ok(tx)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -172,17 +193,4 @@ mod tests {
         // The invalid hash may return Ok or Err depending on Horizon response, so check for Ok or Err
         assert!(result.is_ok() || result.is_err());
     }
-}
-
-async fn fetch_transaction(hash: &str) -> Result<Value, reqwest::Error> {
-    // Read HORIZON_URL from env or default to testnet URL
-    let horizon_url = env::var("HORIZON_URL")
-        .unwrap_or_else(|_| "https://horizon-testnet.stellar.org".to_string());
-
-    let url = format!("{}/transactions/{}", horizon_url, hash);
-    let client = Client::builder().build()?;
-    let resp = client.get(&url).send().await?;
-    // Deserialize response directly into Transaction struct instead of generic Value
-    let tx = resp.json::<Transaction>().await?;
-    Ok(tx)
 }
