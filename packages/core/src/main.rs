@@ -5,6 +5,7 @@ use axum::{
     Router,
     Json,
 };
+use tower_governor::{GovernorLayer, governor::GovernorConfigBuilder};
 use serde_json::{json, Value};
 use reqwest::Client;
 use dotenvy::dotenv;
@@ -21,6 +22,13 @@ use models::explain::TxResponse;
 
 #[tokio::main]
 async fn main() {
+
+    // Configure per-IP rate limiting: 60 requests per minute
+    let governor_conf = GovernorConfigBuilder::default()
+        .per_minute(60)
+        .finish()
+        .expect("invalid governor config");
+
     // Initialize logger
     env_logger::init();
 
@@ -38,6 +46,9 @@ async fn main() {
 
     let app = Router::new()
         .route("/health", get(health_check))
+        .route("/account/:id", get(account_handler))
+        .route("/tx/:hash", get(tx_handler)) // Added route for transaction explanations
+        .layer(GovernorLayer::new(&governor_conf));
         .nest("/api/v1", v1_routes());
 
 
