@@ -10,18 +10,6 @@ impl Operation {
             Operation::CreateAccount { funder, new_account, starting_balance } => {
                 format!("New account {} created by {} with {} XLM", new_account, funder, starting_balance)
             }
-            Operation::ChangeTrust { account, asset, limit } => {
-                format!("{} established trustline for {} with limit {}", account, asset, limit)
-            }
-            Operation::ManageOffer { seller, selling, buying, amount, price } => {
-                format!("{} placed/updated offer: selling {} {} for {} {} (price {})",
-                    seller, amount, selling, buying, amount, price)
-            }
-            Operation::PathPayment { from, to, dest_asset, dest_amount, path } => {
-                format!("{} sent {} {} to {} via path {:?}",
-                    from, dest_amount, dest_asset, to, path)
-            }
-            _ => "Unknown operation".to_string(), // fallback
         }
     }
 }
@@ -35,7 +23,14 @@ pub struct TxResponse {
 impl From<TransactionWithOperations> for TxResponse {
     fn from(tx: TransactionWithOperations) -> Self {
         let explained = tx.operations.iter().map(|op| op.explain()).collect();
-        let raw = tx.transaction;
+        let raw = Transaction {
+            id: tx.id,
+            successful: tx.successful,
+            source_account: tx.source_account,
+            fee_charged: tx.fee_charged,
+            operation_count: tx.operation_count,
+            envelope_xdr: tx.envelope_xdr,
+        };
         TxResponse { raw, explained }
     }
 }

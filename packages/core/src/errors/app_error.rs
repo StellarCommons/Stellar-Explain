@@ -37,7 +37,7 @@ impl IntoResponse for AppError {
             }
             AppError::HorizonError => {
                 let body = Json(ErrorResponse {
-                    error: "The transaction failed when submitted to the stellar network.",
+                    error: "The transaction failed when submitted to the stellar network.".to_string(),
                 });
                 (StatusCode::BAD_REQUEST, body).into_response()
             }
