@@ -170,6 +170,7 @@ name = "core"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "dashmap",
  "dotenvy",
  "env_logger",
  "log",

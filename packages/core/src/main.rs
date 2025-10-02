@@ -1,5 +1,5 @@
 use axum::{
-    extract::Path,
+    extract::{Path, State},
     routing::get,
     response::IntoResponse,
     Router,
@@ -7,14 +7,28 @@ use axum::{
 };
 use serde_json::{json, Value};
 use reqwest::Client;
+use std::sync::Arc;
+use core::services::TransactionCache;
+
+#[derive(Clone)]
+struct AppState {
+    tx_cache: Arc<TransactionCache>,
+}
 
 #[tokio::main]
 async fn main() {
+    env_logger::init();
+
+    let state = AppState {
+        tx_cache: Arc::new(TransactionCache::default()),
+    };
+
     let app = Router::new()
         .route("/", get(|| async { "Hello, Stellar Explain!" }))
         .route("/health", get(health_check))
         .route("/account/:id", get(account_handler))
-        .route("/tx/:hash", get(tx_handler));
+        .route("/tx/:hash", get(tx_handler))
+        .with_state(state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000")
         .await
@@ -38,9 +52,25 @@ async fn account_handler(Path(id): Path<String>) -> impl IntoResponse {
     }
 }
 
-async fn tx_handler(Path(hash): Path<String>) -> impl IntoResponse {
+async fn tx_handler(
+    State(state): State<AppState>,
+    Path(hash): Path<String>,
+) -> impl IntoResponse {
+    // Check cache first
+    if let Some(cached_value) = state.tx_cache.get(&hash) {
+        log::info!("Cache HIT for transaction: {}", hash);
+        return (axum::http::StatusCode::OK, Json(cached_value)).into_response();
+    }
+
+    log::info!("Cache MISS for transaction: {}", hash);
+
+    // Fetch from Horizon if not in cache
     match fetch_transaction(&hash).await {
-        Ok(value) => (axum::http::StatusCode::OK, Json(value)).into_response(),
+        Ok(value) => {
+            // Store in cache
+            state.tx_cache.insert(hash.clone(), value.clone());
+            (axum::http::StatusCode::OK, Json(value)).into_response()
+        }
         Err(e) => {
             let body = json!({ "error": format!("{}", e) });
             (axum::http::StatusCode::BAD_GATEWAY, Json(body)).into_response()
