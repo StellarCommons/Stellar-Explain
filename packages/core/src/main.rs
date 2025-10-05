@@ -131,3 +131,12 @@ async fn fetch_transaction(hash: &str) -> Result<Value, reqwest::Error> {
     let json_val = resp.json::<Value>().await?;
     Ok(json_val)
 }
+
+tokio::spawn(async move {
+    use crate::cache::clean_expired;
+    let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+    loop {
+        interval.tick().await;
+        clean_expired().await;
+    }
+});
