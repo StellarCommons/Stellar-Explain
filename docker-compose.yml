@@ -1,0 +1,12 @@
+version: "3.8"
+
+services:
+  stellar-explain:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - RUST_LOG=info
+      - PORT=3000
+      - HORIZON_URL=https://horizon.stellar.org
+    restart: unless-stopped
