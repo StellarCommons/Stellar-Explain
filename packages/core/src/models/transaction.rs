@@ -34,6 +34,14 @@ pub enum Operation {
         amount: String,
         asset: String,
     },
+    #[serde(rename = "manage_offer")]
+    ManageOffer {
+        seller: String,
+        selling: String,
+        buying: String,
+        amount: String,
+        price: String,
+    },
     #[serde(rename = "create_account")]
     CreateAccount {
         funder: String,

@@ -4,7 +4,7 @@ use axum::{
 };
 use serde::Deserialize;
 use crate::{
-    models::transaction::{Transaction, Operation},
+    models::transaction::{TransactionWithOperations, Operation},
     services::explain::TxResponse,
     errors::AppError,
 };
@@ -25,9 +25,13 @@ pub async fn get_transaction(Path(hash): Path<String>) -> Result<Json<TxResponse
         return Err(AppError::NotFound("Transaction not found".into()));
     }
 
-    let tx = Transaction {
-        hash: hash.clone(),
+    let tx = TransactionWithOperations {
+        id: hash.clone(),
+        successful: true,
         source_account: "Alice".into(),
+        fee_charged: "100".into(),
+        operation_count: 1,
+        envelope_xdr: "AAAA...".into(),
         operations: vec![Operation::Payment {
             from: "Alice".into(),
             to: "Bob".into(),
@@ -50,9 +54,13 @@ pub async fn get_account_transactions(
 
     
     let all_txs = vec![
-        Transaction {
-            hash: "tx1".into(),
+        TransactionWithOperations {
+            id: "tx1".into(),
+            successful: true,
             source_account: address.clone(),
+            fee_charged: "100".into(),
+            operation_count: 1,
+            envelope_xdr: "AAAA...".into(),
             operations: vec![Operation::Payment {
                 from: address.clone(),
                 to: "Bob".into(),
@@ -60,9 +68,13 @@ pub async fn get_account_transactions(
                 asset: "XLM".into(),
             }],
         },
-        Transaction {
-            hash: "tx2".into(),
+        TransactionWithOperations {
+            id: "tx2".into(),
+            successful: true,
             source_account: address.clone(),
+            fee_charged: "100".into(),
+            operation_count: 1,
+            envelope_xdr: "AAAA...".into(),
             operations: vec![Operation::Payment {
                 from: "Alice".into(),
                 to: address.clone(),
@@ -79,6 +91,8 @@ pub async fn get_account_transactions(
             if let Some(ref asset) = params.asset {
                 return tx.operations.iter().any(|op| match op {
                     Operation::Payment { asset: a, .. } => a == asset,
+                    Operation::ManageOffer { selling, buying, .. } => selling == asset || buying == asset,
+                    _ => false,
                 });
             }
             true
