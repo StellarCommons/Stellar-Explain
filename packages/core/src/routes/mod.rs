@@ -1,13 +1,10 @@
-pub mod tx;
-pub mod logging;
-
-pub use tx::*;
-pub use logging::*;
+pub mod transactions;
 
 use axum::routing::get;
 use axum::Router;
 
-use crate::routes::transaction::{get_transaction, get_account_transactions};
+use crate::handlers::tx::get_transaction;
+use crate::routes::transactions::get_account_transactions;
 
 pub fn routes() -> Router {
     Router::new()
