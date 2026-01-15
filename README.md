@@ -1,88 +1,157 @@
-# Stellar Explain 🌍✨
+Perfect — below is a **clean, updated `README.md` for Stellar-Explain**, aligned with the **tone, structure, and clarity** you used for **GistPin**, but adapted properly for this project and its current state.
 
-**Stellar Explain** is an open-source tool that makes Stellar blockchain transactions human-readable. It decodes raw transaction data into plain English, helping both developers and everyday users understand who sent what, when, and why.
+You can **copy–paste this directly** into `README.md`.
 
-## Structure
-- **packages/core** → **Rust backend** (transaction parser & REST API)
-- **packages/ui** → **Next.js frontend** for displaying decoded transactions
-- **docs** → Project documentation & guides
+---
 
-***
+````md
+# 🌟 Stellar Explain
 
-## Features 🚀
-* **Human-Readable Output:** Converts complex XDR (External Data Representation) and base64 transaction data into simple, understandable sentences.
-* **Multi-Operation Support:** Decodes all standard Stellar operations (Payment, ManageData, ChangeTrust, etc.).
-* **RESTful API:** Provides a clean API endpoint for easy integration into wallets, explorers, or other tools.
-* **Intuitive UI:** A user-friendly web interface for direct copy-pasting and visualization of transaction details.
-* **Open Source:** Built with Rust and Next.js, encouraging community contributions and transparency.
+**Stellar Explain** is an open-source educational and developer-friendly tool that helps users **understand what is happening on the Stellar blockchain** in simple, human-readable terms.
 
-***
+Instead of raw hashes, JSON blobs, or confusing transaction data, Stellar Explain breaks down **transactions, operations, and accounts** into clear explanations anyone can understand — from beginners to seasoned developers.
 
-## Getting Started
+---
 
-### Prerequisites
+## 🚀 What Problem Does This Solve?
 
-You need **Node.js** (v18+) and **Rust** (stable) installed to run the full stack locally.
+Stellar data is powerful, but often:
+- Hard to read
+- Too technical for newcomers
+- Scattered across Horizon responses
 
-### Local Development Setup
+**Stellar Explain bridges that gap** by turning blockchain activity into meaningful explanations and insights.
 
-1.  Clone the repo:
-    ```bash
-    git clone [https://github.com/StellarCommons/stellar-explain.git](https://github.com/StellarCommons/stellar-explain.git)
-    cd stellar-explain
-    ```
+---
 
-2.  **Start the Rust Backend (Core API):**
-    The core service handles transaction parsing and exposes a REST API (default port: `3000`).
-    ```bash
-    # Navigate to the core directory
-    cd packages/core
+## ✨ Core Features
 
-    # Build and run the service
-    cargo run
+- 🔍 **Transaction Explanation**
+  - Input a transaction hash and get a clear breakdown of:
+    - What happened
+    - Who sent what
+    - Which assets were involved
 
-    # The API is now running at http://localhost:3000
-    cd ../.. # Return to the root directory
-    ```
+- 🧾 **Operation-Level Insights**
+  - Payments, trustlines, offers, and more explained in plain language
 
-3.  **Start the Next.js Frontend (UI):**
-    The UI serves the web interface and communicates with the core API.
-    ```bash
-    # Install dependencies for the workspace
-    npm install
+- 🩺 **Health & API Endpoints**
+  - Simple health checks and structured API responses
 
-    # Navigate to the UI directory
-    cd packages/ui
+- ⚡ **Horizon API Integration**
+  - Live data fetched directly from Stellar Horizon
 
-    # Start the development server
-    npm run dev
+- 🧠 **Caching & Performance**
+  - Smart caching layer to reduce redundant Horizon calls
 
-    # The UI is now running at http://localhost:3001 (or as indicated by Next.js)
-    ```
+- 🛠 **Developer-Friendly Architecture**
+  - Clean Rust backend
+  - Modular services
+  - Built for extension
 
-***
+---
 
-## Using Docker 🐳
+## 🧱 Tech Stack
 
-The easiest way to run the entire service is using Docker Compose.
+- **Backend:** Rust
+- **Web Framework:** Axum
+- **Blockchain API:** Stellar Horizon
+- **Async Runtime:** Tokio
+- **HTTP Client:** Reqwest
+- **Frontend (WIP):** Next.js
+- **State Management (Planned):** Zustand
 
-1.  Ensure you have **Docker** and **Docker Compose** installed.
-2.  Build and start the services from the root directory:
+---
 
-    ```bash
-    docker compose up --build
-    ```
+## 📂 Project Structure
 
-3.  The service will be accessible at `http://localhost:3000`.
+```text
+stellar-explain/
+├── core/                 # Rust backend
+│   ├── src/
+│   │   ├── routes/
+│   │   ├── services/
+│   │   ├── models/
+│   │   ├── cache/
+│   │   └── main.rs
+│   └── Cargo.toml
+├── web/                  # Frontend (Next.js – coming soon)
+└── README.md
+````
 
-***
+---
 
-## Contributing 🤝
+## 🏃‍♂️ Getting Started (Backend)
 
-We welcome contributions! Whether it's adding a new feature, fixing a bug, or improving documentation, your help is appreciated.
+### 1️⃣ Clone the repository
 
-1.  Fork the repository.
-2.  Create a new branch (`git checkout -b feature/amazing-feature`).
-3.  Commit your changes (`git commit -m 'feat: add amazing feature'`).
-4.  Push to the branch (`git push origin feature/amazing-feature`).
-5.  Open a Pull Request.
+```bash
+git clone https://github.com/StellarCommons/Stellar-Explain.git
+cd Stellar-Explain/core
+```
+
+### 2️⃣ Run the server
+
+```bash
+cargo run
+```
+
+### 3️⃣ Test endpoints
+
+```bash
+curl http://localhost:3000/health
+curl http://localhost:3000/tx/<TRANSACTION_HASH>
+```
+
+---
+
+## 🧑‍💻 Contributing
+
+We welcome contributors of all levels.
+
+### Important:
+
+> **Issues are incremental.**
+> Please start from the **earliest open issue** and work downward.
+> Later issues depend on earlier ones being completed.
+
+### How to contribute:
+
+1. Fork the repo
+2. Create a feature branch
+3. Pick an issue and comment to claim it
+4. Submit a PR with clear commits
+
+---
+
+## Development Principles
+
+* Simple > clever
+* Readability > abstraction
+* Incremental progress
+* Strong foundations before features
+
+---
+
+## Why This Matters
+
+Stellar Explain is not just another explorer — it’s an **educational layer** on top of the Stellar network.
+
+Our goal is to:
+
+* Lower the barrier to blockchain understanding
+* Help developers debug faster
+* Make Stellar more accessible to everyone
+
+---
+
+## 📜 License
+
+MIT — free to use, modify, and distribute.
+
+---
+
+## 🤝 Community
+
+This project is part of the **StellarCommons** open-source initiative.
+
