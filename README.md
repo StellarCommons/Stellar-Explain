@@ -1,152 +1,155 @@
 
-````md
-# Stellar Explain
+```markdown
+# 🌌 Stellar Explain
 
-**Stellar Explain** is an open-source educational and developer-friendly tool that helps users **understand what is happening on the Stellar blockchain** in simple, human-readable terms.
-
-Instead of raw hashes, JSON blobs, or confusing transaction data, Stellar Explain breaks down **transactions, operations, and accounts** into clear explanations anyone can understand — from beginners to seasoned developers.
-
----
-
-## 🚀 What Problem Does This Solve?
-
-Stellar data is powerful, but often:
-- Hard to read
-- Too technical for newcomers
-- Scattered across Horizon responses
-
-**Stellar Explain bridges that gap** by turning blockchain activity into meaningful explanations and insights.
+A developer-centric, human-friendly explorer for the **Stellar blockchain** that turns raw transaction data into clear, concise, plain-English explanations.  
+Stellar Explain helps developers, analysts, and users understand what happens on the Stellar network without digging through raw Horizon JSON responses.
 
 ---
 
-## ✨ Core Features
+## Overview
 
-- 🔍 **Transaction Explanation**
-  - Input a transaction hash and get a clear breakdown of:
-    - What happened
-    - Who sent what
-    - Which assets were involved
+Stellar Explain fetches transactions and account data from the Stellar Horizon API and transforms them into an easy-to-read format.  
+This project combines a **Rust backend** with an optional **Next.js frontend UI** to deliver real-time insights about Stellar transactions and accounts.
 
-- 🧾 **Operation-Level Insights**
-  - Payments, trustlines, offers, and more explained in plain language
-
-- 🩺 **Health & API Endpoints**
-  - Simple health checks and structured API responses
-
-- ⚡ **Horizon API Integration**
-  - Live data fetched directly from Stellar Horizon
-
-- 🧠 **Caching & Performance**
-  - Smart caching layer to reduce redundant Horizon calls
-
-- 🛠 **Developer-Friendly Architecture**
-  - Clean Rust backend
-  - Modular services
-  - Built for extension
+Unlike standard blockchain explorers, Stellar Explain focuses on **explainability**, making Stellar data accessible to both technical and non-technical audiences.
 
 ---
 
-## 🧱 Tech Stack
+## Features
 
-- **Backend:** Rust
-- **Web Framework:** Axum
-- **Blockchain API:** Stellar Horizon
-- **Async Runtime:** Tokio
-- **HTTP Client:** Reqwest
-- **Frontend (WIP):** Next.js
-- **State Management (Planned):** Zustand
+### Core API Services
+- Fetch and explain transactions by hash.
+- Interpret operations into human-readable text.
+- Retrieve and summarize account balances and histories.
+
+### User-Friendly Output
+- Plain English transaction summaries.
+- Organized operation breakdowns (payment, trustline, offers, etc.).
+- Structured JSON for API consumers.
+
+### Modern Tech Stack
+- **Rust** with `axum`: fast, safe, async backend
+- **Tokio**: high-performance async runtime
+- **Reqwest**: HTTP client for Horizon
+- **Next.js (frontend)**: interactive UI for users
+- Caching and rate limiting for performance and stability
 
 ---
 
-## 📂 Project Structure
+## Architecture
 
-```text
+```
+
 stellar-explain/
-├── core/                 # Rust backend
+├── core/                     # Rust backend source
 │   ├── src/
 │   │   ├── routes/
-│   │   ├── services/
-│   │   ├── models/
-│   │   ├── cache/
+│   │   ├── services/         # Horizon and explain logic
+│   │   ├── cache/            # In-memory caching
 │   │   └── main.rs
 │   └── Cargo.toml
-├── web/                  # Frontend (Next.js – coming soon)
-└── README.md
+├── ui/                      # Next.js frontend (optional)
+│   ├── app/
+│   ├── components/
+│   └── package.json
+├── docs/
+├── .github/                  # CI/CD + issue templates
+├── README.md
+└── LICENSE
+
 ````
 
 ---
 
-## 🏃‍♂️ Getting Started (Backend)
+## Quick Start
 
-### 1️⃣ Clone the repository
+### Requirements
+- Rust 1.70+ installed
+- Cargo (Rust package manager)
+-  npm  (for frontend)
 
+---
+
+### Backend Setup (Rust)
+
+#### 1. Clone the repository
 ```bash
 git clone https://github.com/StellarCommons/Stellar-Explain.git
 cd Stellar-Explain/core
-```
+````
 
-### 2️⃣ Run the server
+#### 2. Run the server
 
 ```bash
 cargo run
 ```
 
-### 3️⃣ Test endpoints
+#### 3. Test key endpoints
 
 ```bash
+# Health check
 curl http://localhost:3000/health
+
+# Transaction explain
 curl http://localhost:3000/tx/<TRANSACTION_HASH>
 ```
 
 ---
 
-## 🧑‍💻 Contributing
+### Frontend ( Next.js)
 
-We welcome contributors of all levels.
+```bash
+cd Stellar-Explain/ui
+npm install
+npm run dev
+```
 
-### Important:
+Visit `http://localhost:3000` in your browser.
 
-> **Issues are incremental.**
-> Please start from the **earliest open issue** and work downward.
-> Later issues depend on earlier ones being completed.
+---
 
-### How to contribute:
+## 🛠️ Contribution Guide
+
+We welcome contributions of all kinds — backend enhancements, frontend features, testing, docs, and more.
+
+### Before you start
+
+👉 **Work on issues in order**, as many backend features are incremental and build on previous ones.
+
+### How to contribute
 
 1. Fork the repo
-2. Create a feature branch
-3. Pick an issue and comment to claim it
-4. Submit a PR with clear commits
+2. Create a feature branch:
+
+   ```bash
+   git checkout -b feature/my-awesome-change
+   ```
+3. Commit your changes and push
+4. Open a Pull Request with a clear description
 
 ---
 
-## Development Principles
+## Best Practices
 
-* Simple > clever
-* Readability > abstraction
-* Incremental progress
-* Strong foundations before features
-
----
-
-## Why This Matters
-
-Stellar Explain is not just another explorer — it’s an **educational layer** on top of the Stellar network.
-
-Our goal is to:
-
-* Lower the barrier to blockchain understanding
-* Help developers debug faster
-* Make Stellar more accessible to everyone
+* Run tests locally with `cargo test`
+* Keep log output readable and actionable
+* Handle errors gracefully with structured responses
+* Document new features clearly
 
 ---
 
-## 📜 License
+## License
 
-MIT — free to use, modify, and distribute.
+Licensed under the **MIT License** — feel free to use, modify, and redistribute.
 
 ---
 
-## 🤝 Community
+## ❤️ Community
 
-This project is part of the **StellarCommons** open-source initiative.
+Part of the **StellarCommons** open-source initiative.
+Join our Discord/Telegram channels for active discussions and help.
 
+---
+
+[1]: https://github.com/Crossmint/stellar-smart-account?utm_source=chatgpt.com "GitHub - Crossmint/stellar-smart-account"
