@@ -1,11 +1,6 @@
-Perfect — below is a **clean, updated `README.md` for Stellar-Explain**, aligned with the **tone, structure, and clarity** you used for **GistPin**, but adapted properly for this project and its current state.
-
-You can **copy–paste this directly** into `README.md`.
-
----
 
 ````md
-# 🌟 Stellar Explain
+# Stellar Explain
 
 **Stellar Explain** is an open-source educational and developer-friendly tool that helps users **understand what is happening on the Stellar blockchain** in simple, human-readable terms.
 
