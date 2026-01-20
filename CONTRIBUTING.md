@@ -61,14 +61,6 @@ npm install
 npm run dev
 ```
 
-### NestJS Backend
-
-```bash
-cd packages/web2-backend
-npm install
-npm run start:dev
-```
-
 ---
 
 ## 📋 Issues & Workflow
@@ -91,7 +83,7 @@ npm run start:dev
 
 ## 🌍 Community & Communication
 
-* Discussions happen in GitHub Issues & PRs.
+* Discussions happen in GitHub Issues & telegram channel, you can join the community at 👉 https://t.me/+n10W2fqjxBhmNDM0.
 * Be respectful and inclusive.
 * Ask questions! We’re here to help new contributors.
 
@@ -108,3 +100,4 @@ Here are some helpful resources:
 ---
 
 Thanks again for helping make **StellarCommons** better! ✨
+
