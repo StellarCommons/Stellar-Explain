@@ -34,13 +34,13 @@ It focuses on:
 - Scope is intentionally narrow and incremental
 - Contributions are welcome
 
----
-
+```
 ## 🏗️ Architecture Overview
 
 Stellar Explain is a **monorepo** with two main packages:
-
 ```
+---
+
 
 packages/
 ├── core/     # Rust backend (source of truth)
