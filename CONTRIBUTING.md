@@ -1,6 +1,4 @@
-Perfect ✅ Here’s a **`CONTRIBUTING.md`** draft in **raw Markdown** you can drop straight into your repo. It’s simple, clear, and contributor-friendly.
 
----
 
 ````markdown
 # Contributing to StellarCommons
@@ -100,4 +98,5 @@ Here are some helpful resources:
 ---
 
 Thanks again for helping make **StellarCommons** better! ✨
+
 
