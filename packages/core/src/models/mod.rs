@@ -1,9 +1,6 @@
-// //! Domain and data models.
-// //!
-// //! Database schemas and core domain types will live here.
-// pub mod account;
-// pub mod transaction;
-// pub mod operation;
-// pub mod asset;
-// pub mod ledger;
-// pub mod effect;
+//! Domain and data models.
+//!
+//! Internal models that are independent of Horizon's JSON structure.
+
+pub mod operation;
+pub mod transaction;
