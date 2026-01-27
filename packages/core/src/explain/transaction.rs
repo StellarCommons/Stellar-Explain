@@ -61,7 +61,7 @@ impl std::error::Error for ExplainError {}
 /// let tx = Transaction {
 ///     hash: "abc123".to_string(),
 ///     successful: true,
-///     fee_charged: "100".to_string(),
+///     fee_charged: 100,
 ///     operations: vec![
 ///         Operation::Payment(PaymentOperation {
 ///             id: "1".to_string(),
@@ -168,7 +168,7 @@ mod tests {
         let tx = Transaction {
             hash: "abc123".to_string(),
             successful: true,
-            fee_charged: "100".to_string(),
+            fee_charged: 100,
             operations: vec![create_payment_operation("1", "50.0")],
         };
 
@@ -188,7 +188,7 @@ mod tests {
         let tx = Transaction {
             hash: "def456".to_string(),
             successful: true,
-            fee_charged: "100".to_string(),
+            fee_charged: 100,
             operations: vec![
                 create_payment_operation("1", "50.0"),
                 create_payment_operation("2", "25.0"),
@@ -210,7 +210,7 @@ mod tests {
         let tx = Transaction {
             hash: "ghi789".to_string(),
             successful: true,
-            fee_charged: "100".to_string(),
+            fee_charged: 100,
             operations: vec![create_other_operation("1"), create_other_operation("2")],
         };
 
@@ -224,7 +224,7 @@ mod tests {
         let tx = Transaction {
             hash: "jkl012".to_string(),
             successful: true,
-            fee_charged: "100".to_string(),
+            fee_charged: 100,
             operations: vec![
                 create_other_operation("1"),
                 create_payment_operation("2", "100.0"),
@@ -249,7 +249,7 @@ mod tests {
         let tx = Transaction {
             hash: "mno345".to_string(),
             successful: false,
-            fee_charged: "100".to_string(),
+            fee_charged: 100,
             operations: vec![create_payment_operation("1", "50.0")],
         };
 
