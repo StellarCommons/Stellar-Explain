@@ -46,4 +46,55 @@ impl HorizonClient {
             _ => Err(HorizonError::InvalidResponse),
         }
     }
+
+    pub async fn fetch_operations(
+        &self,
+        hash: &str,
+    ) -> Result<Vec<HorizonOperation>, HorizonError> {
+        let url = format!("{}/transactions/{}/operations", self.base_url, hash);
+
+        let res = self
+            .client
+            .get(url)
+            .send()
+            .await
+            .map_err(|_| HorizonError::NetworkError)?;
+
+        match res.status().as_u16() {
+            200 => {
+                let wrapper: HorizonOperationsResponse = res
+                    .json()
+                    .await
+                    .map_err(|_| HorizonError::InvalidResponse)?;
+                Ok(wrapper._embedded.records)
+            }
+            404 => Err(HorizonError::TransactionNotFound),
+            _ => Err(HorizonError::InvalidResponse),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct HorizonOperationsResponse {
+    _embedded: HorizonEmbeddedOperations,
+}
+
+#[derive(Debug, Deserialize)]
+struct HorizonEmbeddedOperations {
+    records: Vec<HorizonOperation>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct HorizonOperation {
+    pub id: String,
+    pub transaction_hash: String,
+    #[serde(rename = "type")]
+    pub type_i: String,
+    // Payment specific fields
+    pub from: Option<String>,
+    pub to: Option<String>,
+    pub asset_type: Option<String>,
+    pub asset_code: Option<String>,
+    pub asset_issuer: Option<String>,
+    pub amount: Option<String>,
 }

@@ -1,7 +1,8 @@
-use crate::models::fee::FeeStats;
-use crate::models::operation::{Asset, PaymentOperation};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, PartialEq)]
+use crate::models::operation::PaymentOperation;
+
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct PaymentExplanation {
     /// Short, human-readable payment summary
     pub summary: String,
@@ -17,155 +18,74 @@ pub struct PaymentExplanation {
 
     /// Amount transferred
     pub amount: String,
-
-    /// Fee charged for this transaction (stroops)
-    pub fee_charged: u64,
-
-    /// Network base fee at time of transaction (stroops)
-    pub network_base_fee: u64,
-
-    /// Plain-English explanation of the fee
-    pub fee_summary: String,
 }
 
-/// Explain a payment operation with fee context
-///
-/// This function is:
-/// - pure
-/// - deterministic
-/// - side-effect free
-pub fn explain_payment_with_fee(
-    op: &PaymentOperation,
-    fee_charged: u64,
-    network_fees: &FeeStats,
-) -> PaymentExplanation {
-    let asset = match &op.asset {
-        Asset::Native => "XLM".to_string(),
-        Asset::Credit { code, issuer } => {
-            format!("{} ({})", code, issuer)
+pub fn explain_payment(op: &PaymentOperation) -> PaymentExplanation {
+    let asset_display = if op.asset_type == "native" {
+        "XLM".to_string()
+    } else {
+        match (&op.asset_code, &op.asset_issuer) {
+            (Some(code), Some(issuer)) => format!("{} ({})", code, issuer),
+            (Some(code), None) => code.clone(),
+            _ => "Unknown Asset".to_string(),
         }
     };
 
+    let from_account = op.source_account.clone().unwrap_or_else(|| "Source".to_string());
+
     let summary = format!(
         "{} sent {} {} to {}",
-        op.from,
+        from_account,
         op.amount,
-        asset,
-        op.to
+        asset_display,
+        op.destination
     );
-
-    let fee_summary = if fee_charged <= network_fees.base_fee {
-        format!(
-            "The transaction used the network base fee of {} stroops.",
-            network_fees.base_fee
-        )
-    } else {
-        format!(
-            "The transaction paid {} stroops in fees, higher than the base fee of {} due to network conditions.",
-            fee_charged,
-            network_fees.base_fee
-        )
-    };
 
     PaymentExplanation {
         summary,
-        from: op.from.clone(),
-        to: op.to.clone(),
-        asset,
+        from: from_account,
+        to: op.destination.clone(),
+        asset: asset_display,
         amount: op.amount.clone(),
-        fee_charged,
-        network_base_fee: network_fees.base_fee,
-        fee_summary,
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::fee::FeeStats;
-    use crate::models::operation::{Asset, PaymentOperation};
 
     #[test]
-    fn explains_payment_with_base_fee() {
+    fn explains_native_payment() {
         let op = PaymentOperation {
-            from: "GAAAA".to_string(),
-            to: "GBBBB".to_string(),
-            asset: Asset::Native,
+            id: "1".to_string(),
+            source_account: Some("GAAAA".to_string()),
+            destination: "GBBBB".to_string(),
+            asset_type: "native".to_string(),
+            asset_code: None,
+            asset_issuer: None,
             amount: "10".to_string(),
         };
 
-        let fee_stats = FeeStats {
-            base_fee: 100,
-            min_fee: 100,
-            max_fee: 5000,
-            mode_fee: 100,
-            p90_fee: 250,
-        };
+        let explanation = explain_payment(&op);
 
-        let explanation =
-            explain_payment_with_fee(&op, 100, &fee_stats);
-
-        assert_eq!(
-            explanation.fee_summary,
-            "The transaction used the network base fee of 100 stroops."
-        );
+        assert_eq!(explanation.summary, "GAAAA sent 10 XLM to GBBBB");
+        assert_eq!(explanation.asset, "XLM");
     }
 
     #[test]
-    fn explains_payment_with_higher_than_base_fee() {
+    fn explains_credit_payment() {
         let op = PaymentOperation {
-            from: "GAAAA".to_string(),
-            to: "GBBBB".to_string(),
-            asset: Asset::Native,
-            amount: "10".to_string(),
-        };
-
-        let fee_stats = FeeStats {
-            base_fee: 100,
-            min_fee: 100,
-            max_fee: 5000,
-            mode_fee: 100,
-            p90_fee: 250,
-        };
-
-        let explanation =
-            explain_payment_with_fee(&op, 1000, &fee_stats);
-
-        assert!(
-            explanation
-                .fee_summary
-                .contains("higher than the base fee")
-        );
-    }
-
-    #[test]
-    fn explains_payment_with_credit_asset_and_fee() {
-        let op = PaymentOperation {
-            from: "GAAAA".to_string(),
-            to: "GBBBB".to_string(),
-            asset: Asset::Credit {
-                code: "USDC".to_string(),
-                issuer: "GISSUER".to_string(),
-            },
+            id: "2".to_string(),
+            source_account: Some("GAAAA".to_string()),
+            destination: "GBBBB".to_string(),
+            asset_type: "credit_alphanum4".to_string(),
+            asset_code: Some("USDC".to_string()),
+            asset_issuer: Some("GISSUER".to_string()),
             amount: "50".to_string(),
         };
 
-        let fee_stats = FeeStats {
-            base_fee: 100,
-            min_fee: 100,
-            max_fee: 5000,
-            mode_fee: 100,
-            p90_fee: 250,
-        };
+        let explanation = explain_payment(&op);
 
-        let explanation =
-            explain_payment_with_fee(&op, 250, &fee_stats);
-
-        assert_eq!(
-            explanation.summary,
-            "GAAAA sent 50 USDC (GISSUER) to GBBBB"
-        );
-        assert_eq!(explanation.fee_charged, 250);
-        assert_eq!(explanation.network_base_fee, 100);
+        assert_eq!(explanation.asset, "USDC (GISSUER)");
     }
 }
