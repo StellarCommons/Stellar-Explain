@@ -10,21 +10,7 @@ pub struct Transaction {
     pub operations: Vec<Operation>,
 }
 
-impl Transaction {
-    pub fn new(
-        hash: String,
-        successful: bool,
-        fee_charged: u64,
-        operations: Vec<Operation>,
-    ) -> Self {
-        Self {
-            hash,
-            successful,
-            fee_charged,
-            operations,
-        }
-    }
-}
+
 
 
 
@@ -115,5 +101,28 @@ mod tests {
         });
 
         assert_eq!(payment.id(), "12345");
+    }
+}
+
+use crate::services::horizon::HorizonOperation;
+
+impl From<HorizonOperation> for Operation {
+    fn from(op: HorizonOperation) -> Self {
+        if op.type_i == "payment" {
+            Operation::Payment(PaymentOperation {
+                id: op.id,
+                source_account: op.from,
+                destination: op.to.unwrap_or_default(),
+                asset_type: op.asset_type.unwrap_or_else(|| "native".to_string()),
+                asset_code: op.asset_code,
+                asset_issuer: op.asset_issuer,
+                amount: op.amount.unwrap_or_else(|| "0".to_string()),
+            })
+        } else {
+            Operation::Other(OtherOperation {
+                id: op.id,
+                operation_type: op.type_i,
+            })
+        }
     }
 }

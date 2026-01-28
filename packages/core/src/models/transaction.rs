@@ -13,11 +13,24 @@ use super::operation::Operation;
 pub struct Transaction {
     pub hash: String,
     pub successful: bool,
-    pub fee_charged: String,
+    pub fee_charged: u64,
     pub operations: Vec<Operation>,
 }
 
 impl Transaction {
+    pub fn new(
+        hash: String,
+        successful: bool,
+        fee_charged: u64,
+        operations: Vec<Operation>,
+    ) -> Self {
+        Self {
+            hash,
+            successful,
+            fee_charged,
+            operations,
+        }
+    }
     /// Returns all payment operations in this transaction.
     pub fn payment_operations(&self) -> Vec<&Operation> {
         self.operations
@@ -66,7 +79,7 @@ mod tests {
         let tx = Transaction {
             hash: "abc123".to_string(),
             successful: true,
-            fee_charged: "100".to_string(),
+            fee_charged: 100,
             operations: vec![
                 create_payment_operation("1", "50.0"),
                 create_other_operation("2"),
@@ -85,7 +98,7 @@ mod tests {
         let tx_with_payment = Transaction {
             hash: "abc123".to_string(),
             successful: true,
-            fee_charged: "100".to_string(),
+            fee_charged: 100,
             operations: vec![
                 create_other_operation("1"),
                 create_payment_operation("2", "50.0"),
@@ -95,7 +108,7 @@ mod tests {
         let tx_without_payment = Transaction {
             hash: "def456".to_string(),
             successful: true,
-            fee_charged: "100".to_string(),
+            fee_charged: 100,
             operations: vec![create_other_operation("1"), create_other_operation("2")],
         };
 
@@ -108,7 +121,7 @@ mod tests {
         let tx = Transaction {
             hash: "abc123".to_string(),
             successful: true,
-            fee_charged: "100".to_string(),
+            fee_charged: 100,
             operations: vec![
                 create_payment_operation("1", "50.0"),
                 create_other_operation("2"),

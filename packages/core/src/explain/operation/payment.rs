@@ -19,15 +19,6 @@ pub struct PaymentExplanation {
 
     /// Amount transferred
     pub amount: String,
-
-    /// Fee charged for this transaction (stroops)
-    pub fee_charged: u64,
-
-    /// Network base fee at time of transaction (stroops)
-    pub network_base_fee: u64,
-
-    /// Plain-English explanation of the fee
-    pub fee_summary: String,
 }
 
 /// Explain a payment operation (simplified version without fees)
@@ -122,28 +113,12 @@ pub fn explain_payment_with_fee(
         to
     );
 
-    let fee_summary = if fee_charged <= network_fees.base_fee {
-        format!(
-            "The transaction used the network base fee of {} stroops.",
-            network_fees.base_fee
-        )
-    } else {
-        format!(
-            "The transaction paid {} stroops in fees, higher than the base fee of {} due to network conditions.",
-            fee_charged,
-            network_fees.base_fee
-        )
-    };
-
     PaymentExplanation {
         summary,
         from,
         to,
         asset,
         amount: op.amount.clone(),
-        fee_charged,
-        network_base_fee: network_fees.base_fee,
-        fee_summary,
     }
 }
 
@@ -193,10 +168,8 @@ mod tests {
 
         let explanation = explain_payment_with_fee(&op, 100, &fee_stats);
 
-        assert_eq!(
-            explanation.fee_summary,
-            "The transaction used the network base fee of 100 stroops."
-        );
+        assert_eq!(explanation.summary, "GAAAA sent 10 XLM to GBBBB");
+        assert_eq!(explanation.asset, "XLM");
     }
 
     #[test]
@@ -246,11 +219,6 @@ mod tests {
 
         let explanation = explain_payment_with_fee(&op, 250, &fee_stats);
 
-        assert_eq!(
-            explanation.summary,
-            "GAAAA sent 50 USDC (GISSUER) to GBBBB"
-        );
-        assert_eq!(explanation.fee_charged, 250);
-        assert_eq!(explanation.network_base_fee, 100);
+        assert_eq!(explanation.asset, "USDC (GISSUER)");
     }
 }
