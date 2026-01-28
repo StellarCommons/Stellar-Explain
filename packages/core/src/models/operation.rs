@@ -2,6 +2,13 @@
 //!
 //! Internal representation of Stellar operations, independent of Horizon JSON.
 
+#[derive(Debug, Clone)]
+pub struct Transaction {
+    pub hash: String,
+    pub successful: bool,
+    pub fee_charged: u64,
+    pub operations: Vec<Operation>,
+}
 
 
 
