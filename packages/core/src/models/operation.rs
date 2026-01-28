@@ -2,8 +2,6 @@
 //!
 //! Internal representation of Stellar operations, independent of Horizon JSON.
 
-use crate::models::operation::Operation;
-
 #[derive(Debug, Clone)]
 pub struct Transaction {
     pub hash: String,
