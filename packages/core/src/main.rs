@@ -3,6 +3,7 @@ mod errors;
 mod services;
 mod explain;
 mod routes;
+mod config;
 
 use axum::Router;
 use tracing::info;

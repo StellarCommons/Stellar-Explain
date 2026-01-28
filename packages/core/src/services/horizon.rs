@@ -1,5 +1,6 @@
 use reqwest::Client;
 use serde::Deserialize;
+use crate::config::network::StellarNetwork;
 
 use crate::errors::HorizonError;
 
@@ -14,13 +15,22 @@ pub struct HorizonTransaction {
 pub struct HorizonClient {
     client: Client,
     base_url: String,
+
 }
+
 
 impl HorizonClient {
     pub fn new(base_url: impl Into<String>) -> Self {
         Self {
             client: Client::new(),
             base_url: base_url.into(),
+        }
+    }
+
+    pub fn from_network(network: StellarNetwork) -> Self {
+        Self {
+            client: Client::new(),
+            base_url: network.horizon_url().to_string(),
         }
     }
 
