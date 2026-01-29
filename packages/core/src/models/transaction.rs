@@ -1,19 +1,19 @@
-//! Transaction domain models.
-//!
-//! Internal representation of Stellar transactions, independent of Horizon JSON.
-
 use serde::{Deserialize, Serialize};
 
-use super::operation::Operation;
+use crate::models::operation::{Operation, PaymentOperation, Asset};
 
-/// Represents a Stellar transaction with its operations.
-///
-/// This is a Horizon-agnostic internal model used for explanation logic.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Transaction {
+
     pub hash: String,
+
+
     pub successful: bool,
+
+
     pub fee_charged: u64,
+
+
     pub operations: Vec<Operation>,
 }
 
@@ -31,47 +31,55 @@ impl Transaction {
             operations,
         }
     }
-    /// Returns all payment operations in this transaction.
-    pub fn payment_operations(&self) -> Vec<&Operation> {
+
+
+    pub fn payment_operations(&self) -> Vec<&PaymentOperation> {
         self.operations
             .iter()
-            .filter(|op| op.is_payment())
+            .filter_map(|op| match op {
+                Operation::Payment(p) => Some(p),
+                _ => None,
+            })
             .collect()
     }
 
-    /// Returns true if this transaction contains at least one payment operation.
+
     pub fn has_payments(&self) -> bool {
-        self.operations.iter().any(|op| op.is_payment())
+        self.operations.iter().any(|op| matches!(op, Operation::Payment(_)))
     }
 
-    /// Returns the count of payment operations.
+
     pub fn payment_count(&self) -> usize {
-        self.operations.iter().filter(|op| op.is_payment()).count()
+        self.operations
+            .iter()
+            .filter(|op| matches!(op, Operation::Payment(_)))
+            .count()
+    }
+
+
+
+
+
+    pub fn is_failed(&self) -> bool {
+        !self.successful
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::operation::{OtherOperation, PaymentOperation};
 
-    fn create_payment_operation(id: &str, amount: &str) -> Operation {
+    fn create_payment(amount: &str) -> Operation {
         Operation::Payment(PaymentOperation {
-            id: id.to_string(),
-            source_account: None,
-            destination: "GDEST...".to_string(),
-            asset_type: "native".to_string(),
-            asset_code: None,
-            asset_issuer: None,
+            from: "GSOURCE".to_string(),
+            to: "GDEST".to_string(),
+            asset: Asset::Native,
             amount: amount.to_string(),
         })
     }
 
-    fn create_other_operation(id: &str) -> Operation {
-        Operation::Other(OtherOperation {
-            id: id.to_string(),
-            operation_type: "create_account".to_string(),
-        })
+    fn create_unsupported() -> Operation {
+        Operation::Unsupported
     }
 
     #[test]
@@ -81,35 +89,35 @@ mod tests {
             successful: true,
             fee_charged: 100,
             operations: vec![
-                create_payment_operation("1", "50.0"),
-                create_other_operation("2"),
-                create_payment_operation("3", "25.0"),
+                create_payment("50"),
+                create_unsupported(),
+                create_payment("25"),
             ],
         };
 
         let payments = tx.payment_operations();
         assert_eq!(payments.len(), 2);
-        assert_eq!(payments[0].id(), "1");
-        assert_eq!(payments[1].id(), "3");
+        assert_eq!(payments[0].amount, "50");
+        assert_eq!(payments[1].amount, "25");
     }
 
     #[test]
     fn test_has_payments() {
         let tx_with_payment = Transaction {
-            hash: "abc123".to_string(),
+            hash: "tx1".to_string(),
             successful: true,
             fee_charged: 100,
             operations: vec![
-                create_other_operation("1"),
-                create_payment_operation("2", "50.0"),
+                create_unsupported(),
+                create_payment("10"),
             ],
         };
 
         let tx_without_payment = Transaction {
-            hash: "def456".to_string(),
+            hash: "tx2".to_string(),
             successful: true,
             fee_charged: 100,
-            operations: vec![create_other_operation("1"), create_other_operation("2")],
+            operations: vec![create_unsupported()],
         };
 
         assert!(tx_with_payment.has_payments());
@@ -123,13 +131,26 @@ mod tests {
             successful: true,
             fee_charged: 100,
             operations: vec![
-                create_payment_operation("1", "50.0"),
-                create_other_operation("2"),
-                create_payment_operation("3", "25.0"),
-                create_payment_operation("4", "10.0"),
+                create_payment("50"),
+                create_unsupported(),
+                create_payment("25"),
+                create_payment("10"),
             ],
         };
 
         assert_eq!(tx.payment_count(), 3);
+    }
+
+    #[test]
+    fn test_failed_transaction_flag() {
+        let tx = Transaction {
+            hash: "failedtx".to_string(),
+            successful: false,
+            fee_charged: 100,
+            operations: vec![create_payment("100")],
+        };
+
+        assert!(tx.is_failed());
+        assert!(!tx.successful);
     }
 }
