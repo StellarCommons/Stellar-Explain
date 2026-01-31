@@ -1,6 +1,6 @@
 use reqwest::Client;
 use serde::Deserialize;
-use crate::config::network::StellarNetwork;
+// use crate::config::network::StellarNetwork;t
 
 use crate::errors::HorizonError;
 
@@ -27,12 +27,12 @@ impl HorizonClient {
         }
     }
 
-    pub fn from_network(network: StellarNetwork) -> Self {
-        Self {
-            client: Client::new(),
-            base_url: network.horizon_url().to_string(),
-        }
-    }
+    // pub fn from_network(network: StellarNetwork) -> Self {
+    //     Self {
+    //         client: Client::new(),
+    //         base_url: network.horizon_url().to_string(),
+    //     }
+    // }
 
     pub async fn fetch_transaction(
         &self,

@@ -4,7 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::models::operation::Operation;
+// use crate::models::operation::Operation;
 use crate::models::transaction::Transaction;
 
 use super::operation::payment::{explain_payment, PaymentExplanation};
@@ -41,21 +41,10 @@ impl std::fmt::Display for ExplainError {
 
 impl std::error::Error for ExplainError {}
 
-/// Explains a transaction by identifying payment operations and producing explanations.
-///
-/// This function is pure and deterministic - no IO or Horizon calls.
-///
-/// # Arguments
-/// * `transaction` - The internal transaction model to explain
-///
-/// # Returns
-/// * `Ok(TransactionExplanation)` - If the transaction contains at least one payment
-/// * `Err(ExplainError::NoPaymentOperations)` - If there are no payment operations
-///
-/// # Examples
 /// ```
 /// use stellar_explain_core::models::transaction::Transaction;
 /// use stellar_explain_core::models::operation::{Operation, PaymentOperation};
+/// use stellar_explain_core::models::memo::Memo;
 /// use stellar_explain_core::explain::transaction::explain_transaction;
 ///
 /// let tx = Transaction {
@@ -73,11 +62,13 @@ impl std::error::Error for ExplainError {}
 ///             amount: "50.0".to_string(),
 ///         }),
 ///     ],
+///     memo: None,
 /// };
 ///
 /// let explanation = explain_transaction(&tx).unwrap();
 /// assert_eq!(explanation.payment_explanations.len(), 1);
 /// ```
+
 pub fn explain_transaction(transaction: &Transaction) -> ExplainResult {
     // Check if transaction contains any payment operations
     if !transaction.has_payments() {
@@ -92,13 +83,7 @@ pub fn explain_transaction(transaction: &Transaction) -> ExplainResult {
     let payment_explanations = transaction
         .payment_operations()
         .into_iter()
-        .filter_map(|op| {
-            if let Operation::Payment(payment) = op {
-                Some(explain_payment(payment))
-            } else {
-                None
-            }
-        })
+         .map(|payment| explain_payment(payment)) 
         .collect::<Vec<_>>();
 
     // Build transaction summary
@@ -142,7 +127,7 @@ fn build_transaction_summary(successful: bool, payment_count: usize, skipped: us
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::operation::{OtherOperation, PaymentOperation};
+    use crate::models::operation::{OtherOperation, PaymentOperation, Operation};
 
     fn create_payment_operation(id: &str, amount: &str) -> Operation {
         Operation::Payment(PaymentOperation {
@@ -170,6 +155,7 @@ mod tests {
             successful: true,
             fee_charged: 100,
             operations: vec![create_payment_operation("1", "50.0")],
+            memo: None,
         };
 
         let result = explain_transaction(&tx);
@@ -194,6 +180,7 @@ mod tests {
                 create_payment_operation("2", "25.0"),
                 create_payment_operation("3", "10.0"),
             ],
+            memo: None,
         };
 
         let result = explain_transaction(&tx);
@@ -212,6 +199,7 @@ mod tests {
             successful: true,
             fee_charged: 100,
             operations: vec![create_other_operation("1"), create_other_operation("2")],
+            memo: None,
         };
 
         let result = explain_transaction(&tx);
@@ -232,6 +220,7 @@ mod tests {
                 create_payment_operation("4", "200.0"),
                 create_other_operation("5"),
             ],
+            memo: None,
         };
 
         let result = explain_transaction(&tx);
@@ -251,6 +240,7 @@ mod tests {
             successful: false,
             fee_charged: 100,
             operations: vec![create_payment_operation("1", "50.0")],
+            memo: None,
         };
 
         let result = explain_transaction(&tx);

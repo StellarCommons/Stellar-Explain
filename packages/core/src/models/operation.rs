@@ -2,12 +2,17 @@
 //!
 //! Internal representation of Stellar operations, independent of Horizon JSON.
 
+use crate::models::memo::Memo;
+
+
 #[derive(Debug, Clone)]
 pub struct Transaction {
     pub hash: String,
     pub successful: bool,
     pub fee_charged: u64,
     pub operations: Vec<Operation>,
+    pub memo: Memo,
+
 }
 
 

@@ -16,5 +16,6 @@ pub fn map_transaction_to_domain(
         tx.successful,
         tx.fee_charged.parse().unwrap_or(0),
         ops,
+        None,
     )
 }
