@@ -1,23 +1,30 @@
 use reqwest::Client;
 use serde::Deserialize;
-// use crate::config::network::StellarNetwork;t
 
 use crate::errors::HorizonError;
 
+/// Raw transaction response from the Horizon API.
+///
+/// Captures all fields needed for domain mapping including all 5 memo types.
 #[derive(Debug, Deserialize)]
 pub struct HorizonTransaction {
     pub hash: String,
     pub successful: bool,
     pub fee_charged: String,
+
+    // Memo fields — all optional since not every transaction has a memo
+    // memo_type is always present but can be "none"
+    pub memo_type: Option<String>,
+
+    // memo is only present when memo_type is not "none"
+    pub memo: Option<String>,
 }
 
 #[derive(Clone)]
 pub struct HorizonClient {
     client: Client,
     base_url: String,
-
 }
-
 
 impl HorizonClient {
     pub fn new(base_url: impl Into<String>) -> Self {
@@ -26,13 +33,6 @@ impl HorizonClient {
             base_url: base_url.into(),
         }
     }
-
-    // pub fn from_network(network: StellarNetwork) -> Self {
-    //     Self {
-    //         client: Client::new(),
-    //         base_url: network.horizon_url().to_string(),
-    //     }
-    // }
 
     pub async fn fetch_transaction(
         &self,

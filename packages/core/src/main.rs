@@ -13,23 +13,25 @@ use std::env;
 use tower_http::cors::{CorsLayer, AllowOrigin};
 use axum::http::{HeaderValue, Method, header};
 
+use crate::config::network::StellarNetwork;
 use crate::services::horizon::HorizonClient;
 
 #[tokio::main]
 async fn main() {
-    // Load .env file if present
     dotenvy::dotenv().ok();
     tracing_subscriber::fmt().init();
 
-    // ── Horizon URL ───────
+    // ── Network config ────────────────────────────────────────────────────────
+    // StellarNetwork reads STELLAR_NETWORK from env (defaults to Public).
+    // HORIZON_URL can still override if explicitly set — useful for custom nodes.
+    let network = StellarNetwork::from_env();
     let horizon_url = env::var("HORIZON_URL")
-        .unwrap_or_else(|_| "https://horizon-testnet.stellar.org".to_string());
+        .unwrap_or_else(|_| network.horizon_url().to_string());
 
+    info!("Network: {:?}", network);
     info!("Using Horizon URL: {}", horizon_url);
 
-    // ── CORS ─────────
-    // Reads CORS_ORIGIN from .env (e.g. http://localhost:3000).
-    // Falls back to localhost:3000 for local development.
+    // ── CORS ──────────────────────────────────────────────────────────────────
     let cors_origin = env::var("CORS_ORIGIN")
         .unwrap_or_else(|_| "http://localhost:3000".to_string());
 
@@ -44,14 +46,14 @@ async fn main() {
         .allow_methods([Method::GET, Method::OPTIONS])
         .allow_headers([header::CONTENT_TYPE, header::ACCEPT]);
 
-    // ── App ────────
+    // ── App ───────────────────────────────────────────────────────────────────
     let horizon_client = Arc::new(HorizonClient::new(horizon_url));
 
     let app = Router::new()
         .route("/health", axum::routing::get(|| async { "ok" }))
         .route("/tx/:hash", axum::routing::get(routes::tx::get_tx_explanation))
         .with_state(horizon_client)
-        .layer(cors);  // CORS layer goes last — it wraps the entire router
+        .layer(cors);
 
     let addr = "0.0.0.0:4000";
     info!("Stellar Explain backend running on {}", addr);
