@@ -1,10 +1,11 @@
 //! Transaction explanation orchestration.
 //!
 //! Accepts an internal transaction model and produces structured explanations.
+//! Transactions with no payment operations are valid and return a partial
+//! explanation with payment_explanations: [] and skipped_operations: N.
 
 use serde::{Deserialize, Serialize};
 
-// use crate::models::operation::Operation;
 use crate::models::transaction::Transaction;
 
 use super::operation::payment::{explain_payment, PaymentExplanation};
@@ -25,15 +26,15 @@ pub type ExplainResult = Result<TransactionExplanation, ExplainError>;
 /// Errors that can occur during explanation.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExplainError {
-    /// The transaction contains no payment operations.
-    NoPaymentOperations,
+    /// The transaction contains no operations at all — likely an upstream issue.
+    EmptyTransaction,
 }
 
 impl std::fmt::Display for ExplainError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ExplainError::NoPaymentOperations => {
-                write!(f, "This transaction contains no payment operations")
+            ExplainError::EmptyTransaction => {
+                write!(f, "This transaction contains no operations")
             }
         }
     }
@@ -41,10 +42,17 @@ impl std::fmt::Display for ExplainError {
 
 impl std::error::Error for ExplainError {}
 
+/// Explains a transaction.
+///
+/// Returns a TransactionExplanation for any valid transaction, including those
+/// with no payment operations. Non-payment operations are counted in
+/// skipped_operations and the summary reflects what is and isn't explained.
+///
+/// Only returns Err if the transaction has zero operations entirely.
+///
 /// ```
 /// use stellar_explain_core::models::transaction::Transaction;
 /// use stellar_explain_core::models::operation::{Operation, PaymentOperation};
-/// use stellar_explain_core::models::memo::Memo;
 /// use stellar_explain_core::explain::transaction::explain_transaction;
 ///
 /// let tx = Transaction {
@@ -68,25 +76,25 @@ impl std::error::Error for ExplainError {}
 /// let explanation = explain_transaction(&tx).unwrap();
 /// assert_eq!(explanation.payment_explanations.len(), 1);
 /// ```
-
 pub fn explain_transaction(transaction: &Transaction) -> ExplainResult {
-    // Check if transaction contains any payment operations
-    if !transaction.has_payments() {
-        return Err(ExplainError::NoPaymentOperations);
+    let total_operations = transaction.operations.len();
+
+    // Only error on truly empty transactions — these indicate an upstream issue
+    if total_operations == 0 {
+        return Err(ExplainError::EmptyTransaction);
     }
 
     let payment_count = transaction.payment_count();
-    let total_operations = transaction.operations.len();
     let skipped_operations = total_operations - payment_count;
 
     // Generate explanations for each payment operation
     let payment_explanations = transaction
         .payment_operations()
         .into_iter()
-         .map(|payment| explain_payment(payment)) 
+        .map(|payment| explain_payment(payment))
         .collect::<Vec<_>>();
 
-    // Build transaction summary
+    // Build summary that reflects the actual content of the transaction
     let summary = build_transaction_summary(
         transaction.successful,
         payment_count,
@@ -104,6 +112,20 @@ pub fn explain_transaction(transaction: &Transaction) -> ExplainResult {
 
 fn build_transaction_summary(successful: bool, payment_count: usize, skipped: usize) -> String {
     let status = if successful { "successful" } else { "failed" };
+
+    // Transaction with no payments at all
+    if payment_count == 0 {
+        let op_text = if skipped == 1 {
+            "1 operation".to_string()
+        } else {
+            format!("{} operations", skipped)
+        };
+        return format!(
+            "This {} transaction contains {} that Stellar Explain does not yet support.",
+            status, op_text
+        );
+    }
+
     let payment_text = if payment_count == 1 {
         "1 payment".to_string()
     } else {
@@ -193,7 +215,8 @@ mod tests {
     }
 
     #[test]
-    fn test_explain_no_payments() {
+    fn test_explain_no_payments_returns_ok() {
+        // Non-payment transactions are VALID — should return Ok, not Err
         let tx = Transaction {
             hash: "ghi789".to_string(),
             successful: true,
@@ -203,8 +226,28 @@ mod tests {
         };
 
         let result = explain_transaction(&tx);
+        assert!(result.is_ok());
+
+        let explanation = result.unwrap();
+        assert_eq!(explanation.payment_explanations.len(), 0);
+        assert_eq!(explanation.skipped_operations, 2);
+        assert!(explanation.summary.contains("does not yet support"));
+    }
+
+    #[test]
+    fn test_explain_empty_transaction_returns_err() {
+        // Only truly empty transactions should error
+        let tx = Transaction {
+            hash: "empty".to_string(),
+            successful: true,
+            fee_charged: 100,
+            operations: vec![],
+            memo: None,
+        };
+
+        let result = explain_transaction(&tx);
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), ExplainError::NoPaymentOperations);
+        assert_eq!(result.unwrap_err(), ExplainError::EmptyTransaction);
     }
 
     #[test]
@@ -254,19 +297,13 @@ mod tests {
     #[test]
     fn test_build_transaction_summary_single_payment() {
         let summary = build_transaction_summary(true, 1, 0);
-        assert_eq!(
-            summary,
-            "This successful transaction contains 1 payment."
-        );
+        assert_eq!(summary, "This successful transaction contains 1 payment.");
     }
 
     #[test]
     fn test_build_transaction_summary_multiple_payments() {
         let summary = build_transaction_summary(true, 3, 0);
-        assert_eq!(
-            summary,
-            "This successful transaction contains 3 payments."
-        );
+        assert_eq!(summary, "This successful transaction contains 3 payments.");
     }
 
     #[test]
@@ -282,5 +319,12 @@ mod tests {
     fn test_build_transaction_summary_failed() {
         let summary = build_transaction_summary(false, 1, 0);
         assert_eq!(summary, "This failed transaction contains 1 payment.");
+    }
+
+    #[test]
+    fn test_build_transaction_summary_no_payments() {
+        let summary = build_transaction_summary(true, 0, 3);
+        assert!(summary.contains("does not yet support"));
+        assert!(summary.contains("3 operations"));
     }
 }
