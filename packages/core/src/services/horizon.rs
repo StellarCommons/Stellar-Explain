@@ -1,43 +1,49 @@
 use reqwest::Client;
 use serde::Deserialize;
-// use crate::config::network::StellarNetwork;t
 
 use crate::errors::HorizonError;
+use crate::services::transaction_cache::{CacheKey, Network, TransactionCache};
 
-#[derive(Debug, Deserialize)]
+/// Raw transaction response from the Horizon API.
+#[derive(Debug, Deserialize, Clone)]
 pub struct HorizonTransaction {
     pub hash: String,
     pub successful: bool,
     pub fee_charged: String,
+    pub memo_type: Option<String>,
+    pub memo: Option<String>,
 }
 
 #[derive(Clone)]
 pub struct HorizonClient {
     client: Client,
     base_url: String,
-
+    // In-memory TTL cache — avoids re-fetching the same transaction from Horizon
+    cache: TransactionCache<HorizonTransaction>,
 }
-
 
 impl HorizonClient {
     pub fn new(base_url: impl Into<String>) -> Self {
         Self {
             client: Client::new(),
             base_url: base_url.into(),
+            // 5 minute TTL — transactions are immutable once confirmed
+            cache: TransactionCache::with_default_ttl(),
         }
     }
-
-    // pub fn from_network(network: StellarNetwork) -> Self {
-    //     Self {
-    //         client: Client::new(),
-    //         base_url: network.horizon_url().to_string(),
-    //     }
-    // }
 
     pub async fn fetch_transaction(
         &self,
         hash: &str,
     ) -> Result<HorizonTransaction, HorizonError> {
+        let cache_key = CacheKey::new(hash.to_string(), Network::Testnet);
+
+        // Cache hit — return immediately without hitting Horizon
+        if let Some(cached) = self.cache.get(&cache_key) {
+            return Ok(cached);
+        }
+
+        // Cache miss — fetch from Horizon
         let url = format!("{}/transactions/{}", self.base_url, hash);
 
         let res = self
@@ -47,14 +53,19 @@ impl HorizonClient {
             .await
             .map_err(|_| HorizonError::NetworkError)?;
 
-        match res.status().as_u16() {
+        let tx = match res.status().as_u16() {
             200 => res
                 .json::<HorizonTransaction>()
                 .await
-                .map_err(|_| HorizonError::InvalidResponse),
-            404 => Err(HorizonError::TransactionNotFound),
-            _ => Err(HorizonError::InvalidResponse),
-        }
+                .map_err(|_| HorizonError::InvalidResponse)?,
+            404 => return Err(HorizonError::TransactionNotFound),
+            _ => return Err(HorizonError::InvalidResponse),
+        };
+
+        // Store in cache for subsequent requests
+        self.cache.insert(cache_key, tx.clone());
+
+        Ok(tx)
     }
 
     pub async fn fetch_operations(
@@ -100,7 +111,6 @@ pub struct HorizonOperation {
     pub transaction_hash: String,
     #[serde(rename = "type")]
     pub type_i: String,
-    // Payment specific fields
     pub from: Option<String>,
     pub to: Option<String>,
     pub asset_type: Option<String>,
