@@ -5,12 +5,19 @@ use crate::errors::HorizonError;
 use crate::services::transaction_cache::{CacheKey, Network, TransactionCache};
 
 /// Raw transaction response from the Horizon API.
-#[derive(Debug, Deserialize, Clone)]
+///
+/// Captures all fields needed for domain mapping including all 5 memo types.
+#[derive(Debug, Deserialize)]
 pub struct HorizonTransaction {
     pub hash: String,
     pub successful: bool,
     pub fee_charged: String,
+
+    // Memo fields — all optional since not every transaction has a memo
+    // memo_type is always present but can be "none"
     pub memo_type: Option<String>,
+
+    // memo is only present when memo_type is not "none"
     pub memo: Option<String>,
 }
 
@@ -18,8 +25,6 @@ pub struct HorizonTransaction {
 pub struct HorizonClient {
     client: Client,
     base_url: String,
-    // In-memory TTL cache — avoids re-fetching the same transaction from Horizon
-    cache: TransactionCache<HorizonTransaction>,
 }
 
 impl HorizonClient {

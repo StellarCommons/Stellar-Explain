@@ -6,7 +6,9 @@
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "smoke-test": "bash ../../scripts/smoke-test.sh"
+
   },
   "dependencies": {
     "react": "19.1.0",
