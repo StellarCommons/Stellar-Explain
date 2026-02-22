@@ -4,6 +4,7 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
+use crate::explain::transaction::ExplainError;
 
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -101,6 +102,16 @@ impl From<HorizonError> for AppError {
                         .into(),
                 )
             }
+        }
+    }
+}
+
+impl From for AppError {
+    fn from(err: ExplainError) -> Self {
+        match err {
+            ExplainError::EmptyTransaction => AppError::BadRequest(
+                "This transaction contains no operations.".to_string(),
+            ),
         }
     }
 }
