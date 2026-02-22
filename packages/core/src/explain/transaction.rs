@@ -1,4 +1,6 @@
 //! Transaction explanation orchestration.
+//!
+//! Accepts an internal transaction model and produces structured explanations.
 
 use serde::{Deserialize, Serialize};
 
@@ -16,10 +18,9 @@ pub struct TransactionExplanation {
     pub summary: String,
     pub payment_explanations: Vec<PaymentExplanation>,
     pub skipped_operations: usize,
-    /// Human-readable explanation of the transaction memo. None if no memo.
+    /// Human-readable explanation of the transaction memo.
+    /// None if the transaction has no memo.
     pub memo_explanation: Option<String>,
-    /// Human-readable fee context for this transaction.
-    pub fee_explanation: String,
 }
 
 /// Result type for transaction explanation.
@@ -28,6 +29,7 @@ pub type ExplainResult = Result<TransactionExplanation, ExplainError>;
 /// Errors that can occur during explanation.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExplainError {
+    /// The transaction has zero operations (truly empty).
     EmptyTransaction,
 }
 
@@ -70,6 +72,7 @@ pub fn explain_transaction(
     transaction: &Transaction,
     fee_stats: Option<&FeeStats>,
 ) -> ExplainResult {
+pub fn explain_transaction(transaction: &Transaction) -> ExplainResult {
     let total_operations = transaction.operations.len();
 
     if total_operations == 0 {
@@ -94,6 +97,9 @@ pub fn explain_transaction(
     let memo_explanation = transaction.memo.as_ref().and_then(|m| explain_memo(m));
 
     let fee_explanation = explain_fee(transaction.fee_charged, fee_stats);
+
+    // Wire in memo explanation — None if transaction has no memo
+    let memo_explanation = transaction.memo.as_ref().and_then(|m| explain_memo(m));
 
     Ok(TransactionExplanation {
         transaction_hash: transaction.hash.clone(),
@@ -194,6 +200,7 @@ mod tests {
 
     #[test]
     fn test_explain_transaction_includes_fee_explanation() {
+    fn test_explain_single_payment_no_memo() {
         let tx = Transaction {
             hash: "abc123".to_string(),
             successful: true,
@@ -205,6 +212,63 @@ mod tests {
         let explanation = explain_transaction(&tx, Some(&stats)).unwrap();
         assert!(!explanation.fee_explanation.is_empty());
         assert!(explanation.fee_explanation.contains("standard"));
+
+        let explanation = explain_transaction(&tx).unwrap();
+        assert_eq!(explanation.transaction_hash, "abc123");
+        assert!(explanation.successful);
+        assert_eq!(explanation.payment_explanations.len(), 1);
+        assert_eq!(explanation.skipped_operations, 0);
+        assert!(explanation.summary.contains("1 payment"));
+        assert_eq!(explanation.memo_explanation, None);
+    }
+
+    #[test]
+    fn test_explain_transaction_with_text_memo() {
+        let tx = Transaction {
+            hash: "abc123".to_string(),
+            successful: true,
+            fee_charged: 100,
+            operations: vec![create_payment_operation("1", "50.0")],
+            memo: Some(Memo::text("Invoice #12345").unwrap()),
+        };
+
+        let explanation = explain_transaction(&tx).unwrap();
+        assert!(explanation.memo_explanation.is_some());
+        let memo_text = explanation.memo_explanation.unwrap();
+        assert!(memo_text.contains("Invoice #12345"));
+        assert!(memo_text.contains("text memo"));
+    }
+
+    #[test]
+    fn test_explain_transaction_with_id_memo() {
+        let tx = Transaction {
+            hash: "abc123".to_string(),
+            successful: true,
+            fee_charged: 100,
+            operations: vec![create_payment_operation("1", "50.0")],
+            memo: Some(Memo::id(987654321)),
+        };
+
+        let explanation = explain_transaction(&tx).unwrap();
+        assert!(explanation.memo_explanation.is_some());
+        let memo_text = explanation.memo_explanation.unwrap();
+        assert!(memo_text.contains("987654321"));
+        assert!(memo_text.contains("ID memo"));
+    }
+
+    #[test]
+    fn test_explain_transaction_memo_none_variant() {
+        let tx = Transaction {
+            hash: "abc123".to_string(),
+            successful: true,
+            fee_charged: 100,
+            operations: vec![create_payment_operation("1", "50.0")],
+            memo: Some(Memo::None),
+        };
+
+        let explanation = explain_transaction(&tx).unwrap();
+        // Memo::None should produce no explanation
+        assert_eq!(explanation.memo_explanation, None);
     }
 
     #[test]
@@ -223,6 +287,16 @@ mod tests {
 
     #[test]
     fn test_explain_transaction_fee_stats_fallback() {
+
+        let explanation = explain_transaction(&tx).unwrap();
+        assert_eq!(explanation.payment_explanations.len(), 3);
+        assert_eq!(explanation.skipped_operations, 0);
+        assert!(explanation.summary.contains("3 payments"));
+        assert_eq!(explanation.memo_explanation, None);
+    }
+
+    #[test]
+    fn test_explain_no_payments_returns_ok() {
         let tx = Transaction {
             hash: "abc123".to_string(),
             successful: true,
@@ -237,6 +311,17 @@ mod tests {
 
     #[test]
     fn test_explain_single_payment_no_memo() {
+
+        // Non-payment transactions should return Ok with empty payment_explanations
+        let result = explain_transaction(&tx);
+        assert!(result.is_ok());
+        let explanation = result.unwrap();
+        assert_eq!(explanation.payment_explanations.len(), 0);
+        assert_eq!(explanation.skipped_operations, 2);
+    }
+
+    #[test]
+    fn test_explain_empty_transaction_returns_err() {
         let tx = Transaction {
             hash: "abc123".to_string(),
             successful: true,
@@ -274,6 +359,13 @@ mod tests {
             memo: None,
         };
         assert!(explain_transaction(&tx, None).is_err());
+
+        let explanation = explain_transaction(&tx).unwrap();
+        assert_eq!(explanation.payment_explanations.len(), 2);
+        assert_eq!(explanation.skipped_operations, 3);
+        assert!(explanation.summary.contains("2 payments"));
+        assert!(explanation.summary.contains("3 other operations were skipped"));
+        assert_eq!(explanation.memo_explanation, None);
     }
 
     #[test]
@@ -290,5 +382,44 @@ mod tests {
         let explanation = result.unwrap();
         assert_eq!(explanation.payment_explanations.len(), 0);
         assert_eq!(explanation.skipped_operations, 2);
+
+        let explanation = explain_transaction(&tx).unwrap();
+        assert!(!explanation.successful);
+        assert!(explanation.summary.contains("failed"));
+        assert_eq!(explanation.memo_explanation, None);
+    }
+
+    #[test]
+    fn test_build_transaction_summary_single_payment() {
+        let summary = build_transaction_summary(true, 1, 0);
+        assert_eq!(summary, "This successful transaction contains 1 payment.");
+    }
+
+    #[test]
+    fn test_build_transaction_summary_multiple_payments() {
+        let summary = build_transaction_summary(true, 3, 0);
+        assert_eq!(summary, "This successful transaction contains 3 payments.");
+    }
+
+    #[test]
+    fn test_build_transaction_summary_with_skipped() {
+        let summary = build_transaction_summary(true, 2, 3);
+        assert_eq!(
+            summary,
+            "This successful transaction contains 2 payments. 3 other operations were skipped."
+        );
+    }
+
+    #[test]
+    fn test_build_transaction_summary_no_payments() {
+        let summary = build_transaction_summary(true, 0, 2);
+        assert!(summary.contains("does not yet support"));
+        assert!(summary.contains("2 operations"));
+    }
+
+    #[test]
+    fn test_build_transaction_summary_failed() {
+        let summary = build_transaction_summary(false, 1, 0);
+        assert_eq!(summary, "This failed transaction contains 1 payment.");
     }
 }
