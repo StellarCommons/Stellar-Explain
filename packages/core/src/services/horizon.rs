@@ -2,29 +2,40 @@ use reqwest::Client;
 use serde::Deserialize;
 
 use crate::errors::HorizonError;
+use crate::models::fee::FeeStats;
 use crate::services::transaction_cache::{CacheKey, Network, TransactionCache};
 
 /// Raw transaction response from the Horizon API.
-///
-/// Captures all fields needed for domain mapping including all 5 memo types.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct HorizonTransaction {
     pub hash: String,
     pub successful: bool,
     pub fee_charged: String,
-
-    // Memo fields — all optional since not every transaction has a memo
-    // memo_type is always present but can be "none"
     pub memo_type: Option<String>,
-
-    // memo is only present when memo_type is not "none"
     pub memo: Option<String>,
+}
+
+/// Raw fee_stats response from Horizon.
+/// https://developers.stellar.org/api/horizon/aggregations/fee-stats
+#[derive(Debug, Deserialize)]
+struct HorizonFeeStats {
+    last_ledger_base_fee: String,
+    fee_charged: HorizonFeeCharged,
+}
+
+#[derive(Debug, Deserialize)]
+struct HorizonFeeCharged {
+    min: String,
+    max: String,
+    mode: String,
+    p90: String,
 }
 
 #[derive(Clone)]
 pub struct HorizonClient {
     client: Client,
     base_url: String,
+    cache: TransactionCache<HorizonTransaction>,
 }
 
 impl HorizonClient {
@@ -32,7 +43,6 @@ impl HorizonClient {
         Self {
             client: Client::new(),
             base_url: base_url.into(),
-            // 5 minute TTL — transactions are immutable once confirmed
             cache: TransactionCache::with_default_ttl(),
         }
     }
@@ -43,12 +53,10 @@ impl HorizonClient {
     ) -> Result<HorizonTransaction, HorizonError> {
         let cache_key = CacheKey::new(hash.to_string(), Network::Testnet);
 
-        // Cache hit — return immediately without hitting Horizon
         if let Some(cached) = self.cache.get(&cache_key) {
             return Ok(cached);
         }
 
-        // Cache miss — fetch from Horizon
         let url = format!("{}/transactions/{}", self.base_url, hash);
 
         let res = self
@@ -67,7 +75,6 @@ impl HorizonClient {
             _ => return Err(HorizonError::InvalidResponse),
         };
 
-        // Store in cache for subsequent requests
         self.cache.insert(cache_key, tx.clone());
 
         Ok(tx)
@@ -97,6 +104,35 @@ impl HorizonClient {
             404 => Err(HorizonError::TransactionNotFound),
             _ => Err(HorizonError::InvalidResponse),
         }
+    }
+
+    /// Fetch current network fee statistics from Horizon.
+    /// Returns None if the request fails — callers should degrade gracefully.
+    pub async fn fetch_fee_stats(&self) -> Option<FeeStats> {
+        let url = format!("{}/fee_stats", self.base_url);
+
+        let res = self.client.get(url).send().await.ok()?;
+
+        if res.status().as_u16() != 200 {
+            return None;
+        }
+
+        let raw: HorizonFeeStats = res.json().await.ok()?;
+
+        // Horizon returns fees as string stroops — parse each field
+        let base_fee = raw.last_ledger_base_fee.parse::<u64>().ok()?;
+        let min_fee = raw.fee_charged.min.parse::<u64>().ok()?;
+        let max_fee = raw.fee_charged.max.parse::<u64>().ok()?;
+        let mode_fee = raw.fee_charged.mode.parse::<u64>().ok()?;
+        let p90_fee = raw.fee_charged.p90.parse::<u64>().ok()?;
+
+        Some(FeeStats {
+            base_fee,
+            min_fee,
+            max_fee,
+            mode_fee,
+            p90_fee,
+        })
     }
 }
 
