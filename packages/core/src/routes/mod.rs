@@ -4,3 +4,4 @@
 //! Intentionally empty for initial scaffolding.
 pub mod tx;
 pub mod account;
+pub mod health;

@@ -169,6 +169,18 @@ impl HorizonClient {
             p90_fee,
         })
     }
+
+    /// Lightweight connectivity check for health endpoint
+    pub async fn is_reachable(&self) -> bool {
+        let res = self
+            .client
+            .head(&self.base_url)
+            .timeout(Duration::from_secs(2))
+            .send()
+            .await;
+
+        matches!(res, Ok(r) if r.status().is_success())
+    }
 }
 
 #[derive(Debug, Deserialize)]
