@@ -146,16 +146,38 @@ struct HorizonEmbeddedOperations {
     records: Vec<HorizonOperation>,
 }
 
+#[derive(Debug, Deserialize, Clone)]
+pub struct HorizonPathAsset {
+    #[serde(rename = "asset_type")]
+    pub asset_type: String,
+    pub asset_code: Option<String>,
+    pub asset_issuer: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct HorizonOperation {
     pub id: String,
     pub transaction_hash: String,
     #[serde(rename = "type")]
     pub type_i: String,
+    pub source_account: Option<String>,
     pub from: Option<String>,
     pub to: Option<String>,
     pub asset_type: Option<String>,
     pub asset_code: Option<String>,
     pub asset_issuer: Option<String>,
     pub amount: Option<String>,
+    pub selling_asset_type: Option<String>,
+    pub selling_asset_code: Option<String>,
+    pub selling_asset_issuer: Option<String>,
+    pub buying_asset_type: Option<String>,
+    pub buying_asset_code: Option<String>,
+    pub buying_asset_issuer: Option<String>,
+    pub price: Option<String>,
+    pub offer_id: Option<u64>,
+    pub source_asset_type: Option<String>,
+    pub source_asset_code: Option<String>,
+    pub source_asset_issuer: Option<String>,
+    pub source_amount: Option<String>,
+    pub path: Option<Vec<HorizonPathAsset>>,
 }
