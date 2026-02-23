@@ -7,10 +7,19 @@ pub struct AccountExplanation {
     pub xlm_balance: String,
     pub asset_count: usize,
     pub signer_count: u32,
+    pub home_domain: Option<String>,
+    pub org_name: Option<String>,
     pub flag_descriptions: Vec<String>,
 }
 
 pub fn explain_account(account: &Account) -> AccountExplanation {
+    explain_account_with_org_name(account, None)
+}
+
+pub fn explain_account_with_org_name(
+    account: &Account,
+    org_name: Option<String>,
+) -> AccountExplanation {
     let xlm_balance = account
         .balances
         .iter()
@@ -26,30 +35,37 @@ pub fn explain_account(account: &Account) -> AccountExplanation {
 
     let asset_count = other_assets.len();
 
-    let home_domain_part = account
-        .home_domain
-        .as_deref()
-        .map(|d| format!(" and home domain {}.", d))
-        .unwrap_or_else(|| ".".to_string());
-
-    let summary = if asset_count == 0 {
+    let base_summary = if asset_count == 0 {
         format!(
-            "This account holds {} XLM. It has {} signer{}{}",
+            "This account holds {} XLM. It has {} signer{}.",
             xlm_balance,
             account.num_signers,
             if account.num_signers == 1 { "" } else { "s" },
-            home_domain_part
         )
     } else {
         format!(
-            "This account holds {} XLM and {} other asset{}. It has {} signer{}{}",
+            "This account holds {} XLM and {} other asset{}. It has {} signer{}.",
             xlm_balance,
             asset_count,
             if asset_count == 1 { "" } else { "s" },
             account.num_signers,
             if account.num_signers == 1 { "" } else { "s" },
-            home_domain_part
         )
+    };
+
+    let home_domain = account.home_domain.clone();
+    let org_name = org_name.filter(|value| !value.trim().is_empty());
+
+    let summary = match (&home_domain, &org_name) {
+        (Some(domain), Some(name)) => {
+            format!(
+                "{base_summary} Account operated by {} ({}).",
+                name,
+                domain
+            )
+        }
+        (Some(domain), None) => format!("{base_summary} Home domain: {}.", domain),
+        (None, _) => base_summary,
     };
 
     let mut flag_descriptions = Vec::new();
@@ -79,6 +95,8 @@ pub fn explain_account(account: &Account) -> AccountExplanation {
         xlm_balance,
         asset_count,
         signer_count: account.num_signers,
+        home_domain,
+        org_name,
         flag_descriptions,
     }
 }
@@ -127,6 +145,8 @@ mod tests {
         assert_eq!(explanation.signer_count, 1);
         assert!(explanation.summary.contains("100.5000000 XLM"));
         assert!(!explanation.summary.contains("other asset"));
+        assert!(explanation.home_domain.is_none());
+        assert!(explanation.org_name.is_none());
     }
 
     #[test]
@@ -136,7 +156,21 @@ mod tests {
         assert_eq!(explanation.asset_count, 2);
         assert!(explanation.summary.contains("104.5000000 XLM"));
         assert!(explanation.summary.contains("2 other assets"));
-        assert!(explanation.summary.contains("stellar.org"));
+        assert!(explanation.summary.contains("Home domain: stellar.org."));
+        assert_eq!(explanation.home_domain.as_deref(), Some("stellar.org"));
+    }
+
+    #[test]
+    fn test_summary_with_org_name_and_home_domain() {
+        let account = mock_account("200.0000000", 0, 2, Some("anchorage.com"));
+        let explanation = explain_account_with_org_name(
+            &account,
+            Some("Anchorage Digital".to_string()),
+        );
+        assert!(explanation.summary.contains(
+            "Account operated by Anchorage Digital (anchorage.com)"
+        ));
+        assert_eq!(explanation.org_name.as_deref(), Some("Anchorage Digital"));
     }
 
     #[test]

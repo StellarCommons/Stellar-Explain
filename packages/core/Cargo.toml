@@ -17,6 +17,7 @@ tower-governor = "0.4"
 utoipa = { version = "4", features = ["axum_extras"] }
 utoipa-swagger-ui = "6"
 uuid = { version = "1", features = ["v4"] }
+toml = "0.8"
 
 [dev-dependencies]
 httpmock = "0.7"
