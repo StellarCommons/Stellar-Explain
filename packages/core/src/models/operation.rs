@@ -4,10 +4,9 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::services::horizon::{HorizonOperation, HorizonPathAsset};
+
 /// Represents a Stellar operation.
-///
-/// For v1, we support Payment, ChangeTrust, and CreateAccount operations.
-/// Other operation types are preserved but not explained.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Operation {
@@ -68,6 +67,8 @@ pub struct PathPaymentOperation {
     pub dest_amount: String,
     pub path: Vec<String>,
     pub payment_type: PathPaymentType,
+}
+
 /// A create_account operation that funds and activates a new Stellar account.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CreateAccountOperation {
@@ -78,8 +79,6 @@ pub struct CreateAccountOperation {
 }
 
 /// A change_trust operation that opts an account in or out of holding a non-native asset.
-///
-/// Setting limit to "0" removes the trust line; any other value adds or updates it.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ChangeTrustOperation {
     pub id: String,
@@ -89,9 +88,7 @@ pub struct ChangeTrustOperation {
     pub limit: String,
 }
 
-/// Placeholder for non-payment operations.
-///
-/// These are preserved in the transaction model but not explained in v1.
+/// Placeholder for non-supported operation types.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct OtherOperation {
     pub id: String,
@@ -129,49 +126,6 @@ impl Operation {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_is_payment() {
-        let payment = Operation::Payment(PaymentOperation {
-            id: "12345".to_string(),
-            source_account: None,
-            destination: "GDEST...".to_string(),
-            asset_type: "native".to_string(),
-            asset_code: None,
-            asset_issuer: None,
-            amount: "100.0".to_string(),
-        });
-
-        let other = Operation::Other(OtherOperation {
-            id: "67890".to_string(),
-            operation_type: "create_account".to_string(),
-        });
-
-        assert!(payment.is_payment());
-        assert!(!other.is_payment());
-    }
-
-    #[test]
-    fn test_operation_id() {
-        let payment = Operation::Payment(PaymentOperation {
-            id: "12345".to_string(),
-            source_account: None,
-            destination: "GDEST...".to_string(),
-            asset_type: "native".to_string(),
-            asset_code: None,
-            asset_issuer: None,
-            amount: "100.0".to_string(),
-        });
-
-        assert_eq!(payment.id(), "12345");
-    }
-}
-
-use crate::services::horizon::{HorizonOperation, HorizonPathAsset};
-
 fn format_asset(
     asset_type: Option<String>,
     asset_code: Option<String>,
@@ -198,16 +152,18 @@ fn format_offer_asset(
 fn format_path(path: Option<Vec<HorizonPathAsset>>) -> Vec<String> {
     path.unwrap_or_default()
         .into_iter()
-        .map(|a| format_asset(Some(a.asset_type), a.asset_code, a.asset_issuer))
+        .map(|asset| format_asset(Some(asset.asset_type), asset.asset_code, asset.asset_issuer))
         .collect()
 }
 
 impl From<HorizonOperation> for Operation {
     fn from(op: HorizonOperation) -> Self {
-        match op.type_i.as_str() {
+        let op_type = op.type_i.clone();
+
+        match op_type.as_str() {
             "payment" => Operation::Payment(PaymentOperation {
                 id: op.id,
-                source_account: op.from,
+                source_account: op.from.or(op.source_account),
                 destination: op.to.unwrap_or_default(),
                 asset_type: op.asset_type.unwrap_or_else(|| "native".to_string()),
                 asset_code: op.asset_code,
@@ -250,22 +206,18 @@ impl From<HorizonOperation> for Operation {
                 offer_id: op.offer_id.unwrap_or(0),
                 offer_type: OfferType::Buy,
             }),
-            "path_payment_strict_send" => {
-                let path = format_path(op.path);
-                Operation::PathPaymentStrictSend(PathPaymentOperation {
-                    id: op.id,
-                    source_account: op.from.or(op.source_account),
-                    destination: op.to.unwrap_or_default(),
-                    send_asset: format_asset(op.source_asset_type, op.source_asset_code, op.source_asset_issuer),
-                    send_amount: op.source_amount.unwrap_or_else(|| "0".to_string()),
-                    dest_asset: format_asset(op.asset_type, op.asset_code, op.asset_issuer),
-                    dest_amount: op.amount.unwrap_or_else(|| "0".to_string()),
-                    path,
-                    payment_type: PathPaymentType::StrictSend,
-                })
-            }
+            "path_payment_strict_send" => Operation::PathPaymentStrictSend(PathPaymentOperation {
+                id: op.id,
+                source_account: op.from.or(op.source_account),
+                destination: op.to.unwrap_or_default(),
+                send_asset: format_asset(op.source_asset_type, op.source_asset_code, op.source_asset_issuer),
+                send_amount: op.source_amount.unwrap_or_else(|| "0".to_string()),
+                dest_asset: format_asset(op.asset_type, op.asset_code, op.asset_issuer),
+                dest_amount: op.amount.unwrap_or_else(|| "0".to_string()),
+                path: format_path(op.path),
+                payment_type: PathPaymentType::StrictSend,
+            }),
             "path_payment_strict_receive" => {
-                let path = format_path(op.path);
                 Operation::PathPaymentStrictReceive(PathPaymentOperation {
                     id: op.id,
                     source_account: op.from.or(op.source_account),
@@ -274,32 +226,68 @@ impl From<HorizonOperation> for Operation {
                     send_amount: op.source_amount.unwrap_or_else(|| "0".to_string()),
                     dest_asset: format_asset(op.asset_type, op.asset_code, op.asset_issuer),
                     dest_amount: op.amount.unwrap_or_else(|| "0".to_string()),
-                    path,
+                    path: format_path(op.path),
                     payment_type: PathPaymentType::StrictReceive,
                 })
             }
-            _ => Operation::Other(OtherOperation {
-            })
-        } else if op.type_i == "change_trust" {
-            Operation::ChangeTrust(ChangeTrustOperation {
+            "change_trust" => Operation::ChangeTrust(ChangeTrustOperation {
                 id: op.id,
                 trustor: op.trustor.unwrap_or_default(),
                 asset_code: op.asset_code.unwrap_or_default(),
                 asset_issuer: op.asset_issuer.unwrap_or_default(),
                 limit: op.limit.unwrap_or_else(|| "0".to_string()),
-            })
-        } else if op.type_i == "create_account" {
-            Operation::CreateAccount(CreateAccountOperation {
+            }),
+            "create_account" => Operation::CreateAccount(CreateAccountOperation {
                 id: op.id,
                 funder: op.funder.unwrap_or_default(),
                 new_account: op.account.unwrap_or_default(),
                 starting_balance: op.starting_balance.unwrap_or_else(|| "0".to_string()),
-            })
-        } else {
-            Operation::Other(OtherOperation {
+            }),
+            _ => Operation::Other(OtherOperation {
                 id: op.id,
-                operation_type: op.type_i,
+                operation_type: op_type,
             }),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_payment() {
+        let payment = Operation::Payment(PaymentOperation {
+            id: "12345".to_string(),
+            source_account: None,
+            destination: "GDEST...".to_string(),
+            asset_type: "native".to_string(),
+            asset_code: None,
+            asset_issuer: None,
+            amount: "100.0".to_string(),
+        });
+
+        let other = Operation::Other(OtherOperation {
+            id: "67890".to_string(),
+            operation_type: "create_account".to_string(),
+        });
+
+        assert!(payment.is_payment());
+        assert!(!other.is_payment());
+    }
+
+    #[test]
+    fn test_operation_id() {
+        let payment = Operation::Payment(PaymentOperation {
+            id: "12345".to_string(),
+            source_account: None,
+            destination: "GDEST...".to_string(),
+            asset_type: "native".to_string(),
+            asset_code: None,
+            asset_issuer: None,
+            amount: "100.0".to_string(),
+        });
+
+        assert_eq!(payment.id(), "12345");
     }
 }

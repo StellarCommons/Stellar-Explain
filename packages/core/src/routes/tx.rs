@@ -31,6 +31,7 @@ pub struct TxExplanationResponse {
     ),
     responses(
         (status = 200, description = "Transaction explanation", body = TxExplanationResponse),
+        (status = 400, description = "Invalid transaction hash"),
         (status = 404, description = "Transaction not found"),
         (status = 500, description = "Internal server error")
     )
@@ -53,6 +54,22 @@ pub async fn get_tx_explanation(
         hash = %hash,
         "incoming_request"
     );
+
+    if !is_valid_transaction_hash(&hash) {
+        let app_error = AppError::BadRequest(
+            "Invalid transaction hash format. Expected 64-character hexadecimal hash."
+                .to_string(),
+        );
+        info!(
+            request_id = %request_id,
+            hash = %hash,
+            status = app_error.status_code().as_u16(),
+            total_duration_ms = request_started_at.elapsed().as_millis() as u64,
+            error = ?app_error,
+            "request_completed"
+        );
+        return Err(app_error);
+    }
 
     // Fetch transaction, operations, and fee stats in parallel
     let horizon_started_at = Instant::now();
@@ -138,4 +155,8 @@ pub async fn get_tx_explanation(
     );
 
     Ok(Json(explanation))
+}
+
+fn is_valid_transaction_hash(hash: &str) -> bool {
+    hash.len() == 64 && hash.chars().all(|c| c.is_ascii_hexdigit())
 }
