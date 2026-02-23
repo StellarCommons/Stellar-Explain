@@ -106,6 +106,41 @@ impl HorizonClient {
         }
     }
 
+    pub async fn fetch_account_transactions(
+        &self,
+        address: &str,
+        limit: u32,
+        cursor: Option<&str>,
+        order: &str,
+    ) -> Result<(Vec<HorizonAccountTransaction>, Option<String>, Option<String>), HorizonError> {
+        let mut url = format!(
+            "{}/accounts/{}/transactions?limit={}&order={}",
+            self.base_url, address, limit, order
+        );
+        if let Some(c) = cursor {
+            url.push_str(&format!("&cursor={}", c));
+        }
+
+        let res = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|_| HorizonError::NetworkError)?;
+
+        match res.status().as_u16() {
+            200 => {
+                let wrapper: HorizonAccountTransactionsResponse =
+                    res.json().await.map_err(|_| HorizonError::InvalidResponse)?;
+                let next_cursor = wrapper.links.next.as_ref().and_then(|l| extract_cursor(&l.href));
+                let prev_cursor = wrapper.links.prev.as_ref().and_then(|l| extract_cursor(&l.href));
+                Ok((wrapper.embedded.records, next_cursor, prev_cursor))
+            }
+            404 => Err(HorizonError::AccountNotFound),
+            _ => Err(HorizonError::InvalidResponse),
+        }
+    }
+
     /// Fetch current network fee statistics from Horizon.
     /// Returns None if the request fails — callers should degrade gracefully.
     pub async fn fetch_fee_stats(&self) -> Option<FeeStats> {
@@ -134,6 +169,41 @@ impl HorizonClient {
             p90_fee,
         })
     }
+}
+
+#[derive(Debug, Deserialize)]
+struct HorizonTransactionLink {
+    href: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct HorizonTransactionLinks {
+    next: Option<HorizonTransactionLink>,
+    prev: Option<HorizonTransactionLink>,
+}
+
+#[derive(Debug, Deserialize)]
+struct HorizonAccountTransactionsResponse {
+    #[serde(rename = "_links")]
+    links: HorizonTransactionLinks,
+    #[serde(rename = "_embedded")]
+    embedded: HorizonAccountTransactionsEmbedded,
+}
+
+#[derive(Debug, Deserialize)]
+struct HorizonAccountTransactionsEmbedded {
+    records: Vec<HorizonAccountTransaction>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct HorizonAccountTransaction {
+    pub hash: String,
+    pub successful: bool,
+    pub created_at: String,
+    pub source_account: String,
+    pub operation_count: u32,
+    pub memo_type: Option<String>,
+    pub memo: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -185,4 +255,18 @@ pub struct HorizonOperation {
     pub funder: Option<String>,
     pub account: Option<String>,
     pub starting_balance: Option<String>,
+}
+
+fn extract_cursor(href: &str) -> Option<String> {
+    href.split('?')
+        .nth(1)?
+        .split('&')
+        .find_map(|pair| {
+            let mut parts = pair.splitn(2, '=');
+            if parts.next()? == "cursor" {
+                parts.next().map(|v| v.to_string())
+            } else {
+                None
+            }
+        })
 }
