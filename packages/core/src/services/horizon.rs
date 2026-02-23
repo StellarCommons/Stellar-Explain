@@ -160,4 +160,7 @@ pub struct HorizonOperation {
     pub amount: Option<String>,
     pub trustor: Option<String>,
     pub limit: Option<String>,
+    pub funder: Option<String>,
+    pub account: Option<String>,
+    pub starting_balance: Option<String>,
 }
