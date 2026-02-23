@@ -6,13 +6,14 @@ use serde::{Deserialize, Serialize};
 
 /// Represents a Stellar operation.
 ///
-/// For v1, we support Payment and ChangeTrust operations.
+/// For v1, we support Payment, ChangeTrust, and CreateAccount operations.
 /// Other operation types are preserved but not explained.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Operation {
     Payment(PaymentOperation),
     ChangeTrust(ChangeTrustOperation),
+    CreateAccount(CreateAccountOperation),
     Other(OtherOperation),
 }
 
@@ -26,6 +27,15 @@ pub struct PaymentOperation {
     pub asset_code: Option<String>,
     pub asset_issuer: Option<String>,
     pub amount: String,
+}
+
+/// A create_account operation that funds and activates a new Stellar account.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CreateAccountOperation {
+    pub id: String,
+    pub funder: String,
+    pub new_account: String,
+    pub starting_balance: String,
 }
 
 /// A change_trust operation that opts an account in or out of holding a non-native asset.
@@ -60,11 +70,17 @@ impl Operation {
         matches!(self, Operation::ChangeTrust(_))
     }
 
+    /// Returns true if this operation is a create_account.
+    pub fn is_create_account(&self) -> bool {
+        matches!(self, Operation::CreateAccount(_))
+    }
+
     /// Returns the operation ID.
     pub fn id(&self) -> &str {
         match self {
             Operation::Payment(p) => &p.id,
             Operation::ChangeTrust(c) => &c.id,
+            Operation::CreateAccount(ca) => &ca.id,
             Operation::Other(o) => &o.id,
         }
     }
@@ -132,6 +148,13 @@ impl From<HorizonOperation> for Operation {
                 asset_code: op.asset_code.unwrap_or_default(),
                 asset_issuer: op.asset_issuer.unwrap_or_default(),
                 limit: op.limit.unwrap_or_else(|| "0".to_string()),
+            })
+        } else if op.type_i == "create_account" {
+            Operation::CreateAccount(CreateAccountOperation {
+                id: op.id,
+                funder: op.funder.unwrap_or_default(),
+                new_account: op.account.unwrap_or_default(),
+                starting_balance: op.starting_balance.unwrap_or_else(|| "0".to_string()),
             })
         } else {
             Operation::Other(OtherOperation {
