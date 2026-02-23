@@ -12,7 +12,8 @@ use std::sync::Arc;
 use std::env;
 use tower_http::cors::{CorsLayer, AllowOrigin};
 use axum::http::{HeaderValue, Method, header};
-
+use axum::routing::get;
+use crate::routes::health::health;
 use crate::config::network::StellarNetwork;
 use crate::services::horizon::HorizonClient;
 
@@ -52,6 +53,7 @@ async fn main() {
     let app = Router::new()
         .route("/health", axum::routing::get(|| async { "ok" }))
         .route("/tx/:hash", axum::routing::get(routes::tx::get_tx_explanation))
+        .route("/health", get(health))
         .with_state(horizon_client)
         .layer(cors);
 
