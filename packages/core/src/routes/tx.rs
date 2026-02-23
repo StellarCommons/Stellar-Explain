@@ -2,6 +2,7 @@ use axum::{
     extract::{Path, State},
     Json,
 };
+use utoipa::ToSchema;
 use std::sync::Arc;
 
 use crate::{
@@ -10,6 +11,26 @@ use crate::{
     services::{explain::map_transaction_to_domain, horizon::HorizonClient},
 };
 
+#[derive(Serialize, ToSchema)]
+pub struct TxExplanationResponse {
+    pub hash: String,
+    pub successful: bool,
+    pub explanation: String,
+}
+
+
+#[utoipa::path(
+    get,
+    path = "/tx/{hash}",
+    params(
+        ("hash" = String, Path, description = "Transaction hash")
+    ),
+    responses(
+        (status = 200, description = "Transaction explanation", body = TxExplanationResponse),
+        (status = 404, description = "Transaction not found"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn get_tx_explanation(
     Path(hash): Path<String>,
     State(horizon_client): State<Arc<HorizonClient>>,
