@@ -1,13 +1,17 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Extension, Path, State},
     Json,
 };
+use serde::Serialize;
 use utoipa::ToSchema;
 use std::sync::Arc;
+use std::time::Instant;
+use tracing::{error, info, info_span};
 
 use crate::{
     errors::AppError,
     explain::transaction::{explain_transaction, TransactionExplanation},
+    middleware::request_id::RequestId,
     services::{explain::map_transaction_to_domain, horizon::HorizonClient},
 };
 
@@ -34,23 +38,104 @@ pub struct TxExplanationResponse {
 pub async fn get_tx_explanation(
     Path(hash): Path<String>,
     State(horizon_client): State<Arc<HorizonClient>>,
+    Extension(request_id): Extension<RequestId>,
 ) -> Result<Json<TransactionExplanation>, AppError> {
+    let span = info_span!(
+        "tx_explanation_request",
+        request_id = %request_id,
+        hash = %hash
+    );
+    let _span_guard = span.enter();
+    let request_started_at = Instant::now();
+
+    info!(
+        request_id = %request_id,
+        hash = %hash,
+        "incoming_request"
+    );
+
     // Fetch transaction, operations, and fee stats in parallel
+    let horizon_started_at = Instant::now();
     let tx_future = horizon_client.fetch_transaction(&hash);
     let ops_future = horizon_client.fetch_operations(&hash);
     let fee_future = horizon_client.fetch_fee_stats();
 
     let (tx_res, ops_res, fee_stats) = tokio::join!(tx_future, ops_future, fee_future);
+    let horizon_fetch_duration_ms = horizon_started_at.elapsed().as_millis() as u64;
 
-    let tx = tx_res?;
-    let ops = ops_res?;
+    info!(
+        request_id = %request_id,
+        hash = %hash,
+        horizon_fetch_duration_ms,
+        fee_stats_available = fee_stats.is_some(),
+        "horizon_fetch_completed"
+    );
+
+    let tx = match tx_res {
+        Ok(tx) => tx,
+        Err(err) => {
+            let app_error: AppError = err.into();
+            error!(
+                request_id = %request_id,
+                hash = %hash,
+                horizon_fetch_duration_ms,
+                total_duration_ms = request_started_at.elapsed().as_millis() as u64,
+                status = app_error.status_code().as_u16(),
+                error = ?app_error,
+                "horizon_transaction_fetch_failed"
+            );
+            return Err(app_error);
+        }
+    };
+
+    let ops = match ops_res {
+        Ok(ops) => ops,
+        Err(err) => {
+            let app_error: AppError = err.into();
+            error!(
+                request_id = %request_id,
+                hash = %hash,
+                horizon_fetch_duration_ms,
+                total_duration_ms = request_started_at.elapsed().as_millis() as u64,
+                status = app_error.status_code().as_u16(),
+                error = ?app_error,
+                "horizon_operations_fetch_failed"
+            );
+            return Err(app_error);
+        }
+    };
 
     // fee_stats is Option<FeeStats> — None if Horizon /fee_stats is unavailable
     // explain_transaction degrades gracefully when it is None
 
     let domain_tx = map_transaction_to_domain(tx, ops);
+    let explain_started_at = Instant::now();
+    let explanation = match explain_transaction(&domain_tx, fee_stats.as_ref()) {
+        Ok(explanation) => explanation,
+        Err(err) => {
+            let app_error: AppError = err.into();
+            error!(
+                request_id = %request_id,
+                hash = %hash,
+                explain_duration_ms = explain_started_at.elapsed().as_millis() as u64,
+                total_duration_ms = request_started_at.elapsed().as_millis() as u64,
+                status = app_error.status_code().as_u16(),
+                error = ?app_error,
+                "transaction_explain_failed"
+            );
+            return Err(app_error);
+        }
+    };
+    let explain_duration_ms = explain_started_at.elapsed().as_millis() as u64;
 
-    let explanation = explain_transaction(&domain_tx, fee_stats.as_ref())?;
+    info!(
+        request_id = %request_id,
+        hash = %hash,
+        explain_duration_ms,
+        total_duration_ms = request_started_at.elapsed().as_millis() as u64,
+        status = 200u16,
+        "request_completed"
+    );
 
     Ok(Json(explanation))
 }

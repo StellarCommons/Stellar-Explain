@@ -64,7 +64,7 @@ impl AppError {
         }
     }
 
-    fn status_code(&self) -> StatusCode {
+    pub fn status_code(&self) -> StatusCode {
         match self {
             AppError::NotFound(_) => StatusCode::NOT_FOUND,
             AppError::BadRequest(_) => StatusCode::BAD_REQUEST,
@@ -110,7 +110,7 @@ impl From<HorizonError> for AppError {
     }
 }
 
-impl From for AppError {
+impl From<ExplainError> for AppError {
     fn from(err: ExplainError) -> Self {
         match err {
             ExplainError::EmptyTransaction => AppError::BadRequest(
@@ -119,5 +119,4 @@ impl From for AppError {
         }
     }
 }
-
 

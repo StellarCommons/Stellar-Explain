@@ -7,24 +7,17 @@ edition = "2024"
 axum = "0.7"
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
-tracing-subscriber = "0.3"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 dotenvy = "0.15"
-
-# NEW
 reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
 serde = { version = "1.0", features = ["derive"] }
 thiserror = "1.0"
 tower-http = { version = "0.6", features = ["cors"] }
-
+tower-governor = "0.4"
+utoipa = { version = "4", features = ["axum_extras"] }
+utoipa-swagger-ui = "6"
+uuid = { version = "1", features = ["v4"] }
 
 [dev-dependencies]
 httpmock = "0.7"
-serde_json = "1.0"
-tower-governor = "0.4"
-
-# OpenAPI / Swagger
-utoipa = { version = "4", features = ["axum_extras"] }
-utoipa-swagger-ui = "6"
-
-# Needed for tests
 serde_json = "1"

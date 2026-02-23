@@ -4,8 +4,10 @@ mod services;
 mod explain;
 mod routes;
 mod config;
+mod middleware;
 
 use axum::{
+    middleware,
     Router,
     routing::get,
     response::{IntoResponse, Response},
@@ -23,10 +25,12 @@ use tower_governor::{
     GovernorLayer,
 };
 use utoipa_swagger_ui::SwaggerUi;
+use tracing_subscriber::EnvFilter;
 
 use crate::routes::{health::health, ApiDoc};
 use crate::config::network::StellarNetwork;
 use crate::services::horizon::HorizonClient;
+use crate::middleware::request_id::request_id_middleware;
 
 
 fn rate_limit_layer() -> GovernorLayer {
@@ -67,24 +71,46 @@ impl IntoResponse for RateLimitError {
     }
 }
 
+fn init_tracing() {
+    let log_format = env::var("LOG_FORMAT").unwrap_or_else(|_| "pretty".to_string());
+    let env_filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("info"));
+
+    if log_format.eq_ignore_ascii_case("json") {
+        tracing_subscriber::fmt()
+            .with_env_filter(env_filter)
+            .with_target(false)
+            .json()
+            .with_current_span(true)
+            .with_span_list(true)
+            .init();
+    } else {
+        tracing_subscriber::fmt()
+            .with_env_filter(env_filter)
+            .with_target(false)
+            .compact()
+            .init();
+    }
+}
+
 #[tokio::main]
 async fn main() {
     dotenvy::dotenv().ok();
-    tracing_subscriber::fmt().init();
+    init_tracing();
 
     // ── Network config ─────────────────────────────────────────
     let network = StellarNetwork::from_env();
     let horizon_url = env::var("HORIZON_URL")
         .unwrap_or_else(|_| network.horizon_url().to_string());
 
-    info!("Network: {:?}", network);
-    info!("Using Horizon URL: {}", horizon_url);
+    info!(network = ?network, "network_selected");
+    info!(horizon_url = %horizon_url, "horizon_url_selected");
 
     // ── CORS ────────────────────────────────────────────────────
     let cors_origin = env::var("CORS_ORIGIN")
         .unwrap_or_else(|_| "http://localhost:3000".to_string());
 
-    info!("Allowing CORS from: {}", cors_origin);
+    info!(cors_origin = %cors_origin, "cors_origin_selected");
 
     let allowed_origin: HeaderValue = cors_origin
         .parse()
@@ -125,11 +151,12 @@ async fn main() {
         .layer(cors)
         .layer(
             ServiceBuilder::new()
+                .layer(middleware::from_fn(request_id_middleware))
                 .layer(rate_limit_layer())
         );
 
     let addr = "0.0.0.0:4000";
-    info!("Stellar Explain backend running on {}", addr);
+    info!(bind_addr = %addr, "server_starting");
 
     let listener = TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
