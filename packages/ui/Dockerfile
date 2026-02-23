@@ -1,41 +1,38 @@
-# ── Dependencies Stage ────────────────────────────────────────────────────────
-FROM node:20-alpine AS deps
+# ─────────────────────────────────────────────────────────────
+# Builder stage
+# ─────────────────────────────────────────────────────────────
+FROM rust:latest AS builder
 
 WORKDIR /app
 
-COPY packages/ui/package.json packages/ui/package-lock.json* ./
+# Cache dependencies
+COPY Cargo.toml Cargo.lock ./
+COPY packages/core/Cargo.toml packages/core/Cargo.toml
 
-RUN npm ci
+RUN mkdir -p packages/core/src \
+    && echo "fn main() {}" > packages/core/src/main.rs
 
-# ── Build Stage ───────────────────────────────────────────────────────────────
-FROM node:20-alpine AS builder
+RUN cargo build --release -p core
+
+# Build actual source
+COPY . .
+RUN cargo build --release -p core
+
+# ─────────────────────────────────────────────────────────────
+# Runtime stage
+# ─────────────────────────────────────────────────────────────
+FROM debian:slim
+
+RUN apt-get update \
+    && apt-get install -y ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-COPY --from=deps /app/node_modules ./node_modules
-COPY packages/ui .
+COPY --from=builder /app/target/release/core /usr/local/bin/app
 
-# API_URL is a server-side variable — safe to pass at build time
-ARG API_URL=http://backend:4000
-ENV API_URL=$API_URL
+EXPOSE 4000
 
-RUN npm run build
+ENV RUST_LOG=info
 
-# ── Runtime Stage ─────────────────────────────────────────────────────────────
-FROM node:20-alpine AS runner
-
-WORKDIR /app
-
-ENV NODE_ENV=production
-
-# Copy only what's needed to run
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-
-EXPOSE 3000
-
-ENV PORT=3000
-ENV HOSTNAME="0.0.0.0"
-
-CMD ["node", "server.js"]
+CMD ["app"]
