@@ -22,8 +22,9 @@ use tower_governor::{
     governor::GovernorConfigBuilder,
     GovernorLayer,
 };
+use utoipa_swagger_ui::SwaggerUi;
 
-use crate::routes::health::health;
+use crate::routes::{health::health, ApiDoc};
 use crate::config::network::StellarNetwork;
 use crate::services::horizon::HorizonClient;
 
@@ -71,7 +72,7 @@ async fn main() {
     dotenvy::dotenv().ok();
     tracing_subscriber::fmt().init();
 
-    // ── Network config ────────────────────────────────────────────────────────
+    // ── Network config ─────────────────────────────────────────
     let network = StellarNetwork::from_env();
     let horizon_url = env::var("HORIZON_URL")
         .unwrap_or_else(|_| network.horizon_url().to_string());
@@ -79,7 +80,7 @@ async fn main() {
     info!("Network: {:?}", network);
     info!("Using Horizon URL: {}", horizon_url);
 
-    // ── CORS ──────────────────────────────────────────────────────────────────
+    // ── CORS ────────────────────────────────────────────────────
     let cors_origin = env::var("CORS_ORIGIN")
         .unwrap_or_else(|_| "http://localhost:3000".to_string());
 
@@ -87,20 +88,39 @@ async fn main() {
 
     let allowed_origin: HeaderValue = cors_origin
         .parse()
-        .expect("CORS_ORIGIN is not a valid HTTP header value");
+        .expect("CORS_ORIGIN is not valid");
 
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::exact(allowed_origin))
         .allow_methods([Method::GET, Method::OPTIONS])
         .allow_headers([header::CONTENT_TYPE, header::ACCEPT]);
 
-    // ── App State ─────────────────────────────────────────────────────────────
+    // ── App State ──────────────────────────────────────────────
     let horizon_client = Arc::new(HorizonClient::new(horizon_url));
 
-    // ── Router ────────────────────────────────────────────────────────────────
+    // Generate OpenAPI spec once
+    let openapi = ApiDoc::openapi();
+
+    // ── Router ─────────────────────────────────────────────────
     let app = Router::new()
         .route("/health", get(health))
         .route("/tx/:hash", get(routes::tx::get_tx_explanation))
+
+        // OpenAPI JSON
+        .route(
+            "/openapi.json",
+            get({
+                let openapi = openapi.clone();
+                move || async move { Json(openapi) }
+            }),
+        )
+
+        // Swagger UI
+        .merge(
+            SwaggerUi::new("/docs")
+                .url("/openapi.json", openapi),
+        )
+
         .with_state(horizon_client)
         .layer(cors)
         .layer(

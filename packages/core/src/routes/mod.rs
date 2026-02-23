@@ -1,7 +1,24 @@
-//! HTTP route definitions.
-//!
-//! Route handlers and routers will be defined here.
-//! Intentionally empty for initial scaffolding.
+use utoipa::OpenApi;
+
+#[derive(OpenApi)]
+#[openapi(
+    paths(
+        health::health,
+        tx::get_tx_explanation
+    ),
+    components(
+        schemas(
+            health::HealthResponse,
+            tx::TxExplanationResponse
+        )
+    ),
+    tags(
+        (name = "health", description = "Health check endpoints"),
+        (name = "transactions", description = "Transaction explanation endpoints")
+    )
+)]
+pub struct ApiDoc;
+
 pub mod tx;
 pub mod account;
 pub mod health;

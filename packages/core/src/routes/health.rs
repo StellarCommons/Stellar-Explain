@@ -1,9 +1,9 @@
 use axum::{http::StatusCode, Json};
 use serde::Serialize;
-
+use utoipa::ToSchema;
 use crate::services::horizon::HorizonClient;
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct HealthResponse {
     pub status: String,
     pub network: String,
@@ -11,6 +11,14 @@ pub struct HealthResponse {
     pub version: String,
 }
 
+#[utoipa::path(
+    get,
+    path = "/health",
+    responses(
+        (status = 200, description = "Service is healthy", body = HealthResponse),
+        (status = 503, description = "Service degraded", body = HealthResponse)
+    )
+)]
 pub async fn health() -> Result<Json<HealthResponse>, (StatusCode, Json<HealthResponse>)> {
     let horizon_url =
         std::env::var("HORIZON_URL").unwrap_or_else(|_| "https://horizon-testnet.stellar.org".into());
