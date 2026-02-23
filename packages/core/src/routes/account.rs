@@ -1,11 +1,17 @@
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Extension, Path, Query, State},
     Json,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use std::time::Instant;
+use tracing::{error, info, info_span};
 
-use crate::{errors::AppError, services::horizon::HorizonClient};
+use crate::{
+    errors::AppError,
+    middleware::request_id::RequestId,
+    services::horizon::HorizonClient,
+};
 
 #[derive(Debug, Deserialize)]
 pub struct AccountTransactionsQuery {
@@ -35,25 +41,80 @@ pub async fn get_account_transactions(
     Path(address): Path<String>,
     Query(params): Query<AccountTransactionsQuery>,
     State(client): State<Arc<HorizonClient>>,
+    Extension(request_id): Extension<RequestId>,
 ) -> Result<Json<PaginatedResponse<TransactionSummary>>, AppError> {
+    let span = info_span!(
+        "account_transactions_request",
+        request_id = %request_id,
+        address = %address
+    );
+    let _span_guard = span.enter();
+    let request_started_at = Instant::now();
+
+    info!(
+        request_id = %request_id,
+        address = %address,
+        "incoming_request"
+    );
+
     let limit = params.limit.unwrap_or(10);
     let order = params.order.as_deref().unwrap_or("asc");
 
     if limit == 0 || limit > 50 {
-        return Err(AppError::BadRequest(
-            "limit must be between 1 and 50".to_string(),
-        ));
+        let app_error = AppError::BadRequest("limit must be between 1 and 50".to_string());
+        info!(
+            request_id = %request_id,
+            address = %address,
+            status = app_error.status_code().as_u16(),
+            total_duration_ms = request_started_at.elapsed().as_millis() as u64,
+            error = ?app_error,
+            "request_completed"
+        );
+        return Err(app_error);
     }
 
     if order != "asc" && order != "desc" {
-        return Err(AppError::BadRequest(
-            "order must be 'asc' or 'desc'".to_string(),
-        ));
+        let app_error = AppError::BadRequest("order must be 'asc' or 'desc'".to_string());
+        info!(
+            request_id = %request_id,
+            address = %address,
+            status = app_error.status_code().as_u16(),
+            total_duration_ms = request_started_at.elapsed().as_millis() as u64,
+            error = ?app_error,
+            "request_completed"
+        );
+        return Err(app_error);
     }
 
-    let (records, next_cursor, prev_cursor) = client
+    let horizon_started_at = Instant::now();
+    let fetch_result = client
         .fetch_account_transactions(&address, limit, params.cursor.as_deref(), order)
-        .await?;
+        .await;
+    let horizon_fetch_duration_ms = horizon_started_at.elapsed().as_millis() as u64;
+
+    let (records, next_cursor, prev_cursor) = match fetch_result {
+        Ok(result) => result,
+        Err(err) => {
+            let app_error: AppError = err.into();
+            error!(
+                request_id = %request_id,
+                address = %address,
+                horizon_fetch_duration_ms,
+                status = app_error.status_code().as_u16(),
+                total_duration_ms = request_started_at.elapsed().as_millis() as u64,
+                error = ?app_error,
+                "horizon_account_fetch_failed"
+            );
+            return Err(app_error);
+        }
+    };
+
+    info!(
+        request_id = %request_id,
+        address = %address,
+        horizon_fetch_duration_ms,
+        "horizon_fetch_completed"
+    );
 
     let items = records
         .into_iter()
@@ -78,6 +139,14 @@ pub async fn get_account_transactions(
             }
         })
         .collect();
+
+    info!(
+        request_id = %request_id,
+        address = %address,
+        status = 200u16,
+        total_duration_ms = request_started_at.elapsed().as_millis() as u64,
+        "request_completed"
+    );
 
     Ok(Json(PaginatedResponse {
         items,
