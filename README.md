@@ -1,4 +1,5 @@
 
+[![CI](https://github.com/drip22/Stellar-Explain/actions/workflows/ci.yml/badge.svg)](https://github.com/drip22/Stellar-Explain/actions/workflows/ci.yml)
 
 ```md
 # 🌌 Stellar Explain
