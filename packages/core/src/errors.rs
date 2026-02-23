@@ -22,6 +22,7 @@ pub struct ErrorBody {
 pub enum HorizonError {
     NetworkError,
     TransactionNotFound,
+    AccountNotFound,
     InvalidResponse,
 }
 
@@ -89,6 +90,9 @@ impl From<HorizonError> for AppError {
                 AppError::NotFound(
                     "Transaction not found on the Stellar network.".into(),
                 )
+            }
+            HorizonError::AccountNotFound => {
+                AppError::NotFound("Account not found on the Stellar network.".into())
             }
             HorizonError::NetworkError => {
                 AppError::UpstreamFailure(
