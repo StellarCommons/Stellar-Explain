@@ -6,12 +6,13 @@ use serde::{Deserialize, Serialize};
 
 /// Represents a Stellar operation.
 ///
-/// For v1, we only support Payment operations.
+/// For v1, we support Payment and ChangeTrust operations.
 /// Other operation types are preserved but not explained.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Operation {
     Payment(PaymentOperation),
+    ChangeTrust(ChangeTrustOperation),
     Other(OtherOperation),
 }
 
@@ -25,6 +26,18 @@ pub struct PaymentOperation {
     pub asset_code: Option<String>,
     pub asset_issuer: Option<String>,
     pub amount: String,
+}
+
+/// A change_trust operation that opts an account in or out of holding a non-native asset.
+///
+/// Setting limit to "0" removes the trust line; any other value adds or updates it.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ChangeTrustOperation {
+    pub id: String,
+    pub trustor: String,
+    pub asset_code: String,
+    pub asset_issuer: String,
+    pub limit: String,
 }
 
 /// Placeholder for non-payment operations.
@@ -42,10 +55,16 @@ impl Operation {
         matches!(self, Operation::Payment(_))
     }
 
+    /// Returns true if this operation is a change_trust.
+    pub fn is_change_trust(&self) -> bool {
+        matches!(self, Operation::ChangeTrust(_))
+    }
+
     /// Returns the operation ID.
     pub fn id(&self) -> &str {
         match self {
             Operation::Payment(p) => &p.id,
+            Operation::ChangeTrust(c) => &c.id,
             Operation::Other(o) => &o.id,
         }
     }
@@ -105,6 +124,14 @@ impl From<HorizonOperation> for Operation {
                 asset_code: op.asset_code,
                 asset_issuer: op.asset_issuer,
                 amount: op.amount.unwrap_or_else(|| "0".to_string()),
+            })
+        } else if op.type_i == "change_trust" {
+            Operation::ChangeTrust(ChangeTrustOperation {
+                id: op.id,
+                trustor: op.trustor.unwrap_or_default(),
+                asset_code: op.asset_code.unwrap_or_default(),
+                asset_issuer: op.asset_issuer.unwrap_or_default(),
+                limit: op.limit.unwrap_or_else(|| "0".to_string()),
             })
         } else {
             Operation::Other(OtherOperation {
