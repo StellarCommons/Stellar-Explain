@@ -1,5 +1,10 @@
 use reqwest::Client;
 use serde::Deserialize;
+use std::{
+    collections::HashMap,
+    sync::{Mutex, OnceLock},
+    time::Duration,
+};
 
 use crate::errors::HorizonError;
 use crate::models::fee::FeeStats;
@@ -30,6 +35,8 @@ struct HorizonFeeCharged {
     mode: String,
     p90: String,
 }
+
+static STELLAR_TOML_ORG_CACHE: OnceLock<Mutex<HashMap<String, Option<String>>>> = OnceLock::new();
 
 #[derive(Clone)]
 pub struct HorizonClient {
@@ -139,6 +146,57 @@ impl HorizonClient {
             404 => Err(HorizonError::AccountNotFound),
             _ => Err(HorizonError::InvalidResponse),
         }
+    }
+
+    /// Resolve ORG_NAME from a domain's stellar.toml file.
+    ///
+    /// Uses an in-memory cache for the process lifetime and applies a hard timeout
+    /// so this call never blocks explanation responses for long.
+    pub async fn fetch_stellar_toml_org_name(&self, home_domain: &str) -> Option<String> {
+        let cache_key = normalize_cache_key(home_domain)?;
+
+        if let Some(cached) = lookup_stellar_toml_cache(&cache_key) {
+            return cached;
+        }
+
+        let url = match build_stellar_toml_url(home_domain) {
+            Some(url) => url,
+            None => {
+                store_stellar_toml_cache(cache_key, None);
+                return None;
+            }
+        };
+
+        let response = match self
+            .client
+            .get(url)
+            .timeout(Duration::from_secs(3))
+            .send()
+            .await
+        {
+            Ok(response) => response,
+            Err(_) => {
+                store_stellar_toml_cache(cache_key, None);
+                return None;
+            }
+        };
+
+        if !response.status().is_success() {
+            store_stellar_toml_cache(cache_key, None);
+            return None;
+        }
+
+        let body = match response.text().await {
+            Ok(body) => body,
+            Err(_) => {
+                store_stellar_toml_cache(cache_key, None);
+                return None;
+            }
+        };
+        let org_name = parse_org_name_from_stellar_toml(&body);
+        store_stellar_toml_cache(cache_key, org_name.clone());
+
+        org_name
     }
 
     /// Fetch current network fee statistics from Horizon.
@@ -281,4 +339,50 @@ fn extract_cursor(href: &str) -> Option<String> {
                 None
             }
         })
+}
+
+fn stellar_toml_cache() -> &'static Mutex<HashMap<String, Option<String>>> {
+    STELLAR_TOML_ORG_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn lookup_stellar_toml_cache(cache_key: &str) -> Option<Option<String>> {
+    let cache = stellar_toml_cache().lock().ok()?;
+    cache.get(cache_key).cloned()
+}
+
+fn store_stellar_toml_cache(cache_key: String, org_name: Option<String>) {
+    if let Ok(mut cache) = stellar_toml_cache().lock() {
+        cache.insert(cache_key, org_name);
+    }
+}
+
+fn normalize_cache_key(home_domain: &str) -> Option<String> {
+    let key = home_domain.trim().trim_end_matches('/').to_lowercase();
+    if key.is_empty() {
+        None
+    } else {
+        Some(key)
+    }
+}
+
+fn build_stellar_toml_url(home_domain: &str) -> Option<String> {
+    let domain = home_domain.trim().trim_end_matches('/');
+    if domain.is_empty() {
+        return None;
+    }
+
+    if domain.starts_with("https://") || domain.starts_with("http://") {
+        Some(format!("{domain}/.well-known/stellar.toml"))
+    } else {
+        Some(format!("https://{domain}/.well-known/stellar.toml"))
+    }
+}
+
+fn parse_org_name_from_stellar_toml(content: &str) -> Option<String> {
+    let parsed: toml::Value = toml::from_str(content).ok()?;
+    parsed
+        .get("ORG_NAME")
+        .and_then(|value| value.as_str())
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
 }

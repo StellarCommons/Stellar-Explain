@@ -175,4 +175,31 @@ mod tests {
 
         matches!(err, crate::errors::HorizonError::AccountNotFound);
     }
+
+    #[tokio::test]
+    async fn fetch_stellar_toml_org_name_with_cache() {
+        let server = MockServer::start();
+        let domain = server.base_url();
+
+        let stellar_toml_mock = server.mock(|when, then| {
+            when.method(GET)
+                .path("/.well-known/stellar.toml");
+            then.status(200)
+                .body(
+                    r#"
+ORG_NAME="Anchorage Digital"
+NETWORK_PASSPHRASE="Test SDF Network ; September 2015"
+"#,
+                );
+        });
+
+        let client = HorizonClient::new(server.base_url());
+
+        let first = client.fetch_stellar_toml_org_name(&domain).await;
+        let second = client.fetch_stellar_toml_org_name(&domain).await;
+
+        assert_eq!(first.as_deref(), Some("Anchorage Digital"));
+        assert_eq!(second.as_deref(), Some("Anchorage Digital"));
+        stellar_toml_mock.assert_hits(1);
+    }
 }
