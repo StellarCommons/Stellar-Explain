@@ -180,4 +180,9 @@ pub struct HorizonOperation {
     pub source_asset_issuer: Option<String>,
     pub source_amount: Option<String>,
     pub path: Option<Vec<HorizonPathAsset>>,
+    pub trustor: Option<String>,
+    pub limit: Option<String>,
+    pub funder: Option<String>,
+    pub account: Option<String>,
+    pub starting_balance: Option<String>,
 }

@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 /// Represents a Stellar operation.
 ///
-/// For v1, we only support Payment operations.
+/// For v1, we support Payment, ChangeTrust, and CreateAccount operations.
 /// Other operation types are preserved but not explained.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -16,6 +16,8 @@ pub enum Operation {
     ManageBuyOffer(ManageOfferOperation),
     PathPaymentStrictSend(PathPaymentOperation),
     PathPaymentStrictReceive(PathPaymentOperation),
+    ChangeTrust(ChangeTrustOperation),
+    CreateAccount(CreateAccountOperation),
     Other(OtherOperation),
 }
 
@@ -66,6 +68,25 @@ pub struct PathPaymentOperation {
     pub dest_amount: String,
     pub path: Vec<String>,
     pub payment_type: PathPaymentType,
+/// A create_account operation that funds and activates a new Stellar account.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CreateAccountOperation {
+    pub id: String,
+    pub funder: String,
+    pub new_account: String,
+    pub starting_balance: String,
+}
+
+/// A change_trust operation that opts an account in or out of holding a non-native asset.
+///
+/// Setting limit to "0" removes the trust line; any other value adds or updates it.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ChangeTrustOperation {
+    pub id: String,
+    pub trustor: String,
+    pub asset_code: String,
+    pub asset_issuer: String,
+    pub limit: String,
 }
 
 /// Placeholder for non-payment operations.
@@ -83,6 +104,16 @@ impl Operation {
         matches!(self, Operation::Payment(_))
     }
 
+    /// Returns true if this operation is a change_trust.
+    pub fn is_change_trust(&self) -> bool {
+        matches!(self, Operation::ChangeTrust(_))
+    }
+
+    /// Returns true if this operation is a create_account.
+    pub fn is_create_account(&self) -> bool {
+        matches!(self, Operation::CreateAccount(_))
+    }
+
     /// Returns the operation ID.
     pub fn id(&self) -> &str {
         match self {
@@ -91,6 +122,8 @@ impl Operation {
             Operation::ManageBuyOffer(o) => &o.id,
             Operation::PathPaymentStrictSend(p) => &p.id,
             Operation::PathPaymentStrictReceive(p) => &p.id,
+            Operation::ChangeTrust(c) => &c.id,
+            Operation::CreateAccount(ca) => &ca.id,
             Operation::Other(o) => &o.id,
         }
     }
@@ -246,6 +279,24 @@ impl From<HorizonOperation> for Operation {
                 })
             }
             _ => Operation::Other(OtherOperation {
+            })
+        } else if op.type_i == "change_trust" {
+            Operation::ChangeTrust(ChangeTrustOperation {
+                id: op.id,
+                trustor: op.trustor.unwrap_or_default(),
+                asset_code: op.asset_code.unwrap_or_default(),
+                asset_issuer: op.asset_issuer.unwrap_or_default(),
+                limit: op.limit.unwrap_or_else(|| "0".to_string()),
+            })
+        } else if op.type_i == "create_account" {
+            Operation::CreateAccount(CreateAccountOperation {
+                id: op.id,
+                funder: op.funder.unwrap_or_default(),
+                new_account: op.account.unwrap_or_default(),
+                starting_balance: op.starting_balance.unwrap_or_else(|| "0".to_string()),
+            })
+        } else {
+            Operation::Other(OtherOperation {
                 id: op.id,
                 operation_type: op.type_i,
             }),
