@@ -5,17 +5,66 @@ mod explain;
 mod routes;
 mod config;
 
-use axum::Router;
-use tracing::info;
+use axum::{
+    Router,
+    routing::get,
+    response::{IntoResponse, Response},
+    http::{HeaderValue, Method, StatusCode, header},
+    Json,
+};
 use tokio::net::TcpListener;
-use std::sync::Arc;
-use std::env;
+use tracing::info;
+use std::{sync::Arc, env};
+use serde::Serialize;
+use tower::ServiceBuilder;
 use tower_http::cors::{CorsLayer, AllowOrigin};
-use axum::http::{HeaderValue, Method, header};
-use axum::routing::get;
+use tower_governor::{
+    governor::GovernorConfigBuilder,
+    GovernorLayer,
+};
+
 use crate::routes::health::health;
 use crate::config::network::StellarNetwork;
 use crate::services::horizon::HorizonClient;
+
+
+fn rate_limit_layer() -> GovernorLayer {
+    let governor_conf = GovernorConfigBuilder::default()
+        .per_minute(60)
+        .burst_size(60)
+        .use_headers()
+        .finish()
+        .expect("failed to build rate limit config");
+
+    GovernorLayer {
+        config: std::sync::Arc::new(governor_conf),
+        error_handler: Some(Box::new(|_| {
+            Box::pin(async {
+                RateLimitError {
+                    error: "rate_limited",
+                    message: "Too many requests. Please retry later.",
+                }
+                .into_response()
+            })
+        })),
+    }
+}
+
+#[derive(Serialize)]
+struct RateLimitError {
+    error: &'static str,
+    message: &'static str,
+}
+
+impl IntoResponse for RateLimitError {
+    fn into_response(self) -> Response {
+        (
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(self),
+        )
+            .into_response()
+    }
+}
 
 #[tokio::main]
 async fn main() {
@@ -23,8 +72,6 @@ async fn main() {
     tracing_subscriber::fmt().init();
 
     // ── Network config ────────────────────────────────────────────────────────
-    // StellarNetwork reads STELLAR_NETWORK from env (defaults to Public).
-    // HORIZON_URL can still override if explicitly set — useful for custom nodes.
     let network = StellarNetwork::from_env();
     let horizon_url = env::var("HORIZON_URL")
         .unwrap_or_else(|_| network.horizon_url().to_string());
@@ -47,15 +94,19 @@ async fn main() {
         .allow_methods([Method::GET, Method::OPTIONS])
         .allow_headers([header::CONTENT_TYPE, header::ACCEPT]);
 
-    // ── App ───────────────────────────────────────────────────────────────────
+    // ── App State ─────────────────────────────────────────────────────────────
     let horizon_client = Arc::new(HorizonClient::new(horizon_url));
 
+    // ── Router ────────────────────────────────────────────────────────────────
     let app = Router::new()
-        .route("/health", axum::routing::get(|| async { "ok" }))
-        .route("/tx/:hash", axum::routing::get(routes::tx::get_tx_explanation))
         .route("/health", get(health))
+        .route("/tx/:hash", get(routes::tx::get_tx_explanation))
         .with_state(horizon_client)
-        .layer(cors);
+        .layer(cors)
+        .layer(
+            ServiceBuilder::new()
+                .layer(rate_limit_layer())
+        );
 
     let addr = "0.0.0.0:4000";
     info!("Stellar Explain backend running on {}", addr);
