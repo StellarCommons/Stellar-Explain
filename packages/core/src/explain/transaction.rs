@@ -1,6 +1,4 @@
 //! Transaction explanation orchestration.
-//!
-//! Accepts an internal transaction model and produces structured explanations.
 
 use serde::{Deserialize, Serialize};
 
@@ -8,11 +6,7 @@ use crate::explain::memo::explain_memo;
 use crate::models::fee::FeeStats;
 use crate::models::transaction::Transaction;
 
-use super::operation::payment::{
-    explain_payment,
-    explain_payment_with_fee,
-    PaymentExplanation,
-};
+use super::operation::payment::{explain_payment, explain_payment_with_fee, PaymentExplanation};
 
 /// Complete explanation of a transaction.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -22,20 +16,14 @@ pub struct TransactionExplanation {
     pub summary: String,
     pub payment_explanations: Vec<PaymentExplanation>,
     pub skipped_operations: usize,
-    /// Human-readable explanation of the transaction memo.
-    /// None if the transaction has no memo.
     pub memo_explanation: Option<String>,
-    /// Human-readable explanation of transaction fee context.
     pub fee_explanation: Option<String>,
 }
 
-/// Result type for transaction explanation.
 pub type ExplainResult = Result<TransactionExplanation, ExplainError>;
 
-/// Errors that can occur during explanation.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExplainError {
-    /// The transaction has zero operations (truly empty).
     EmptyTransaction,
 }
 
@@ -52,12 +40,8 @@ impl std::fmt::Display for ExplainError {
 impl std::error::Error for ExplainError {}
 
 /// Produce a plain-English fee explanation.
-///
-/// Uses FeeStats to contextualise whether the fee is standard or elevated.
-/// Falls back to a simple message if fee_stats is None.
 pub fn explain_fee(fee_charged: u64, fee_stats: Option<&FeeStats>) -> String {
     let xlm = FeeStats::stroops_to_xlm(fee_charged);
-
     match fee_stats {
         None => format!("A fee of {} XLM was charged.", xlm),
         Some(stats) => {
@@ -192,14 +176,10 @@ mod tests {
             operations: vec![create_payment_operation("1", "50.0")],
             memo: Some(Memo::text("Invoice #12345").unwrap()),
         };
-
         let explanation = explain_transaction(&tx, None).unwrap();
         assert_eq!(explanation.transaction_hash, "abc123");
         assert!(explanation.memo_explanation.is_some());
-        assert!(explanation
-            .memo_explanation
-            .unwrap()
-            .contains("Invoice #12345"));
+        assert!(explanation.memo_explanation.unwrap().contains("Invoice #12345"));
         assert!(explanation.fee_explanation.is_some());
     }
 
@@ -212,7 +192,6 @@ mod tests {
             operations: vec![create_other_operation("1"), create_other_operation("2")],
             memo: None,
         };
-
         let result = explain_transaction(&tx, None);
         assert!(result.is_ok());
         let explanation = result.unwrap();
@@ -229,7 +208,6 @@ mod tests {
             operations: vec![],
             memo: None,
         };
-
         assert!(explain_transaction(&tx, None).is_err());
     }
 
