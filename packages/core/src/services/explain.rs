@@ -23,21 +23,12 @@ pub fn map_transaction_to_domain(
 fn map_memo(memo_type: Option<&str>, memo_value: Option<&str>) -> Option<Memo> {
     match memo_type {
         None | Some("none") => None,
-        Some("text") => {
-            memo_value.and_then(|v| Memo::text(v))
-        }
-        Some("id") => {
-            memo_value
-                .and_then(|v| v.parse::<u64>().ok())
-                .map(Memo::id)
-        }
-        Some("hash") => {
-            memo_value.map(|v| Memo::hash(v))
-        }
-        Some("return") => {
-            memo_value.map(|v| Memo::return_hash(v))
-        }
-        // Unknown memo type — treat as no memo rather than crashing
+        Some("text") => memo_value.and_then(|v| Memo::text(v)),
+        Some("id") => memo_value
+            .and_then(|v| v.parse::<u64>().ok())
+            .map(Memo::id),
+        Some("hash") => memo_value.map(|v| Memo::hash(v)),
+        Some("return") => memo_value.map(|v| Memo::return_hash(v)),
         Some(_) => None,
     }
 }
@@ -86,7 +77,6 @@ mod tests {
 
     #[test]
     fn test_map_memo_unknown_type() {
-        // Unknown types should degrade gracefully, not crash
         assert_eq!(map_memo(Some("unknown_future_type"), Some("value")), None);
     }
 }

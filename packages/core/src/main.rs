@@ -5,9 +5,10 @@ mod explain;
 mod routes;
 mod config;
 mod middleware;
+mod state;
 
 use axum::{
-    middleware,
+    middleware as axum_middleware,
     Router,
     routing::get,
     response::{IntoResponse, Response},
@@ -23,7 +24,10 @@ use tower_http::cors::{CorsLayer, AllowOrigin};
 use tower_governor::{
     governor::GovernorConfigBuilder,
     GovernorLayer,
+    key_extractor::PeerIpKeyExtractor,
 };
+use governor::middleware::NoOpMiddleware;
+use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 use tracing_subscriber::EnvFilter;
 
@@ -33,26 +37,16 @@ use crate::services::horizon::HorizonClient;
 use crate::middleware::request_id::request_id_middleware;
 
 
-fn rate_limit_layer() -> GovernorLayer {
-    let governor_conf = GovernorConfigBuilder::default()
-        .per_minute(60)
-        .burst_size(60)
-        .use_headers()
-        .finish()
-        .expect("failed to build rate limit config");
+fn rate_limit_layer() -> GovernorLayer<PeerIpKeyExtractor, NoOpMiddleware> {
+    let governor_conf = Arc::new(
+        GovernorConfigBuilder::default()
+            .per_second(1)
+            .burst_size(60)
+            .finish()
+            .expect("failed to build rate limit config"),
+    );
 
-    GovernorLayer {
-        config: std::sync::Arc::new(governor_conf),
-        error_handler: Some(Box::new(|_| {
-            Box::pin(async {
-                RateLimitError {
-                    error: "rate_limited",
-                    message: "Too many requests. Please retry later.",
-                }
-                .into_response()
-            })
-        })),
-    }
+    GovernorLayer { config: governor_conf }
 }
 
 #[derive(Serialize)]
@@ -63,11 +57,7 @@ struct RateLimitError {
 
 impl IntoResponse for RateLimitError {
     fn into_response(self) -> Response {
-        (
-            StatusCode::TOO_MANY_REQUESTS,
-            Json(self),
-        )
-            .into_response()
+        (StatusCode::TOO_MANY_REQUESTS, Json(self)).into_response()
     }
 }
 
@@ -151,7 +141,7 @@ async fn main() {
         .layer(cors)
         .layer(
             ServiceBuilder::new()
-                .layer(middleware::from_fn(request_id_middleware))
+                .layer(axum_middleware::from_fn(request_id_middleware))
                 .layer(rate_limit_layer())
         );
 

@@ -1,16 +1,12 @@
 use reqwest::Client;
 use serde::Deserialize;
-use std::{
-    collections::HashMap,
-    sync::{Mutex, OnceLock},
-    time::Duration,
-};
+use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
+use std::time::{Duration, Instant};
 
 use crate::errors::HorizonError;
 use crate::models::fee::FeeStats;
-use crate::services::transaction_cache::{CacheKey, Network, TransactionCache};
 
-/// Raw transaction response from the Horizon API.
 #[derive(Debug, Deserialize, Clone)]
 pub struct HorizonTransaction {
     pub hash: String,
@@ -20,29 +16,23 @@ pub struct HorizonTransaction {
     pub memo: Option<String>,
 }
 
-/// Raw fee_stats response from Horizon.
-/// https://developers.stellar.org/api/horizon/aggregations/fee-stats
-#[derive(Debug, Deserialize)]
-struct HorizonFeeStats {
-    last_ledger_base_fee: String,
-    fee_charged: HorizonFeeCharged,
+#[derive(Debug, Deserialize, Clone)]
+pub struct HorizonAccountTransaction {
+    pub hash: String,
+    pub successful: bool,
+    pub created_at: String,
+    pub source_account: Option<String>,
+    pub operation_count: u32,
+    pub memo_type: Option<String>,
+    pub memo: Option<String>,
 }
-
-#[derive(Debug, Deserialize)]
-struct HorizonFeeCharged {
-    min: String,
-    max: String,
-    mode: String,
-    p90: String,
-}
-
-static STELLAR_TOML_ORG_CACHE: OnceLock<Mutex<HashMap<String, Option<String>>>> = OnceLock::new();
 
 #[derive(Clone)]
 pub struct HorizonClient {
     client: Client,
     base_url: String,
-    cache: TransactionCache<HorizonTransaction>,
+    /// Simple in-memory cache for stellar.toml lookups keyed by domain.
+    toml_cache: Arc<RwLock<HashMap<String, (Option<String>, Instant)>>>,
 }
 
 impl HorizonClient {
@@ -50,7 +40,7 @@ impl HorizonClient {
         Self {
             client: Client::new(),
             base_url: base_url.into(),
-            cache: TransactionCache::with_default_ttl(),
+            toml_cache: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -58,12 +48,6 @@ impl HorizonClient {
         &self,
         hash: &str,
     ) -> Result<HorizonTransaction, HorizonError> {
-        let cache_key = CacheKey::new(hash.to_string(), Network::Testnet);
-
-        if let Some(cached) = self.cache.get(&cache_key) {
-            return Ok(cached);
-        }
-
         let url = format!("{}/transactions/{}", self.base_url, hash);
 
         let res = self
@@ -73,18 +57,14 @@ impl HorizonClient {
             .await
             .map_err(|_| HorizonError::NetworkError)?;
 
-        let tx = match res.status().as_u16() {
+        match res.status().as_u16() {
             200 => res
                 .json::<HorizonTransaction>()
                 .await
-                .map_err(|_| HorizonError::InvalidResponse)?,
-            404 => return Err(HorizonError::TransactionNotFound),
-            _ => return Err(HorizonError::InvalidResponse),
-        };
-
-        self.cache.insert(cache_key, tx.clone());
-
-        Ok(tx)
+                .map_err(|_| HorizonError::InvalidResponse),
+            404 => Err(HorizonError::TransactionNotFound),
+            _ => Err(HorizonError::InvalidResponse),
+        }
     }
 
     pub async fn fetch_operations(
@@ -113,6 +93,43 @@ impl HorizonClient {
         }
     }
 
+    /// Fetch the current network fee stats from Horizon.
+    /// Returns None if the request fails — callers degrade gracefully.
+    pub async fn fetch_fee_stats(&self) -> Option<FeeStats> {
+        let url = format!("{}/fee_stats", self.base_url);
+
+        let res = self.client.get(url).send().await.ok()?;
+
+        if res.status().as_u16() != 200 {
+            return None;
+        }
+
+        let raw: HorizonFeeStats = res.json().await.ok()?;
+
+        let base_fee = raw.last_ledger_base_fee.parse::<u64>().ok()?;
+        let min_fee = raw.fee_charged.min.parse::<u64>().unwrap_or(base_fee);
+        let max_fee = raw.fee_charged.max.parse::<u64>().unwrap_or(base_fee);
+        let mode_fee = raw.fee_charged.mode.parse::<u64>().unwrap_or(base_fee);
+        let p90_fee = raw.fee_charged.p90.parse::<u64>().unwrap_or(base_fee);
+
+        Some(FeeStats::new(base_fee, min_fee, max_fee, mode_fee, p90_fee))
+    }
+
+    /// Check whether Horizon is reachable by hitting the root endpoint.
+    pub async fn is_reachable(&self) -> bool {
+        let url = format!("{}/", self.base_url);
+        self.client
+            .get(url)
+            .timeout(Duration::from_secs(5))
+            .send()
+            .await
+            .map(|r| r.status().as_u16() < 500)
+            .unwrap_or(false)
+    }
+
+    /// Fetch paginated transactions for an account.
+    ///
+    /// Returns `(records, next_cursor, prev_cursor)`.
     pub async fn fetch_account_transactions(
         &self,
         address: &str,
@@ -137,144 +154,90 @@ impl HorizonClient {
 
         match res.status().as_u16() {
             200 => {
-                let wrapper: HorizonAccountTransactionsResponse =
-                    res.json().await.map_err(|_| HorizonError::InvalidResponse)?;
-                let next_cursor = wrapper.links.next.as_ref().and_then(|l| extract_cursor(&l.href));
-                let prev_cursor = wrapper.links.prev.as_ref().and_then(|l| extract_cursor(&l.href));
-                Ok((wrapper.embedded.records, next_cursor, prev_cursor))
+                let wrapper: HorizonAccountTransactionsResponse = res
+                    .json()
+                    .await
+                    .map_err(|_| HorizonError::InvalidResponse)?;
+
+                let next_cursor = extract_cursor(
+                    wrapper._links.next.as_ref().and_then(|l| l.href.as_deref()),
+                );
+                let prev_cursor = extract_cursor(
+                    wrapper._links.prev.as_ref().and_then(|l| l.href.as_deref()),
+                );
+
+                Ok((wrapper._embedded.records, next_cursor, prev_cursor))
             }
             404 => Err(HorizonError::AccountNotFound),
             _ => Err(HorizonError::InvalidResponse),
         }
     }
 
-    /// Resolve ORG_NAME from a domain's stellar.toml file.
-    ///
-    /// Uses an in-memory cache for the process lifetime and applies a hard timeout
-    /// so this call never blocks explanation responses for long.
-    pub async fn fetch_stellar_toml_org_name(&self, home_domain: &str) -> Option<String> {
-        let cache_key = normalize_cache_key(home_domain)?;
-
-        if let Some(cached) = lookup_stellar_toml_cache(&cache_key) {
-            return cached;
-        }
-
-        let url = match build_stellar_toml_url(home_domain) {
-            Some(url) => url,
-            None => {
-                store_stellar_toml_cache(cache_key, None);
-                return None;
-            }
-        };
-
-        let response = match self
-            .client
-            .get(url)
-            .timeout(Duration::from_secs(3))
-            .send()
-            .await
+    /// Fetch ORG_NAME from a domain's stellar.toml.
+    /// Results are cached in memory for 10 minutes per domain.
+    pub async fn fetch_stellar_toml_org_name(&self, domain: &str) -> Option<String> {
+        // Check cache first
         {
-            Ok(response) => response,
-            Err(_) => {
-                store_stellar_toml_cache(cache_key, None);
-                return None;
+            let cache = self.toml_cache.read().unwrap();
+            if let Some((cached_value, cached_at)) = cache.get(domain) {
+                if cached_at.elapsed() < Duration::from_secs(600) {
+                    return cached_value.clone();
+                }
             }
-        };
-
-        if !response.status().is_success() {
-            store_stellar_toml_cache(cache_key, None);
-            return None;
         }
 
-        let body = match response.text().await {
-            Ok(body) => body,
-            Err(_) => {
-                store_stellar_toml_cache(cache_key, None);
-                return None;
+        // Fetch from domain
+        let url = format!("{}/.well-known/stellar.toml", domain);
+        let result = self.client.get(&url).send().await.ok();
+
+        let org_name = if let Some(res) = result {
+            if res.status().as_u16() == 200 {
+                let body = res.text().await.ok().unwrap_or_default();
+                parse_org_name(&body)
+            } else {
+                None
             }
+        } else {
+            None
         };
-        let org_name = parse_org_name_from_stellar_toml(&body);
-        store_stellar_toml_cache(cache_key, org_name.clone());
+
+        // Store in cache
+        {
+            let mut cache = self.toml_cache.write().unwrap();
+            cache.insert(domain.to_string(), (org_name.clone(), Instant::now()));
+        }
 
         org_name
     }
+}
 
-    /// Fetch current network fee statistics from Horizon.
-    /// Returns None if the request fails — callers should degrade gracefully.
-    pub async fn fetch_fee_stats(&self) -> Option<FeeStats> {
-        let url = format!("{}/fee_stats", self.base_url);
+/// Extract `cursor` query param value from a Horizon pagination href.
+fn extract_cursor(href: Option<&str>) -> Option<String> {
+    let href = href?;
+    let url = reqwest::Url::parse(href).ok()?;
+    url.query_pairs()
+        .find(|(k, _)| k == "cursor")
+        .map(|(_, v)| v.into_owned())
+}
 
-        let res = self.client.get(url).send().await.ok()?;
-
-        if res.status().as_u16() != 200 {
-            return None;
+/// Parse ORG_NAME from a stellar.toml body.
+/// Handles both `ORG_NAME="Foo"` and `ORG_NAME = "Foo"` formats.
+fn parse_org_name(toml: &str) -> Option<String> {
+    for line in toml.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("ORG_NAME") {
+            if let Some(pos) = trimmed.find('=') {
+                let value = trimmed[pos + 1..].trim().trim_matches('"').to_string();
+                if !value.is_empty() {
+                    return Some(value);
+                }
+            }
         }
-
-        let raw: HorizonFeeStats = res.json().await.ok()?;
-
-        // Horizon returns fees as string stroops — parse each field
-        let base_fee = raw.last_ledger_base_fee.parse::<u64>().ok()?;
-        let min_fee = raw.fee_charged.min.parse::<u64>().ok()?;
-        let max_fee = raw.fee_charged.max.parse::<u64>().ok()?;
-        let mode_fee = raw.fee_charged.mode.parse::<u64>().ok()?;
-        let p90_fee = raw.fee_charged.p90.parse::<u64>().ok()?;
-
-        Some(FeeStats {
-            base_fee,
-            min_fee,
-            max_fee,
-            mode_fee,
-            p90_fee,
-        })
     }
-
-    /// Lightweight connectivity check for health endpoint
-    pub async fn is_reachable(&self) -> bool {
-        let res = self
-            .client
-            .head(&self.base_url)
-            .timeout(Duration::from_secs(2))
-            .send()
-            .await;
-
-        matches!(res, Ok(r) if r.status().is_success())
-    }
+    None
 }
 
-#[derive(Debug, Deserialize)]
-struct HorizonTransactionLink {
-    href: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct HorizonTransactionLinks {
-    next: Option<HorizonTransactionLink>,
-    prev: Option<HorizonTransactionLink>,
-}
-
-#[derive(Debug, Deserialize)]
-struct HorizonAccountTransactionsResponse {
-    #[serde(rename = "_links")]
-    links: HorizonTransactionLinks,
-    #[serde(rename = "_embedded")]
-    embedded: HorizonAccountTransactionsEmbedded,
-}
-
-#[derive(Debug, Deserialize)]
-struct HorizonAccountTransactionsEmbedded {
-    records: Vec<HorizonAccountTransaction>,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct HorizonAccountTransaction {
-    pub hash: String,
-    pub successful: bool,
-    pub created_at: String,
-    pub source_account: String,
-    pub operation_count: u32,
-    pub memo_type: Option<String>,
-    pub memo: Option<String>,
-}
+// ── Horizon JSON shapes ────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
 struct HorizonOperationsResponse {
@@ -286,12 +249,40 @@ struct HorizonEmbeddedOperations {
     records: Vec<HorizonOperation>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
-pub struct HorizonPathAsset {
-    #[serde(rename = "asset_type")]
-    pub asset_type: String,
-    pub asset_code: Option<String>,
-    pub asset_issuer: Option<String>,
+#[derive(Debug, Deserialize)]
+struct HorizonAccountTransactionsResponse {
+    _links: HorizonLinks,
+    _embedded: HorizonEmbeddedAccountTransactions,
+}
+
+#[derive(Debug, Deserialize)]
+struct HorizonLinks {
+    next: Option<HorizonLink>,
+    prev: Option<HorizonLink>,
+}
+
+#[derive(Debug, Deserialize)]
+struct HorizonLink {
+    href: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct HorizonEmbeddedAccountTransactions {
+    records: Vec<HorizonAccountTransaction>,
+}
+
+#[derive(Debug, Deserialize)]
+struct HorizonFeeStats {
+    last_ledger_base_fee: String,
+    fee_charged: HorizonFeeCharged,
+}
+
+#[derive(Debug, Deserialize)]
+struct HorizonFeeCharged {
+    min: String,
+    max: String,
+    mode: String,
+    p90: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -300,13 +291,37 @@ pub struct HorizonOperation {
     pub transaction_hash: String,
     #[serde(rename = "type")]
     pub type_i: String,
-    pub source_account: Option<String>,
+
+    // Shared / payment
     pub from: Option<String>,
     pub to: Option<String>,
     pub asset_type: Option<String>,
     pub asset_code: Option<String>,
     pub asset_issuer: Option<String>,
     pub amount: Option<String>,
+    pub source_account: Option<String>,
+
+    // set_options
+    pub inflation_dest: Option<String>,
+    pub clear_flags: Option<u32>,
+    pub set_flags: Option<u32>,
+    pub master_weight: Option<u32>,
+    pub low_threshold: Option<u32>,
+    pub med_threshold: Option<u32>,
+    pub high_threshold: Option<u32>,
+    pub home_domain: Option<String>,
+    pub signer_key: Option<String>,
+    pub signer_weight: Option<u32>,
+
+    // create_account
+    pub funder: Option<String>,
+    pub account: Option<String>,
+    pub starting_balance: Option<String>,
+
+    // change_trust
+    pub limit: Option<String>,
+
+    // manage_offer / manage_buy_offer
     pub selling_asset_type: Option<String>,
     pub selling_asset_code: Option<String>,
     pub selling_asset_issuer: Option<String>,
@@ -315,74 +330,11 @@ pub struct HorizonOperation {
     pub buying_asset_issuer: Option<String>,
     pub price: Option<String>,
     pub offer_id: Option<u64>,
+
+    // path_payment
     pub source_asset_type: Option<String>,
     pub source_asset_code: Option<String>,
     pub source_asset_issuer: Option<String>,
     pub source_amount: Option<String>,
-    pub path: Option<Vec<HorizonPathAsset>>,
-    pub trustor: Option<String>,
-    pub limit: Option<String>,
-    pub funder: Option<String>,
-    pub account: Option<String>,
-    pub starting_balance: Option<String>,
-}
-
-fn extract_cursor(href: &str) -> Option<String> {
-    href.split('?')
-        .nth(1)?
-        .split('&')
-        .find_map(|pair| {
-            let mut parts = pair.splitn(2, '=');
-            if parts.next()? == "cursor" {
-                parts.next().map(|v| v.to_string())
-            } else {
-                None
-            }
-        })
-}
-
-fn stellar_toml_cache() -> &'static Mutex<HashMap<String, Option<String>>> {
-    STELLAR_TOML_ORG_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
-fn lookup_stellar_toml_cache(cache_key: &str) -> Option<Option<String>> {
-    let cache = stellar_toml_cache().lock().ok()?;
-    cache.get(cache_key).cloned()
-}
-
-fn store_stellar_toml_cache(cache_key: String, org_name: Option<String>) {
-    if let Ok(mut cache) = stellar_toml_cache().lock() {
-        cache.insert(cache_key, org_name);
-    }
-}
-
-fn normalize_cache_key(home_domain: &str) -> Option<String> {
-    let key = home_domain.trim().trim_end_matches('/').to_lowercase();
-    if key.is_empty() {
-        None
-    } else {
-        Some(key)
-    }
-}
-
-fn build_stellar_toml_url(home_domain: &str) -> Option<String> {
-    let domain = home_domain.trim().trim_end_matches('/');
-    if domain.is_empty() {
-        return None;
-    }
-
-    if domain.starts_with("https://") || domain.starts_with("http://") {
-        Some(format!("{domain}/.well-known/stellar.toml"))
-    } else {
-        Some(format!("https://{domain}/.well-known/stellar.toml"))
-    }
-}
-
-fn parse_org_name_from_stellar_toml(content: &str) -> Option<String> {
-    let parsed: toml::Value = toml::from_str(content).ok()?;
-    parsed
-        .get("ORG_NAME")
-        .and_then(|value| value.as_str())
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
+    pub path: Option<Vec<String>>,
 }
