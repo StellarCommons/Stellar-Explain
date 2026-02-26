@@ -119,6 +119,30 @@ impl HorizonClient {
         Some(FeeStats::new(base_fee, min_fee, max_fee, mode_fee, p90_fee))
     }
 
+    /// Fetch the raw Horizon JSON bytes for a transaction without deserializing.
+    pub async fn fetch_transaction_raw(
+        &self,
+        hash: &str,
+    ) -> Result<bytes::Bytes, HorizonError> {
+        let url = format!("{}/transactions/{}", self.base_url, hash);
+
+        let res = self
+            .client
+            .get(url)
+            .send()
+            .await
+            .map_err(|_| HorizonError::NetworkError)?;
+
+        match res.status().as_u16() {
+            200 => res
+                .bytes()
+                .await
+                .map_err(|_| HorizonError::InvalidResponse),
+            404 => Err(HorizonError::TransactionNotFound),
+            _ => Err(HorizonError::InvalidResponse),
+        }
+    }
+
     /// Check whether Horizon is reachable by hitting the root endpoint.
     pub async fn is_reachable(&self) -> bool {
         let url = format!("{}/", self.base_url);

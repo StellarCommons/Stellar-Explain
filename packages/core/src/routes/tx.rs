@@ -1,5 +1,8 @@
 use axum::{
+    body::Body,
     extract::{Extension, Path, State},
+    http::{header, StatusCode},
+    response::Response,
     Json,
 };
 use serde::Serialize;
@@ -166,4 +169,83 @@ pub async fn get_tx_explanation(
 
 fn is_valid_transaction_hash(hash: &str) -> bool {
     hash.len() == 64 && hash.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+#[utoipa::path(
+    get,
+    path = "/tx/{hash}/raw",
+    params(
+        ("hash" = String, Path, description = "Transaction hash")
+    ),
+    responses(
+        (status = 200, description = "Raw Horizon transaction JSON"),
+        (status = 400, description = "Invalid transaction hash"),
+        (status = 404, description = "Transaction not found"),
+        (status = 502, description = "Upstream error from Horizon")
+    )
+)]
+pub async fn get_tx_raw(
+    Path(hash): Path<String>,
+    State(horizon_client): State<Arc<HorizonClient>>,
+    Extension(request_id): Extension<RequestId>,
+) -> Result<Response, AppError> {
+    let span = info_span!(
+        "tx_raw_request",
+        request_id = %request_id,
+        hash = %hash
+    );
+    let _span_guard = span.enter();
+    let request_started_at = Instant::now();
+
+    info!(
+        request_id = %request_id,
+        hash = %hash,
+        "incoming_request"
+    );
+
+    if !is_valid_transaction_hash(&hash) {
+        let app_error = AppError::BadRequest(
+            "Invalid transaction hash format. Expected 64-character hexadecimal hash."
+                .to_string(),
+        );
+        info!(
+            request_id = %request_id,
+            hash = %hash,
+            status = app_error.status_code().as_u16(),
+            total_duration_ms = request_started_at.elapsed().as_millis() as u64,
+            error = ?app_error,
+            "request_completed"
+        );
+        return Err(app_error);
+    }
+
+    let bytes = match horizon_client.fetch_transaction_raw(&hash).await {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            let app_error: AppError = err.into();
+            error!(
+                request_id = %request_id,
+                hash = %hash,
+                total_duration_ms = request_started_at.elapsed().as_millis() as u64,
+                status = app_error.status_code().as_u16(),
+                error = ?app_error,
+                "horizon_transaction_raw_fetch_failed"
+            );
+            return Err(app_error);
+        }
+    };
+
+    info!(
+        request_id = %request_id,
+        hash = %hash,
+        total_duration_ms = request_started_at.elapsed().as_millis() as u64,
+        status = 200u16,
+        "request_completed"
+    );
+
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(bytes))
+        .expect("infallible response build"))
 }

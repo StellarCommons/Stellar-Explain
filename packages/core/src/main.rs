@@ -121,6 +121,7 @@ async fn main() {
     let app = Router::new()
         .route("/health", get(health))
         .route("/tx/:hash", get(routes::tx::get_tx_explanation))
+        .route("/tx/:hash/raw", get(routes::tx::get_tx_raw))
 
         // OpenAPI JSON
         .route(

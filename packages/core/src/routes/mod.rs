@@ -4,7 +4,8 @@ use utoipa::OpenApi;
 #[openapi(
     paths(
         health::health,
-        tx::get_tx_explanation
+        tx::get_tx_explanation,
+        tx::get_tx_raw
     ),
     components(
         schemas(

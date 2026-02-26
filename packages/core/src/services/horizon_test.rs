@@ -177,6 +177,55 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn fetch_transaction_raw_proxies_horizon_response() {
+        let server = MockServer::start();
+        let raw_body =
+            r#"{"hash":"abc123","successful":true,"fee_charged":"100","ledger":12345}"#;
+
+        server.mock(|when, then| {
+            when.method(GET).path("/transactions/abc123");
+            then.status(200)
+                .header("content-type", "application/json")
+                .body(raw_body);
+        });
+
+        let client = HorizonClient::new(server.base_url());
+        let bytes = client.fetch_transaction_raw("abc123").await.unwrap();
+
+        assert_eq!(bytes.as_ref(), raw_body.as_bytes());
+    }
+
+    #[tokio::test]
+    async fn fetch_transaction_raw_not_found() {
+        let server = MockServer::start();
+
+        server.mock(|when, then| {
+            when.method(GET).path("/transactions/missing");
+            then.status(404);
+        });
+
+        let client = HorizonClient::new(server.base_url());
+        let err = client.fetch_transaction_raw("missing").await.unwrap_err();
+
+        matches!(err, crate::errors::HorizonError::TransactionNotFound);
+    }
+
+    #[tokio::test]
+    async fn fetch_transaction_raw_upstream_error() {
+        let server = MockServer::start();
+
+        server.mock(|when, then| {
+            when.method(GET).path("/transactions/bad");
+            then.status(500);
+        });
+
+        let client = HorizonClient::new(server.base_url());
+        let err = client.fetch_transaction_raw("bad").await.unwrap_err();
+
+        matches!(err, crate::errors::HorizonError::InvalidResponse);
+    }
+
+    #[tokio::test]
     async fn fetch_stellar_toml_org_name_with_cache() {
         let server = MockServer::start();
         let domain = server.base_url();
