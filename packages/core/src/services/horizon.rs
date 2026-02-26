@@ -337,4 +337,7 @@ pub struct HorizonOperation {
     pub source_asset_issuer: Option<String>,
     pub source_amount: Option<String>,
     pub path: Option<Vec<String>>,
+
+    // clawback_claimable_balance
+    pub balance_id: Option<String>,
 }
