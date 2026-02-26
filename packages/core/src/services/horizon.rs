@@ -14,6 +14,10 @@ pub struct HorizonTransaction {
     pub fee_charged: String,
     pub memo_type: Option<String>,
     pub memo: Option<String>,
+    /// ISO 8601 timestamp of ledger close, e.g. "2024-01-15T14:32:00Z"
+    pub created_at: Option<String>,
+    /// Ledger sequence number in which this transaction was included.
+    pub ledger: Option<u64>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
