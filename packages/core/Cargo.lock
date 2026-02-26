@@ -2362,6 +2362,7 @@ name = "stellar-explain-core"
 version = "0.0.1"
 dependencies = [
  "axum",
+ "bytes",
  "dotenvy",
  "governor",
  "httpmock",
