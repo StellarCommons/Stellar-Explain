@@ -24,6 +24,8 @@ pub enum Operation {
     ChangeTrust(ChangeTrustOperation),
     ManageOffer(ManageOfferOperation),
     PathPayment(PathPaymentOperation),
+    Clawback(ClawbackOperation),
+    ClawbackClaimableBalance(ClawbackClaimableBalanceOperation),
     Other(OtherOperation),
 }
 
@@ -126,6 +128,28 @@ pub struct PathPaymentOperation {
     pub payment_type: PathPaymentType,
 }
 
+/// A clawback operation that recovers regulated asset funds from a holder.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ClawbackOperation {
+    pub id: String,
+    pub source_account: Option<String>,
+    /// The account the funds are clawed back from.
+    pub from: String,
+    pub asset_code: String,
+    pub asset_issuer: String,
+    pub amount: String,
+}
+
+/// A clawback_claimable_balance operation that cancels an unclaimed balance
+/// created with a regulated asset.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ClawbackClaimableBalanceOperation {
+    pub id: String,
+    pub source_account: Option<String>,
+    /// The claimable balance ID being clawed back.
+    pub balance_id: String,
+}
+
 /// Placeholder for operation types we do not yet explain.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct OtherOperation {
@@ -150,6 +174,8 @@ impl Operation {
             Operation::ChangeTrust(c) => &c.id,
             Operation::ManageOffer(m) => &m.id,
             Operation::PathPayment(p) => &p.id,
+            Operation::Clawback(c) => &c.id,
+            Operation::ClawbackClaimableBalance(c) => &c.id,
             Operation::Other(o) => &o.id,
         }
     }
@@ -299,6 +325,19 @@ impl From<HorizonOperation> for Operation {
                     payment_type: PathPaymentType::StrictReceive,
                 })
             }
+            "clawback" => Operation::Clawback(ClawbackOperation {
+                id: op.id,
+                source_account: op.source_account,
+                from: op.from.unwrap_or_default(),
+                asset_code: op.asset_code.unwrap_or_default(),
+                asset_issuer: op.asset_issuer.unwrap_or_default(),
+                amount: op.amount.unwrap_or_else(|| "0".to_string()),
+            }),
+            "clawback_claimable_balance" => Operation::ClawbackClaimableBalance(ClawbackClaimableBalanceOperation {
+                id: op.id,
+                source_account: op.source_account,
+                balance_id: op.balance_id.unwrap_or_default(),
+            }),
             _ => Operation::Other(OtherOperation {
                 id: op.id,
                 operation_type: op.type_i,
