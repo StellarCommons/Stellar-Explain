@@ -10,7 +10,7 @@ use tracing::{error, info, info_span};
 
 use crate::{
     errors::AppError,
-    explain::transaction::{explain_transaction, TransactionExplanation},
+    explain::transaction::{explain_transaction_with_ledger, TransactionExplanation},
     middleware::request_id::RequestId,
     services::{explain::map_transaction_to_domain, horizon::HorizonClient},
 };
@@ -21,7 +21,6 @@ pub struct TxExplanationResponse {
     pub successful: bool,
     pub explanation: String,
 }
-
 
 #[utoipa::path(
     get,
@@ -122,12 +121,20 @@ pub async fn get_tx_explanation(
         }
     };
 
-    // fee_stats is Option<FeeStats> — None if Horizon /fee_stats is unavailable
-    // explain_transaction degrades gracefully when it is None
+    // Capture ledger fields before tx is consumed by map_transaction_to_domain
+    let created_at = tx.created_at.clone();
+    let ledger = tx.ledger;
 
+    // fee_stats is Option<FeeStats> — None if Horizon /fee_stats is unavailable
     let domain_tx = map_transaction_to_domain(tx, ops);
     let explain_started_at = Instant::now();
-    let explanation = match explain_transaction(&domain_tx, fee_stats.as_ref()) {
+
+    let explanation = match explain_transaction_with_ledger(
+        &domain_tx,
+        fee_stats.as_ref(),
+        created_at.as_deref(),
+        ledger,
+    ) {
         Ok(explanation) => explanation,
         Err(err) => {
             let app_error: AppError = err.into();
