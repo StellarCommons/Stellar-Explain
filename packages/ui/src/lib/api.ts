@@ -23,6 +23,10 @@ export interface TransactionExplanation {
   skipped_operations: number;
   memo_explanation: string | null;
   fee_explanation: string | null;
+  /** ISO 8601 timestamp of ledger close (Issue #29) */
+  ledger_closed_at: string | null;
+  /** Ledger sequence number (Issue #29) */
+  ledger: number | null;
 }
 
 export interface AccountExplanation {
@@ -33,6 +37,7 @@ export interface AccountExplanation {
   signer_count: number;
   home_domain: string | null;
   org_name: string | null;
+  flag_descriptions: string[];
 }
 
 export interface HealthResponse {
@@ -53,17 +58,17 @@ export interface ApiError {
 
 export function isApiError(value: unknown): value is ApiError {
   return (
-    typeof value === 'object' &&
+    typeof value === "object" &&
     value !== null &&
-    'error' in value &&
-    typeof (value as ApiError).error?.code === 'string'
+    "error" in value &&
+    typeof (value as ApiError).error?.code === "string"
   );
 }
 
 export function getErrorMessage(error: unknown): string {
   if (isApiError(error)) return error.error.message;
   if (error instanceof Error) return error.message;
-  return 'Something went wrong. Please try again.';
+  return "Something went wrong. Please try again.";
 }
 
 async function handleResponse<T>(res: Response): Promise<T> {
@@ -74,35 +79,23 @@ async function handleResponse<T>(res: Response): Promise<T> {
 
 // ── Fetch Functions ────────────────────────────────────────────────────────
 
-/**
- * Fetch a transaction explanation by hash.
- * Calls: GET /api/tx/:hash → proxied to Rust GET /tx/:hash
- */
 export async function fetchTransaction(hash: string): Promise<TransactionExplanation> {
   const res = await fetch(`/api/tx/${hash}`, {
-    headers: { Accept: 'application/json' },
+    headers: { Accept: "application/json" },
   });
   return handleResponse<TransactionExplanation>(res);
 }
 
-/**
- * Fetch an account explanation by Stellar address.
- * Calls: GET /api/account/:address → proxied to Rust GET /account/:address
- */
 export async function fetchAccount(address: string): Promise<AccountExplanation> {
   const res = await fetch(`/api/account/${address}`, {
-    headers: { Accept: 'application/json' },
+    headers: { Accept: "application/json" },
   });
   return handleResponse<AccountExplanation>(res);
 }
 
-/**
- * Fetch backend health status.
- * Calls: GET /api/health → proxied to Rust GET /health
- */
 export async function fetchHealth(): Promise<HealthResponse> {
-  const res = await fetch('/api/health', {
-    headers: { Accept: 'application/json' },
+  const res = await fetch("/api/health", {
+    headers: { Accept: "application/json" },
   });
   return handleResponse<HealthResponse>(res);
 }

@@ -90,8 +90,7 @@ pub enum OfferType {
     Buy,
 }
 
-/// A manage_offer (or manage_buy_offer) operation that creates, updates, or
-/// cancels an order on the Stellar DEX.
+/// A manage_offer (or manage_buy_offer) operation.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ManageOfferOperation {
     pub id: String,
@@ -140,13 +139,11 @@ pub struct ClawbackOperation {
     pub amount: String,
 }
 
-/// A clawback_claimable_balance operation that cancels an unclaimed balance
-/// created with a regulated asset.
+/// A clawback_claimable_balance operation.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ClawbackClaimableBalanceOperation {
     pub id: String,
     pub source_account: Option<String>,
-    /// The claimable balance ID being clawed back.
     pub balance_id: String,
 }
 
@@ -185,7 +182,11 @@ use crate::services::horizon::HorizonOperation;
 
 /// Format an asset from Horizon's separate code/issuer/type fields into
 /// a single display string: "XLM (native)" or "USDC (GISSUER...)".
-fn format_asset(asset_type: Option<&str>, asset_code: Option<&str>, asset_issuer: Option<&str>) -> String {
+fn format_asset(
+    asset_type: Option<&str>,
+    asset_code: Option<&str>,
+    asset_issuer: Option<&str>,
+) -> String {
     match asset_type {
         Some("native") | None => "XLM (native)".to_string(),
         _ => match (asset_code, asset_issuer) {
@@ -198,7 +199,7 @@ fn format_asset(asset_type: Option<&str>, asset_code: Option<&str>, asset_issuer
 
 impl From<HorizonOperation> for Operation {
     fn from(op: HorizonOperation) -> Self {
-        match op.type_i.as_str() {
+        match op.operation_type.as_str() {
             "payment" => Operation::Payment(PaymentOperation {
                 id: op.id,
                 source_account: op.from.clone().or(op.source_account.clone()),
@@ -212,9 +213,14 @@ impl From<HorizonOperation> for Operation {
                 id: op.id,
                 source_account: op.source_account,
                 inflation_dest: op.inflation_dest,
-                clear_flags: op.clear_flags,
-                set_flags: op.set_flags,
-                master_weight: op.master_weight,
+                // Horizon sends flags as Vec<u32> — fold into a single bitmask
+                clear_flags: op
+                    .clear_flags
+                    .and_then(|v| v.into_iter().reduce(|a, b| a | b)),
+                set_flags: op
+                    .set_flags
+                    .and_then(|v| v.into_iter().reduce(|a, b| a | b)),
+                master_weight: op.master_key_weight,
                 low_threshold: op.low_threshold,
                 med_threshold: op.med_threshold,
                 high_threshold: op.high_threshold,
@@ -235,7 +241,7 @@ impl From<HorizonOperation> for Operation {
                 asset_issuer: op.asset_issuer.unwrap_or_default(),
                 limit: op.limit.unwrap_or_else(|| "0".to_string()),
             }),
-            "manage_offer" | "manage_sell_offer" => {
+            "manage_offer" | "manage_sell_offer" | "create_passive_sell_offer" => {
                 let selling = format_asset(
                     op.selling_asset_type.as_deref(),
                     op.selling_asset_code.as_deref(),
@@ -253,7 +259,10 @@ impl From<HorizonOperation> for Operation {
                     buying_asset: buying,
                     amount: op.amount.unwrap_or_else(|| "0".to_string()),
                     price: op.price.unwrap_or_default(),
-                    offer_id: op.offer_id.unwrap_or(0),
+                    offer_id: op
+                        .offer_id
+                        .and_then(|s| s.parse::<u64>().ok())
+                        .unwrap_or(0),
                     offer_type: OfferType::Sell,
                 })
             }
@@ -275,7 +284,10 @@ impl From<HorizonOperation> for Operation {
                     buying_asset: buying,
                     amount: op.amount.unwrap_or_else(|| "0".to_string()),
                     price: op.price.unwrap_or_default(),
-                    offer_id: op.offer_id.unwrap_or(0),
+                    offer_id: op
+                        .offer_id
+                        .and_then(|s| s.parse::<u64>().ok())
+                        .unwrap_or(0),
                     offer_type: OfferType::Buy,
                 })
             }
@@ -298,7 +310,7 @@ impl From<HorizonOperation> for Operation {
                     send_amount: op.source_amount.unwrap_or_else(|| "0".to_string()),
                     dest_asset,
                     dest_amount: op.amount.unwrap_or_else(|| "0".to_string()),
-                    path: op.path.unwrap_or_default(),
+                    path: vec![],
                     payment_type: PathPaymentType::StrictSend,
                 })
             }
@@ -321,7 +333,7 @@ impl From<HorizonOperation> for Operation {
                     send_amount: op.source_amount.unwrap_or_else(|| "0".to_string()),
                     dest_asset,
                     dest_amount: op.amount.unwrap_or_else(|| "0".to_string()),
-                    path: op.path.unwrap_or_default(),
+                    path: vec![],
                     payment_type: PathPaymentType::StrictReceive,
                 })
             }
@@ -333,14 +345,16 @@ impl From<HorizonOperation> for Operation {
                 asset_issuer: op.asset_issuer.unwrap_or_default(),
                 amount: op.amount.unwrap_or_else(|| "0".to_string()),
             }),
-            "clawback_claimable_balance" => Operation::ClawbackClaimableBalance(ClawbackClaimableBalanceOperation {
-                id: op.id,
-                source_account: op.source_account,
-                balance_id: op.balance_id.unwrap_or_default(),
-            }),
+            "clawback_claimable_balance" => {
+                Operation::ClawbackClaimableBalance(ClawbackClaimableBalanceOperation {
+                    id: op.id,
+                    source_account: op.source_account,
+                    balance_id: op.balance_id.unwrap_or_default(),
+                })
+            }
             _ => Operation::Other(OtherOperation {
                 id: op.id,
-                operation_type: op.type_i,
+                operation_type: op.operation_type,
             }),
         }
     }
