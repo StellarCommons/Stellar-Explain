@@ -6,6 +6,9 @@ use std::time::{Duration, Instant};
 
 use crate::errors::HorizonError;
 use crate::models::fee::FeeStats;
+use crate::models::account::{Account, AccountFlags, Balance};
+
+// ── Horizon response structs ───────────────────────────────────────────────
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct HorizonTransaction {
@@ -31,11 +34,89 @@ pub struct HorizonAccountTransaction {
     pub memo: Option<String>,
 }
 
+/// Raw Horizon account response shape.
+/// Horizon returns `signers` as an array and `flags` as a nested object,
+/// so we deserialize here then convert to the domain Account model.
+#[derive(Debug, Deserialize)]
+struct HorizonAccount {
+    pub id: String,
+    pub account_id: String,
+    pub sequence: String,
+    pub balances: Vec<HorizonBalance>,
+    pub signers: Vec<HorizonSigner>,
+    pub flags: HorizonAccountFlags,
+    /// Horizon sends "" when not set, never null or absent
+    #[serde(default)]
+    pub home_domain: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct HorizonBalance {
+    pub asset_type: String,
+    #[serde(default)]
+    pub asset_code: Option<String>,
+    #[serde(default)]
+    pub asset_issuer: Option<String>,
+    pub balance: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct HorizonSigner {
+    #[serde(default)]
+    pub weight: u32,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct HorizonAccountFlags {
+    #[serde(default)]
+    pub auth_required: bool,
+    #[serde(default)]
+    pub auth_revocable: bool,
+    #[serde(default)]
+    pub auth_immutable: bool,
+    #[serde(default)]
+    pub auth_clawback_enabled: bool,
+}
+
+impl HorizonAccount {
+    fn into_domain(self) -> Account {
+        let balances = self
+            .balances
+            .into_iter()
+            .map(|b| Balance {
+                asset_type: b.asset_type,
+                asset_code: b.asset_code,
+                asset_issuer: b.asset_issuer,
+                balance: b.balance,
+            })
+            .collect();
+
+        // Count signers with weight > 0 (weight 0 = revoked/removed)
+        let num_signers = self.signers.iter().filter(|s| s.weight > 0).count() as u32;
+
+        Account {
+            id: self.id,
+            account_id: self.account_id,
+            sequence: self.sequence,
+            num_signers,
+            balances,
+            flags: AccountFlags {
+                auth_required: self.flags.auth_required,
+                auth_revocable: self.flags.auth_revocable,
+                auth_immutable: self.flags.auth_immutable,
+                auth_clawback_enabled: self.flags.auth_clawback_enabled,
+            },
+            home_domain: if self.home_domain.is_empty() { None } else { Some(self.home_domain) },
+        }
+    }
+}
+
+// ── HorizonClient ──────────────────────────────────────────────────────────
+
 #[derive(Clone)]
 pub struct HorizonClient {
     client: Client,
     base_url: String,
-    /// Simple in-memory cache for stellar.toml lookups keyed by domain.
     toml_cache: Arc<RwLock<HashMap<String, (Option<String>, Instant)>>>,
 }
 
@@ -97,6 +178,32 @@ impl HorizonClient {
         }
     }
 
+    /// Fetch a Stellar account by address.
+    /// Deserializes via HorizonAccount (matching Horizon's actual response shape)
+    /// then converts to the domain Account model.
+    pub async fn fetch_account(&self, address: &str) -> Result<Account, HorizonError> {
+        let url = format!("{}/accounts/{}", self.base_url, address);
+
+        let res = self
+            .client
+            .get(url)
+            .send()
+            .await
+            .map_err(|_| HorizonError::NetworkError)?;
+
+        match res.status().as_u16() {
+            200 => {
+                let raw: HorizonAccount = res
+                    .json()
+                    .await
+                    .map_err(|_| HorizonError::InvalidResponse)?;
+                Ok(raw.into_domain())
+            }
+            404 => Err(HorizonError::AccountNotFound),
+            _ => Err(HorizonError::InvalidResponse),
+        }
+    }
+
     /// Fetch the current network fee stats from Horizon.
     /// Returns None if the request fails — callers degrade gracefully.
     pub async fn fetch_fee_stats(&self) -> Option<FeeStats> {
@@ -119,30 +226,6 @@ impl HorizonClient {
         Some(FeeStats::new(base_fee, min_fee, max_fee, mode_fee, p90_fee))
     }
 
-    /// Fetch the raw Horizon JSON bytes for a transaction without deserializing.
-    pub async fn fetch_transaction_raw(
-        &self,
-        hash: &str,
-    ) -> Result<bytes::Bytes, HorizonError> {
-        let url = format!("{}/transactions/{}", self.base_url, hash);
-
-        let res = self
-            .client
-            .get(url)
-            .send()
-            .await
-            .map_err(|_| HorizonError::NetworkError)?;
-
-        match res.status().as_u16() {
-            200 => res
-                .bytes()
-                .await
-                .map_err(|_| HorizonError::InvalidResponse),
-            404 => Err(HorizonError::TransactionNotFound),
-            _ => Err(HorizonError::InvalidResponse),
-        }
-    }
-
     /// Check whether Horizon is reachable by hitting the root endpoint.
     pub async fn is_reachable(&self) -> bool {
         let url = format!("{}/", self.base_url);
@@ -156,7 +239,6 @@ impl HorizonClient {
     }
 
     /// Fetch paginated transactions for an account.
-    ///
     /// Returns `(records, next_cursor, prev_cursor)`.
     pub async fn fetch_account_transactions(
         &self,
@@ -201,37 +283,37 @@ impl HorizonClient {
         }
     }
 
-    /// Fetch ORG_NAME from a domain's stellar.toml.
-    /// Results are cached in memory for 10 minutes per domain.
+    /// Fetch the ORG_NAME from a domain's stellar.toml file.
+    /// Returns None if the file is missing, unreachable, or doesn't contain ORG_NAME.
     pub async fn fetch_stellar_toml_org_name(&self, domain: &str) -> Option<String> {
         // Check cache first
         {
-            let cache = self.toml_cache.read().unwrap();
-            if let Some((cached_value, cached_at)) = cache.get(domain) {
-                if cached_at.elapsed() < Duration::from_secs(600) {
-                    return cached_value.clone();
+            let cache = self.toml_cache.read().ok()?;
+            if let Some((cached, fetched_at)) = cache.get(domain) {
+                if fetched_at.elapsed() < Duration::from_secs(3600) {
+                    return cached.clone();
                 }
             }
         }
 
-        // Fetch from domain
-        let url = format!("{}/.well-known/stellar.toml", domain);
-        let result = self.client.get(&url).send().await.ok();
+        let toml_url = format!("{}/.well-known/stellar.toml", domain);
+        let res = self
+            .client
+            .get(&toml_url)
+            .timeout(Duration::from_secs(5))
+            .send()
+            .await
+            .ok()?;
 
-        let org_name = if let Some(res) = result {
-            if res.status().as_u16() == 200 {
-                let body = res.text().await.ok().unwrap_or_default();
-                parse_org_name(&body)
-            } else {
-                None
-            }
-        } else {
-            None
-        };
+        if res.status().as_u16() != 200 {
+            return None;
+        }
+
+        let text = res.text().await.ok()?;
+        let org_name = parse_org_name(&text);
 
         // Store in cache
-        {
-            let mut cache = self.toml_cache.write().unwrap();
+        if let Ok(mut cache) = self.toml_cache.write() {
             cache.insert(domain.to_string(), (org_name.clone(), Instant::now()));
         }
 
@@ -239,33 +321,59 @@ impl HorizonClient {
     }
 }
 
-/// Extract `cursor` query param value from a Horizon pagination href.
-fn extract_cursor(href: Option<&str>) -> Option<String> {
-    let href = href?;
-    let url = reqwest::Url::parse(href).ok()?;
-    url.query_pairs()
-        .find(|(k, _)| k == "cursor")
-        .map(|(_, v)| v.into_owned())
-}
+// ── Supporting structs ─────────────────────────────────────────────────────
 
-/// Parse ORG_NAME from a stellar.toml body.
-/// Handles both `ORG_NAME="Foo"` and `ORG_NAME = "Foo"` formats.
-fn parse_org_name(toml: &str) -> Option<String> {
-    for line in toml.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with("ORG_NAME") {
-            if let Some(pos) = trimmed.find('=') {
-                let value = trimmed[pos + 1..].trim().trim_matches('"').to_string();
-                if !value.is_empty() {
-                    return Some(value);
-                }
-            }
-        }
-    }
-    None
+#[derive(Debug, Deserialize)]
+pub struct HorizonOperation {
+    pub id: String,
+    pub transaction_hash: String,
+    #[serde(rename = "type")]
+    pub operation_type: String,
+    pub source_account: Option<String>,
+    // Payment fields
+    pub amount: Option<String>,
+    pub asset_type: Option<String>,
+    pub asset_code: Option<String>,
+    pub asset_issuer: Option<String>,
+    pub from: Option<String>,
+    pub to: Option<String>,
+    // Create account fields
+    pub starting_balance: Option<String>,
+    pub funder: Option<String>,
+    pub account: Option<String>,
+    // Change trust fields
+    pub limit: Option<String>,
+    pub trustee: Option<String>,
+    pub trustor: Option<String>,
+    pub asset_code_change_trust: Option<String>,
+    // Manage offer fields
+    pub offer_id: Option<String>,
+    pub buying_asset_type: Option<String>,
+    pub buying_asset_code: Option<String>,
+    pub buying_asset_issuer: Option<String>,
+    pub selling_asset_type: Option<String>,
+    pub selling_asset_code: Option<String>,
+    pub selling_asset_issuer: Option<String>,
+    pub price: Option<String>,
+    // Set options fields
+    pub set_flags: Option<Vec<u32>>,
+    pub clear_flags: Option<Vec<u32>>,
+    pub master_key_weight: Option<u32>,
+    pub low_threshold: Option<u32>,
+    pub med_threshold: Option<u32>,
+    pub high_threshold: Option<u32>,
+    pub home_domain: Option<String>,
+    pub signer_key: Option<String>,
+    pub signer_weight: Option<u32>,
+    pub inflation_dest: Option<String>,
+    // Path payment fields
+    pub source_amount: Option<String>,
+    pub source_asset_type: Option<String>,
+    pub source_asset_code: Option<String>,
+    pub source_asset_issuer: Option<String>,
+    // Clawback fields
+    pub balance_id: Option<String>,
 }
-
-// ── Horizon JSON shapes ────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
 struct HorizonOperationsResponse {
@@ -277,10 +385,18 @@ struct HorizonEmbeddedOperations {
     records: Vec<HorizonOperation>,
 }
 
-#[derive(Debug, Deserialize)]
-struct HorizonAccountTransactionsResponse {
-    _links: HorizonLinks,
-    _embedded: HorizonEmbeddedAccountTransactions,
+#[derive(Deserialize)]
+struct HorizonFeeStats {
+    last_ledger_base_fee: String,
+    fee_charged: HorizonFeeDistribution,
+}
+
+#[derive(Deserialize)]
+struct HorizonFeeDistribution {
+    min: String,
+    max: String,
+    mode: String,
+    p90: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -295,77 +411,33 @@ struct HorizonLink {
 }
 
 #[derive(Debug, Deserialize)]
+struct HorizonAccountTransactionsResponse {
+    _links: HorizonLinks,
+    _embedded: HorizonEmbeddedAccountTransactions,
+}
+
+#[derive(Debug, Deserialize)]
 struct HorizonEmbeddedAccountTransactions {
     records: Vec<HorizonAccountTransaction>,
 }
 
-#[derive(Debug, Deserialize)]
-struct HorizonFeeStats {
-    last_ledger_base_fee: String,
-    fee_charged: HorizonFeeCharged,
+fn extract_cursor(href: Option<&str>) -> Option<String> {
+    let href = href?;
+    let cursor_param = href.split('&').find(|p| p.starts_with("cursor="))?;
+    Some(cursor_param.trim_start_matches("cursor=").to_string())
 }
 
-#[derive(Debug, Deserialize)]
-struct HorizonFeeCharged {
-    min: String,
-    max: String,
-    mode: String,
-    p90: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct HorizonOperation {
-    pub id: String,
-    pub transaction_hash: String,
-    #[serde(rename = "type")]
-    pub type_i: String,
-
-    // Shared / payment
-    pub from: Option<String>,
-    pub to: Option<String>,
-    pub asset_type: Option<String>,
-    pub asset_code: Option<String>,
-    pub asset_issuer: Option<String>,
-    pub amount: Option<String>,
-    pub source_account: Option<String>,
-
-    // set_options
-    pub inflation_dest: Option<String>,
-    pub clear_flags: Option<u32>,
-    pub set_flags: Option<u32>,
-    pub master_weight: Option<u32>,
-    pub low_threshold: Option<u32>,
-    pub med_threshold: Option<u32>,
-    pub high_threshold: Option<u32>,
-    pub home_domain: Option<String>,
-    pub signer_key: Option<String>,
-    pub signer_weight: Option<u32>,
-
-    // create_account
-    pub funder: Option<String>,
-    pub account: Option<String>,
-    pub starting_balance: Option<String>,
-
-    // change_trust
-    pub limit: Option<String>,
-
-    // manage_offer / manage_buy_offer
-    pub selling_asset_type: Option<String>,
-    pub selling_asset_code: Option<String>,
-    pub selling_asset_issuer: Option<String>,
-    pub buying_asset_type: Option<String>,
-    pub buying_asset_code: Option<String>,
-    pub buying_asset_issuer: Option<String>,
-    pub price: Option<String>,
-    pub offer_id: Option<u64>,
-
-    // path_payment
-    pub source_asset_type: Option<String>,
-    pub source_asset_code: Option<String>,
-    pub source_asset_issuer: Option<String>,
-    pub source_amount: Option<String>,
-    pub path: Option<Vec<String>>,
-
-    // clawback_claimable_balance
-    pub balance_id: Option<String>,
+fn parse_org_name(toml: &str) -> Option<String> {
+    for line in toml.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("ORG_NAME") {
+            if let Some(eq_pos) = trimmed.find('=') {
+                let value = trimmed[eq_pos + 1..].trim().trim_matches('"').to_string();
+                if !value.is_empty() {
+                    return Some(value);
+                }
+            }
+        }
+    }
+    None
 }

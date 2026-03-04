@@ -8,10 +8,23 @@ use std::time::Instant;
 use tracing::{error, info, info_span};
 
 use crate::{
+    explain::account::explain_account_with_org_name,
     errors::AppError,
     middleware::request_id::RequestId,
     services::horizon::HorizonClient,
 };
+
+#[derive(Debug, Serialize)]
+pub struct AccountExplanationResponse {
+    pub address: String,
+    pub summary: String,
+    pub xlm_balance: String,
+    pub asset_count: usize,
+    pub signer_count: u32,
+    pub home_domain: Option<String>,
+    pub org_name: Option<String>,
+    pub flag_descriptions: Vec<String>,
+}
 
 #[derive(Debug, Deserialize)]
 pub struct AccountTransactionsQuery {
@@ -152,6 +165,72 @@ pub async fn get_account_transactions(
         items,
         next_cursor,
         prev_cursor,
+    }))
+}
+
+/// GET /account/:address
+/// Returns a plain-English explanation of a Stellar account.
+pub async fn get_account_explanation(
+    Path(address): Path<String>,
+    State(horizon_client): State<Arc<HorizonClient>>,
+    Extension(request_id): Extension<RequestId>,
+) -> Result<Json<AccountExplanationResponse>, AppError> {
+    let span = info_span!(
+        "account_explanation_request",
+        request_id = %request_id,
+        address = %address
+    );
+    let _span_guard = span.enter();
+    let request_started_at = Instant::now();
+
+    info!(request_id = %request_id, address = %address, "incoming_request");
+
+    let account = match horizon_client.fetch_account(&address).await {
+        Ok(a) => a,
+        Err(err) => {
+            let app_error: AppError = err.into();
+            error!(
+                request_id = %request_id,
+                address = %address,
+                total_duration_ms = request_started_at.elapsed().as_millis() as u64,
+                error = ?app_error,
+                "account_fetch_failed"
+            );
+            return Err(app_error);
+        }
+    };
+
+    // Attempt stellar.toml org name lookup if the account has a home domain
+    let org_name = if let Some(ref domain) = account.home_domain {
+        let domain_url = if domain.starts_with("http") {
+            domain.clone()
+        } else {
+            format!("https://{}", domain)
+        };
+        horizon_client.fetch_stellar_toml_org_name(&domain_url).await
+    } else {
+        None
+    };
+
+    let explanation = explain_account_with_org_name(&account, org_name);
+
+    info!(
+        request_id = %request_id,
+        address = %address,
+        total_duration_ms = request_started_at.elapsed().as_millis() as u64,
+        status = 200u16,
+        "request_completed"
+    );
+
+    Ok(Json(AccountExplanationResponse {
+        address: account.account_id,
+        summary: explanation.summary,
+        xlm_balance: explanation.xlm_balance,
+        asset_count: explanation.asset_count,
+        signer_count: explanation.signer_count,
+        home_domain: explanation.home_domain,
+        org_name: explanation.org_name,
+        flag_descriptions: explanation.flag_descriptions,
     }))
 }
 
