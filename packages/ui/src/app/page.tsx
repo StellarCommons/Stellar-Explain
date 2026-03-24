@@ -1,6 +1,9 @@
 'use client";';
 import HeroSection from '@/components/landing/HeroSection';
+import HowItWorksSection from '@/components/landing/HowItWorksSection';
 import Navbar from '@/components/landing/Navbar';
+import UseCasesSection from '@/components/landing/UseCasesSection';
+import WhatWeDecodeSection from '@/components/landing/WhatWeDecodeSection';
 
 export default function LandingPage() {
   return (
@@ -42,6 +45,9 @@ export default function LandingPage() {
 
       <Navbar />
       <HeroSection />
+      <HowItWorksSection />
+      <WhatWeDecodeSection />
+      <UseCasesSection />
     </div>
   );
 }
