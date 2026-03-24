@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import "./globals.css";
+import NetworkStatusBanner from "@/components/NetworkStatusBanner";
 // import NetworkStatusBanner from "@/components/NetworkStatusBanner";
 
 const ibmPlexMono = IBM_Plex_Mono({
@@ -32,7 +33,7 @@ export default function RootLayout({
         suppressHydrationWarning
       >
         {" "}
-        {/* <NetworkStatusBanner /> */}
+        <NetworkStatusBanner />
         {children}
       </body>
     </html>

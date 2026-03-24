@@ -1,14 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { fetchTransaction, getErrorMessage } from "@/lib/api";
+import { fetchTransaction } from "@/lib/api";
 import type { TransactionExplanation } from "@/types";
 import { TransactionResult } from "@/components/TransactionResult";
+import ErrorDisplay from "@/components/ErrorDisplay";
 import AppShell from "@/components/AppShell";
 import { useAppShell } from "@/components/AppShellContext";
-
-// ── Inner page — consumes context ──────────────────────────────────────────
 
 function TxPageInner() {
   const { hash } = useParams<{ hash: string }>();
@@ -17,33 +16,26 @@ function TxPageInner() {
 
   const [data, setData] = useState<TransactionExplanation | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Error | null>(null);
+
+  const load = useCallback(async () => {
+    if (!hash) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await fetchTransaction(hash);
+      setData(result);
+      addEntry("transaction", hash, result.summary);
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error(String(err)));
+    } finally {
+      setLoading(false);
+    }
+  }, [hash, addEntry]);
 
   useEffect(() => {
-    if (!hash) return;
-    let cancelled = false;
-
-    async function load() {
-      setLoading(true);
-      setError(null);
-      try {
-        const result = await fetchTransaction(hash);
-        if (!cancelled) {
-          setData(result);
-          addEntry("transaction", hash, result.summary);
-        }
-      } catch (err) {
-        if (!cancelled) setError(getErrorMessage(err));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
     load();
-    return () => {
-      cancelled = true;
-    };
-  }, [hash, addEntry]);
+  }, [load]);
 
   return (
     <div style={{ paddingTop: "24px" }}>
@@ -64,41 +56,30 @@ function TxPageInner() {
           transition: "color 0.15s ease",
         }}
         onMouseEnter={(e) => {
-          (e.currentTarget as HTMLButtonElement).style.color =
-            "rgba(255,255,255,0.7)";
+          (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.7)";
         }}
         onMouseLeave={(e) => {
-          (e.currentTarget as HTMLButtonElement).style.color =
-            "rgba(255,255,255,0.3)";
+          (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.3)";
         }}
       >
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-          <path
-            d="M8 2L4 6l4 4"
-            stroke="currentColor"
-            strokeWidth="1.3"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
+          <path d="M8 2L4 6l4 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
         Back to search
       </button>
 
       {loading && <TransactionSkeleton />}
-     
 
       {error && !loading && (
-        <div className="px-4 py-3 rounded-lg bg-red-900/20 border border-red-700/30 text-red-300 text-xs font-mono">
-          {error}
-        </div>
+        <ErrorDisplay error={error} identifier={hash} onRetry={load} />
       )}
 
-      {data && !loading && <TransactionResult data={data} />}
+      {data && !loading && (
+        <TransactionResult data={data} />
+      )}
     </div>
   );
 }
-
-// ── Page — wraps with AppShell ─────────────────────────────────────────────
 
 export default function TxPage() {
   return (
@@ -108,50 +89,15 @@ export default function TxPage() {
   );
 }
 
-// ── Skeleton ───────────────────────────────────────────────────────────────
-
 function TransactionSkeleton() {
   return (
     <div className="space-y-4 animate-pulse">
-      <div
-        style={{
-          height: "16px",
-          width: "120px",
-          borderRadius: "6px",
-          background: "rgba(255,255,255,0.06)",
-        }}
-      />
-      <div
-        style={{
-          height: "60px",
-          borderRadius: "12px",
-          background: "rgba(255,255,255,0.04)",
-        }}
-      />
-      <div
-        style={{
-          height: "80px",
-          borderRadius: "12px",
-          background: "rgba(255,255,255,0.04)",
-        }}
-      />
-      <div
-        style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}
-      >
-        <div
-          style={{
-            height: "72px",
-            borderRadius: "12px",
-            background: "rgba(255,255,255,0.04)",
-          }}
-        />
-        <div
-          style={{
-            height: "72px",
-            borderRadius: "12px",
-            background: "rgba(255,255,255,0.04)",
-          }}
-        />
+      <div style={{ height: "16px", width: "120px", borderRadius: "6px", background: "rgba(255,255,255,0.06)" }} />
+      <div style={{ height: "60px", borderRadius: "12px", background: "rgba(255,255,255,0.04)" }} />
+      <div style={{ height: "80px", borderRadius: "12px", background: "rgba(255,255,255,0.04)" }} />
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+        <div style={{ height: "72px", borderRadius: "12px", background: "rgba(255,255,255,0.04)" }} />
+        <div style={{ height: "72px", borderRadius: "12px", background: "rgba(255,255,255,0.04)" }} />
       </div>
     </div>
   );
