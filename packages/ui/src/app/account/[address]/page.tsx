@@ -1,76 +1,65 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { fetchAccount, getErrorMessage } from "@/lib/api";
-import type { AccountExplanation } from "@/types";
-import { AccountResult } from "@/components/AccountResult";
-import AppShell from "@/components/AppShell";
-import { useAppShell } from "@/components/AppShellContext";
-
-// ── Inner page — consumes context ──────────────────────────────────────────
+import { useEffect, useState, useCallback } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { fetchAccount } from '@/lib/api';
+import type { AccountExplanation } from '@/types';
+import { AccountResult } from '@/components/AccountResult';
+import ErrorDisplay from '@/components/ErrorDisplay';
+import AppShell from '@/components/AppShell';
+import { useAppShell } from '@/components/AppShellContext';
 
 function AccountPageInner() {
   const { address } = useParams<{ address: string }>();
   const router = useRouter();
-  const { addEntry, isSaved, getEntry, saveAddress, removeAddress } =
-    useAppShell();
+  const { addEntry, isSaved, getEntry, saveAddress, removeAddress } = useAppShell();
 
   const [data, setData] = useState<AccountExplanation | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Error | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     if (!address) return;
-    let cancelled = false;
-
-    async function load() {
-      setLoading(true);
-      setError(null);
-      try {
-        const result = await fetchAccount(address);
-        if (!cancelled) {
-          setData(result);
-          addEntry("account", address, result.summary);
-        }
-      } catch (err) {
-        if (!cancelled) setError(getErrorMessage(err));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await fetchAccount(address);
+      setData(result);
+      addEntry('account', address, result.summary);
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error(String(err)));
+    } finally {
+      setLoading(false);
     }
-
-    load();
-    return () => {
-      cancelled = true;
-    };
   }, [address, addEntry]);
 
+  useEffect(() => {
+    load();
+  }, [load]);
+
   return (
-    <div style={{ paddingTop: "24px" }}>
+    <div style={{ paddingTop: '24px' }}>
       {/* Back button */}
       <button
-        onClick={() => router.push("/app")}
+        onClick={() => router.push('/app')}
         style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "6px",
-          background: "none",
-          border: "none",
-          cursor: "pointer",
-          color: "rgba(255,255,255,0.3)",
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          background: 'none',
+          border: 'none',
+          cursor: 'pointer',
+          color: 'rgba(255,255,255,0.3)',
           fontFamily: "'IBM Plex Sans', sans-serif",
-          fontSize: "12px",
-          padding: "0 0 20px",
-          transition: "color 0.15s ease",
+          fontSize: '12px',
+          padding: '0 0 20px',
+          transition: 'color 0.15s ease',
         }}
         onMouseEnter={(e) => {
-          (e.currentTarget as HTMLButtonElement).style.color =
-            "rgba(255,255,255,0.7)";
+          (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.7)';
         }}
         onMouseLeave={(e) => {
-          (e.currentTarget as HTMLButtonElement).style.color =
-            "rgba(255,255,255,0.3)";
+          (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.3)';
         }}
       >
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
@@ -86,13 +75,8 @@ function AccountPageInner() {
       </button>
 
       {loading && <AccountSkeleton />}
-     
 
-      {error && !loading && (
-        <div className="px-4 py-3 rounded-lg bg-red-900/20 border border-red-700/30 text-red-300 text-xs font-mono">
-          {error}
-        </div>
-      )}
+      {error && !loading && <ErrorDisplay error={error} identifier={address} onRetry={load} />}
 
       {data && !loading && (
         <AccountResult
@@ -110,8 +94,6 @@ function AccountPageInner() {
   );
 }
 
-// ── Page — wraps with AppShell ─────────────────────────────────────────────
-
 export default function AccountPage() {
   return (
     <AppShell>
@@ -120,62 +102,30 @@ export default function AccountPage() {
   );
 }
 
-// ── Skeleton ───────────────────────────────────────────────────────────────
-
 function AccountSkeleton() {
   return (
     <div className="space-y-4 animate-pulse">
       <div
         style={{
-          height: "16px",
-          width: "100px",
-          borderRadius: "6px",
-          background: "rgba(255,255,255,0.06)",
+          height: '16px',
+          width: '100px',
+          borderRadius: '6px',
+          background: 'rgba(255,255,255,0.06)',
         }}
       />
-      <div
-        style={{
-          height: "60px",
-          borderRadius: "12px",
-          background: "rgba(255,255,255,0.04)",
-        }}
-      />
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr 1fr",
-          gap: "12px",
-        }}
-      >
+      <div style={{ height: '60px', borderRadius: '12px', background: 'rgba(255,255,255,0.04)' }} />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
         <div
-          style={{
-            height: "80px",
-            borderRadius: "12px",
-            background: "rgba(255,255,255,0.04)",
-          }}
+          style={{ height: '80px', borderRadius: '12px', background: 'rgba(255,255,255,0.04)' }}
         />
         <div
-          style={{
-            height: "80px",
-            borderRadius: "12px",
-            background: "rgba(255,255,255,0.04)",
-          }}
+          style={{ height: '80px', borderRadius: '12px', background: 'rgba(255,255,255,0.04)' }}
         />
         <div
-          style={{
-            height: "80px",
-            borderRadius: "12px",
-            background: "rgba(255,255,255,0.04)",
-          }}
+          style={{ height: '80px', borderRadius: '12px', background: 'rgba(255,255,255,0.04)' }}
         />
       </div>
-      <div
-        style={{
-          height: "60px",
-          borderRadius: "12px",
-          background: "rgba(255,255,255,0.04)",
-        }}
-      />
+      <div style={{ height: '60px', borderRadius: '12px', background: 'rgba(255,255,255,0.04)' }} />
     </div>
   );
 }
