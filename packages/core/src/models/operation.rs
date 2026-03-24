@@ -259,10 +259,7 @@ impl From<HorizonOperation> for Operation {
                     buying_asset: buying,
                     amount: op.amount.unwrap_or_else(|| "0".to_string()),
                     price: op.price.unwrap_or_default(),
-                    offer_id: op
-                        .offer_id
-                        .and_then(|s| s.parse::<u64>().ok())
-                        .unwrap_or(0),
+                    offer_id: op.offer_id.and_then(|s| s.parse::<u64>().ok()).unwrap_or(0),
                     offer_type: OfferType::Sell,
                 })
             }
@@ -284,10 +281,7 @@ impl From<HorizonOperation> for Operation {
                     buying_asset: buying,
                     amount: op.amount.unwrap_or_else(|| "0".to_string()),
                     price: op.price.unwrap_or_default(),
-                    offer_id: op
-                        .offer_id
-                        .and_then(|s| s.parse::<u64>().ok())
-                        .unwrap_or(0),
+                    offer_id: op.offer_id.and_then(|s| s.parse::<u64>().ok()).unwrap_or(0),
                     offer_type: OfferType::Buy,
                 })
             }

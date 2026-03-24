@@ -244,10 +244,7 @@ mod tests {
     #[test]
     fn test_memo_display() {
         assert_eq!(Memo::None.to_string(), "No memo");
-        assert_eq!(
-            Memo::text("test").unwrap().to_string(),
-            "Text: test"
-        );
+        assert_eq!(Memo::text("test").unwrap().to_string(), "Text: test");
         assert_eq!(Memo::id(123).to_string(), "ID: 123");
         assert_eq!(Memo::hash("abc").to_string(), "Hash: abc");
         assert_eq!(Memo::return_hash("def").to_string(), "Return: def");

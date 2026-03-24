@@ -1,7 +1,7 @@
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
-use std::hash::{Hash, Hasher};
 
 /// Represents a Stellar network
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -81,7 +81,7 @@ impl<T: Clone> TransactionCache<T> {
     }
 
     /// Insert or update a cache entry
-    /// 
+    ///
     /// Returns true if this is a new entry, false if updating existing
     pub fn insert(&self, key: CacheKey, value: T) -> bool {
         let mut cache = self.cache.write().unwrap();
@@ -97,7 +97,7 @@ impl<T: Clone> TransactionCache<T> {
     }
 
     /// Get a value from the cache
-    /// 
+    ///
     /// Returns None if:
     /// - Key doesn't exist
     /// - Entry has expired (also removes it)
@@ -128,7 +128,8 @@ impl<T: Clone> TransactionCache<T> {
     /// Check if a key exists and is not expired
     pub fn contains_key(&self, key: &CacheKey) -> bool {
         let cache = self.cache.read().unwrap();
-        cache.get(key)
+        cache
+            .get(key)
             .map(|entry| !entry.is_expired())
             .unwrap_or(false)
     }
@@ -146,7 +147,7 @@ impl<T: Clone> TransactionCache<T> {
     }
 
     /// Remove all expired entries (garbage collection)
-    /// 
+    ///
     /// Returns the number of entries removed
     pub fn evict_expired(&self) -> usize {
         let mut cache = self.cache.write().unwrap();
@@ -172,7 +173,7 @@ impl<T: Clone> TransactionCache<T> {
         let cache = self.cache.read().unwrap();
         let total = cache.len();
         let expired = cache.values().filter(|e| e.is_expired()).count();
-        
+
         CacheStats {
             total_entries: total,
             expired_entries: expired,
@@ -234,7 +235,7 @@ mod tests {
     #[test]
     fn test_cache_key_uniqueness() {
         let cache: TransactionCache<String> = TransactionCache::with_default_ttl();
-        
+
         let key1 = CacheKey::new("hash1".to_string(), Network::Public);
         let key2 = CacheKey::new("hash1".to_string(), Network::Testnet);
         let key3 = CacheKey::new("hash2".to_string(), Network::Public);
@@ -293,9 +294,9 @@ mod tests {
 
         // Insert with very short custom TTL
         cache.insert_with_ttl(key.clone(), "value".to_string(), Duration::from_millis(50));
-        
+
         assert_eq!(cache.get(&key), Some("value".to_string()));
-        
+
         thread::sleep(Duration::from_millis(100));
         assert_eq!(cache.get(&key), None);
     }
@@ -307,24 +308,30 @@ mod tests {
 
         // First insert
         assert!(cache.insert(key.clone(), "first".to_string()));
-        
+
         // Update existing key
         assert!(!cache.insert(key.clone(), "second".to_string()));
-        
+
         assert_eq!(cache.get(&key), Some("second".to_string()));
     }
 
     #[test]
     fn test_clear_cache() {
         let cache: TransactionCache<String> = TransactionCache::with_default_ttl();
-        
-        cache.insert(CacheKey::new("tx1".to_string(), Network::Public), "val1".to_string());
-        cache.insert(CacheKey::new("tx2".to_string(), Network::Testnet), "val2".to_string());
-        
+
+        cache.insert(
+            CacheKey::new("tx1".to_string(), Network::Public),
+            "val1".to_string(),
+        );
+        cache.insert(
+            CacheKey::new("tx2".to_string(), Network::Testnet),
+            "val2".to_string(),
+        );
+
         assert_eq!(cache.len(), 2);
-        
+
         cache.clear();
-        
+
         assert_eq!(cache.len(), 0);
         assert!(cache.is_empty());
     }
@@ -332,22 +339,28 @@ mod tests {
     #[test]
     fn test_evict_expired() {
         let cache: TransactionCache<String> = TransactionCache::new(Duration::from_millis(50));
-        
+
         // Add entries that will expire
-        cache.insert(CacheKey::new("tx1".to_string(), Network::Public), "val1".to_string());
-        cache.insert(CacheKey::new("tx2".to_string(), Network::Public), "val2".to_string());
-        
+        cache.insert(
+            CacheKey::new("tx1".to_string(), Network::Public),
+            "val1".to_string(),
+        );
+        cache.insert(
+            CacheKey::new("tx2".to_string(), Network::Public),
+            "val2".to_string(),
+        );
+
         thread::sleep(Duration::from_millis(100));
-        
+
         // Add fresh entry
         cache.insert_with_ttl(
             CacheKey::new("tx3".to_string(), Network::Public),
             "val3".to_string(),
-            Duration::from_secs(60)
+            Duration::from_secs(60),
         );
-        
+
         assert_eq!(cache.len(), 3);
-        
+
         // Evict expired entries
         let evicted = cache.evict_expired();
         assert_eq!(evicted, 2);
@@ -357,17 +370,23 @@ mod tests {
     #[test]
     fn test_cache_stats() {
         let cache: TransactionCache<String> = TransactionCache::new(Duration::from_millis(100));
-        
-        cache.insert(CacheKey::new("tx1".to_string(), Network::Public), "val1".to_string());
-        cache.insert(CacheKey::new("tx2".to_string(), Network::Public), "val2".to_string());
-        
+
+        cache.insert(
+            CacheKey::new("tx1".to_string(), Network::Public),
+            "val1".to_string(),
+        );
+        cache.insert(
+            CacheKey::new("tx2".to_string(), Network::Public),
+            "val2".to_string(),
+        );
+
         let stats = cache.stats();
         assert_eq!(stats.total_entries, 2);
         assert_eq!(stats.valid_entries, 2);
         assert_eq!(stats.expired_entries, 0);
-        
+
         thread::sleep(Duration::from_millis(150));
-        
+
         let stats = cache.stats();
         assert_eq!(stats.total_entries, 2);
         assert_eq!(stats.expired_entries, 2);
@@ -385,10 +404,7 @@ mod tests {
                 let cache = cache.clone();
                 thread::spawn(move || {
                     for j in 0..10 {
-                        let key = CacheKey::new(
-                            format!("tx_{}", i * 10 + j),
-                            Network::Public
-                        );
+                        let key = CacheKey::new(format!("tx_{}", i * 10 + j), Network::Public);
                         cache.insert(key, format!("value_{}", i * 10 + j));
                     }
                 })
@@ -408,7 +424,7 @@ mod tests {
     fn test_thread_safe_concurrent_read_write() {
         let cache: TransactionCache<u64> = TransactionCache::with_default_ttl();
         let key = CacheKey::new("shared_key".to_string(), Network::Public);
-        
+
         cache.insert(key.clone(), 0);
 
         // Multiple readers and writers
@@ -449,7 +465,7 @@ mod tests {
     #[test]
     fn test_network_types() {
         let cache: TransactionCache<String> = TransactionCache::with_default_ttl();
-        
+
         let networks = vec![
             Network::Public,
             Network::Testnet,
@@ -468,18 +484,18 @@ mod tests {
     #[test]
     fn test_cache_does_not_grow_unbounded() {
         let cache: TransactionCache<String> = TransactionCache::new(Duration::from_millis(10));
-        
+
         // Add many entries
         for i in 0..1000 {
             let key = CacheKey::new(format!("tx_{}", i), Network::Public);
             cache.insert(key, format!("value_{}", i));
         }
-        
+
         assert_eq!(cache.len(), 1000);
-        
+
         // Wait for expiration
         thread::sleep(Duration::from_millis(50));
-        
+
         // Evict expired entries
         let evicted = cache.evict_expired();
         assert_eq!(evicted, 1000);

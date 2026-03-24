@@ -58,11 +58,7 @@ pub fn explain_account_with_org_name(
 
     let summary = match (&home_domain, &org_name) {
         (Some(domain), Some(name)) => {
-            format!(
-                "{base_summary} Account operated by {} ({}).",
-                name,
-                domain
-            )
+            format!("{base_summary} Account operated by {} ({}).", name, domain)
         }
         (Some(domain), None) => format!("{base_summary} Home domain: {}.", domain),
         (None, _) => base_summary,
@@ -106,7 +102,12 @@ mod tests {
     use super::*;
     use crate::models::account::{AccountFlags, Balance};
 
-    fn mock_account(xlm: &str, extra_assets: usize, num_signers: u32, home_domain: Option<&str>) -> Account {
+    fn mock_account(
+        xlm: &str,
+        extra_assets: usize,
+        num_signers: u32,
+        home_domain: Option<&str>,
+    ) -> Account {
         let mut balances = vec![Balance {
             asset_type: "native".to_string(),
             asset_code: None,
@@ -163,13 +164,13 @@ mod tests {
     #[test]
     fn test_summary_with_org_name_and_home_domain() {
         let account = mock_account("200.0000000", 0, 2, Some("anchorage.com"));
-        let explanation = explain_account_with_org_name(
-            &account,
-            Some("Anchorage Digital".to_string()),
+        let explanation =
+            explain_account_with_org_name(&account, Some("Anchorage Digital".to_string()));
+        assert!(
+            explanation
+                .summary
+                .contains("Account operated by Anchorage Digital (anchorage.com)")
         );
-        assert!(explanation.summary.contains(
-            "Account operated by Anchorage Digital (anchorage.com)"
-        ));
         assert_eq!(explanation.org_name.as_deref(), Some("Anchorage Digital"));
     }
 

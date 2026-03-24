@@ -4,7 +4,7 @@
 //! funds from a holder's account. It is often unexpected by the recipient
 //! so explanations include contextual information about what clawback means.
 
-use crate::models::operation::{ClawbackOperation, ClawbackClaimableBalanceOperation};
+use crate::models::operation::{ClawbackClaimableBalanceOperation, ClawbackOperation};
 use serde::{Deserialize, Serialize};
 
 /// Human-readable explanation of a clawback operation.
@@ -109,7 +109,7 @@ fn shorten_id(id: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::operation::{ClawbackOperation, ClawbackClaimableBalanceOperation};
+    use crate::models::operation::{ClawbackClaimableBalanceOperation, ClawbackOperation};
 
     fn base_clawback() -> ClawbackOperation {
         ClawbackOperation {
@@ -126,7 +126,8 @@ mod tests {
         ClawbackClaimableBalanceOperation {
             id: "op2".to_string(),
             source_account: Some("GISSUER123".to_string()),
-            balance_id: "00000000abcdef1234567890abcdef1234567890abcdef1234567890abcdef12".to_string(),
+            balance_id: "00000000abcdef1234567890abcdef1234567890abcdef1234567890abcdef12"
+                .to_string(),
         }
     }
 
@@ -155,7 +156,11 @@ mod tests {
     #[test]
     fn test_clawback_summary_format() {
         let result = explain_clawback(&base_clawback());
-        assert!(result.summary.starts_with("The asset issuer reclaimed 100 USDC from GHOLDER456."));
+        assert!(
+            result
+                .summary
+                .starts_with("The asset issuer reclaimed 100 USDC from GHOLDER456.")
+        );
     }
 
     #[test]
@@ -213,14 +218,22 @@ mod tests {
     #[test]
     fn test_clawback_claimable_balance_summary_starts_correctly() {
         let result = explain_clawback_claimable_balance(&base_clawback_balance());
-        assert!(result.summary.starts_with("The asset issuer clawed back claimable balance"));
+        assert!(
+            result
+                .summary
+                .starts_with("The asset issuer clawed back claimable balance")
+        );
     }
 
     #[test]
     fn test_clawback_claimable_balance_id_shortened() {
         let result = explain_clawback_claimable_balance(&base_clawback_balance());
         // Full ID should not appear in summary — shortened version should
-        assert!(!result.summary.contains("00000000abcdef1234567890abcdef1234567890abcdef1234567890abcdef12"));
+        assert!(
+            !result
+                .summary
+                .contains("00000000abcdef1234567890abcdef1234567890abcdef1234567890abcdef12")
+        );
         assert!(result.summary.contains("00000000"));
         assert!(result.summary.contains("ef12"));
     }

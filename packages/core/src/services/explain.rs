@@ -14,7 +14,13 @@ pub fn map_transaction_to_domain(
     // The memo value itself is only present for non-none memo types.
     let memo = map_memo(tx.memo_type.as_deref(), tx.memo.as_deref());
 
-    Transaction::new(tx.hash, tx.successful, tx.fee_charged.parse().unwrap_or(0), ops, memo)
+    Transaction::new(
+        tx.hash,
+        tx.successful,
+        tx.fee_charged.parse().unwrap_or(0),
+        ops,
+        memo,
+    )
 }
 
 /// Converts raw Horizon memo fields into a domain Memo.
@@ -24,9 +30,7 @@ fn map_memo(memo_type: Option<&str>, memo_value: Option<&str>) -> Option<Memo> {
     match memo_type {
         None | Some("none") => None,
         Some("text") => memo_value.and_then(|v| Memo::text(v)),
-        Some("id") => memo_value
-            .and_then(|v| v.parse::<u64>().ok())
-            .map(Memo::id),
+        Some("id") => memo_value.and_then(|v| v.parse::<u64>().ok()).map(Memo::id),
         Some("hash") => memo_value.map(|v| Memo::hash(v)),
         Some("return") => memo_value.map(|v| Memo::return_hash(v)),
         Some(_) => None,

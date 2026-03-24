@@ -1,11 +1,10 @@
+use crate::explain::transaction::ExplainError;
 use axum::{
+    Json,
     http::StatusCode,
     response::{IntoResponse, Response},
-    Json,
 };
 use serde::{Deserialize, Serialize};
-use crate::explain::transaction::ExplainError;
-
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct ApiError {
@@ -82,30 +81,21 @@ impl IntoResponse for AppError {
     }
 }
 
-
 impl From<HorizonError> for AppError {
     fn from(err: HorizonError) -> Self {
         match err {
             HorizonError::TransactionNotFound => {
-                AppError::NotFound(
-                    "Transaction not found on the Stellar network.".into(),
-                )
+                AppError::NotFound("Transaction not found on the Stellar network.".into())
             }
             HorizonError::AccountNotFound => {
                 AppError::NotFound("Account not found on the Stellar network.".into())
             }
-            HorizonError::NetworkError => {
-                AppError::UpstreamFailure(
-                    "Unable to reach Stellar network. Please try again later."
-                        .into(),
-                )
-            }
-            HorizonError::InvalidResponse => {
-                AppError::UpstreamFailure(
-                    "Received an invalid response from the Stellar network."
-                        .into(),
-                )
-            }
+            HorizonError::NetworkError => AppError::UpstreamFailure(
+                "Unable to reach Stellar network. Please try again later.".into(),
+            ),
+            HorizonError::InvalidResponse => AppError::UpstreamFailure(
+                "Received an invalid response from the Stellar network.".into(),
+            ),
         }
     }
 }
@@ -113,10 +103,9 @@ impl From<HorizonError> for AppError {
 impl From<ExplainError> for AppError {
     fn from(err: ExplainError) -> Self {
         match err {
-            ExplainError::EmptyTransaction => AppError::BadRequest(
-                "This transaction contains no operations.".to_string(),
-            ),
+            ExplainError::EmptyTransaction => {
+                AppError::BadRequest("This transaction contains no operations.".to_string())
+            }
         }
     }
 }
-

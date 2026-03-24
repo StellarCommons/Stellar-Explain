@@ -19,6 +19,6 @@ use utoipa::OpenApi;
 )]
 pub struct ApiDoc;
 
-pub mod tx;
 pub mod account;
 pub mod health;
+pub mod tx;
