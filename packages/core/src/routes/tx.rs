@@ -1,16 +1,16 @@
 use axum::{
-    extract::{Extension, Path, State},
     Json,
+    extract::{Extension, Path, State},
 };
 use serde::Serialize;
-use utoipa::ToSchema;
 use std::sync::Arc;
 use std::time::Instant;
 use tracing::{error, info, info_span};
+use utoipa::ToSchema;
 
 use crate::{
     errors::AppError,
-    explain::transaction::{explain_transaction_with_ledger, TransactionExplanation},
+    explain::transaction::{TransactionExplanation, explain_transaction_with_ledger},
     middleware::request_id::RequestId,
     services::{explain::map_transaction_to_domain, horizon::HorizonClient},
 };
@@ -21,7 +21,6 @@ pub struct TxExplanationResponse {
     pub successful: bool,
     pub explanation: String,
 }
-
 
 #[utoipa::path(
     get,
@@ -57,8 +56,7 @@ pub async fn get_tx_explanation(
 
     if !is_valid_transaction_hash(&hash) {
         let app_error = AppError::BadRequest(
-            "Invalid transaction hash format. Expected 64-character hexadecimal hash."
-                .to_string(),
+            "Invalid transaction hash format. Expected 64-character hexadecimal hash.".to_string(),
         );
         info!(
             request_id = %request_id,

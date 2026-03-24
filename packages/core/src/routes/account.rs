@@ -1,6 +1,6 @@
 use axum::{
-    extract::{Extension, Path, Query, State},
     Json,
+    extract::{Extension, Path, Query, State},
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -8,10 +8,8 @@ use std::time::Instant;
 use tracing::{error, info, info_span};
 
 use crate::{
-    explain::account::explain_account_with_org_name,
-    errors::AppError,
-    middleware::request_id::RequestId,
-    services::horizon::HorizonClient,
+    errors::AppError, explain::account::explain_account_with_org_name,
+    middleware::request_id::RequestId, services::horizon::HorizonClient,
 };
 
 #[derive(Debug, Serialize)]
@@ -138,7 +136,11 @@ pub async fn get_account_transactions(
             };
             let summary = format!(
                 "{} transaction with {} operation{}.",
-                if tx.successful { "Successful" } else { "Failed" },
+                if tx.successful {
+                    "Successful"
+                } else {
+                    "Failed"
+                },
                 tx.operation_count,
                 if tx.operation_count == 1 { "" } else { "s" },
             );
@@ -207,7 +209,9 @@ pub async fn get_account_explanation(
         } else {
             format!("https://{}", domain)
         };
-        horizon_client.fetch_stellar_toml_org_name(&domain_url).await
+        horizon_client
+            .fetch_stellar_toml_org_name(&domain_url)
+            .await
     } else {
         None
     };
@@ -277,7 +281,10 @@ mod tests {
 
     #[test]
     fn test_limit_zero_rejected() {
-        assert!(matches!(validate(Some(0), None), Err(AppError::BadRequest(_))));
+        assert!(matches!(
+            validate(Some(0), None),
+            Err(AppError::BadRequest(_))
+        ));
     }
 
     #[test]

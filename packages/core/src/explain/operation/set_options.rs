@@ -67,21 +67,21 @@ pub fn explain_set_options(op: &SetOptionsOperation) -> SetOptionsExplanation {
     }
 
     // Flags
-    if let Some(flags) = op.set_flags {
-        if flags > 0 {
-            changes.push(format!(
-                "enabled account flag(s): {}",
-                describe_flags(flags)
-            ));
-        }
+    if let Some(flags) = op.set_flags
+        && flags > 0
+    {
+        changes.push(format!(
+            "enabled account flag(s): {}",
+            describe_flags(flags)
+        ));
     }
-    if let Some(flags) = op.clear_flags {
-        if flags > 0 {
-            changes.push(format!(
-                "disabled account flag(s): {}",
-                describe_flags(flags)
-            ));
-        }
+    if let Some(flags) = op.clear_flags
+        && flags > 0
+    {
+        changes.push(format!(
+            "disabled account flag(s): {}",
+            describe_flags(flags)
+        ));
     }
 
     // Signer — weight 0 means remove, anything else means add/modify
@@ -92,10 +92,7 @@ pub fn explain_set_options(op: &SetOptionsOperation) -> SetOptionsExplanation {
                 changes.push(format!("removed signer {}", short_key));
             }
             Some(weight) => {
-                changes.push(format!(
-                    "added signer {} with weight {}",
-                    short_key, weight
-                ));
+                changes.push(format!("added signer {} with weight {}", short_key, weight));
             }
             None => {
                 changes.push(format!("modified signer {}", short_key));
@@ -120,7 +117,11 @@ fn build_summary(account: &str, changes: &[String]) -> String {
             account
         );
     }
-    format!("{} updated their account: {}", account, join_changes(changes))
+    format!(
+        "{} updated their account: {}",
+        account,
+        join_changes(changes)
+    )
 }
 
 /// Join change descriptions into natural English.
@@ -143,10 +144,18 @@ fn join_changes(changes: &[String]) -> String {
 /// AUTH_REQUIRED=1, AUTH_REVOCABLE=2, AUTH_IMMUTABLE=4, CLAWBACK_ENABLED=8
 fn describe_flags(flags: u32) -> String {
     let mut names: Vec<&str> = Vec::new();
-    if flags & 1 != 0 { names.push("AUTH_REQUIRED"); }
-    if flags & 2 != 0 { names.push("AUTH_REVOCABLE"); }
-    if flags & 4 != 0 { names.push("AUTH_IMMUTABLE"); }
-    if flags & 8 != 0 { names.push("CLAWBACK_ENABLED"); }
+    if flags & 1 != 0 {
+        names.push("AUTH_REQUIRED");
+    }
+    if flags & 2 != 0 {
+        names.push("AUTH_REVOCABLE");
+    }
+    if flags & 4 != 0 {
+        names.push("AUTH_IMMUTABLE");
+    }
+    if flags & 8 != 0 {
+        names.push("CLAWBACK_ENABLED");
+    }
     if names.is_empty() {
         flags.to_string()
     } else {
@@ -245,7 +254,9 @@ mod tests {
     #[test]
     fn test_signer_added() {
         let op = SetOptionsOperation {
-            signer_key: Some("GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB".to_string()),
+            signer_key: Some(
+                "GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB".to_string(),
+            ),
             signer_weight: Some(1),
             ..base_op()
         };
@@ -259,7 +270,9 @@ mod tests {
     #[test]
     fn test_signer_removed_weight_zero() {
         let op = SetOptionsOperation {
-            signer_key: Some("GCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC".to_string()),
+            signer_key: Some(
+                "GCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC".to_string(),
+            ),
             signer_weight: Some(0),
             ..base_op()
         };
@@ -302,7 +315,9 @@ mod tests {
     fn test_signer_add_plus_home_domain() {
         let op = SetOptionsOperation {
             home_domain: Some("example.com".to_string()),
-            signer_key: Some("GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB".to_string()),
+            signer_key: Some(
+                "GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB".to_string(),
+            ),
             signer_weight: Some(1),
             ..base_op()
         };

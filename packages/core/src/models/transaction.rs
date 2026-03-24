@@ -1,6 +1,6 @@
-use serde::{Deserialize, Serialize};
 use crate::models::memo::Memo;
-use crate::models::operation::{Operation, PaymentOperation, OtherOperation};
+use crate::models::operation::{Operation, PaymentOperation};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Transaction {
@@ -8,7 +8,7 @@ pub struct Transaction {
     pub successful: bool,
     pub fee_charged: u64,
     pub operations: Vec<Operation>,
-    pub memo: Option<Memo>,  // Added memo field
+    pub memo: Option<Memo>, // Added memo field
 }
 
 impl Transaction {
@@ -39,7 +39,9 @@ impl Transaction {
     }
 
     pub fn has_payments(&self) -> bool {
-        self.operations.iter().any(|op| matches!(op, Operation::Payment(_)))
+        self.operations
+            .iter()
+            .any(|op| matches!(op, Operation::Payment(_)))
     }
 
     pub fn payment_count(&self) -> usize {
@@ -55,7 +57,7 @@ impl Transaction {
 
     /// Checks if transaction has a memo attached.
     pub fn has_memo(&self) -> bool {
-        self.memo.as_ref().map_or(false, |m| !m.is_none())
+        self.memo.as_ref().is_some_and(|m| !m.is_none())
     }
 
     /// Returns the memo type as a string.
@@ -118,10 +120,7 @@ mod tests {
             hash: "tx1".to_string(),
             successful: true,
             fee_charged: 100,
-            operations: vec![
-                create_unsupported(),
-                create_payment("10"),
-            ],
+            operations: vec![create_unsupported(), create_payment("10")],
             memo: None,
         };
 

@@ -1,6 +1,6 @@
 use axum::{
     body::Body,
-    http::{Request, HeaderValue},
+    http::{HeaderValue, Request},
     middleware::Next,
     response::Response,
 };
@@ -8,6 +8,12 @@ use uuid::Uuid;
 
 #[derive(Clone, Debug)]
 pub struct RequestId(pub Uuid);
+
+impl Default for RequestId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl RequestId {
     pub fn new() -> Self {
@@ -21,10 +27,7 @@ impl std::fmt::Display for RequestId {
     }
 }
 
-pub async fn request_id_middleware(
-    mut request: Request<Body>,
-    next: Next,
-) -> Response {
+pub async fn request_id_middleware(mut request: Request<Body>, next: Next) -> Response {
     let request_id = RequestId::new();
     request.extensions_mut().insert(request_id.clone());
 
