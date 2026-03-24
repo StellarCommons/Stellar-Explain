@@ -84,10 +84,8 @@ function TxPageInner() {
         Back to search
       </button>
 
-      {/* {loading && <TransactionSkeleton />} */}
-      {loading && (
-        <p className="text-white/30 text-xs font-mono pt-8">Loading...</p>
-      )}
+      {loading && <TransactionSkeleton />}
+     
 
       {error && !loading && (
         <div className="px-4 py-3 rounded-lg bg-red-900/20 border border-red-700/30 text-red-300 text-xs font-mono">
@@ -112,49 +110,49 @@ export default function TxPage() {
 
 // ── Skeleton ───────────────────────────────────────────────────────────────
 
-// function TransactionSkeleton() {
-//   return (
-//     <div className="space-y-4 animate-pulse">
-//       <div
-//         style={{
-//           height: "16px",
-//           width: "120px",
-//           borderRadius: "6px",
-//           background: "rgba(255,255,255,0.06)",
-//         }}
-//       />
-//       <div
-//         style={{
-//           height: "60px",
-//           borderRadius: "12px",
-//           background: "rgba(255,255,255,0.04)",
-//         }}
-//       />
-//       <div
-//         style={{
-//           height: "80px",
-//           borderRadius: "12px",
-//           background: "rgba(255,255,255,0.04)",
-//         }}
-//       />
-//       <div
-//         style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}
-//       >
-//         <div
-//           style={{
-//             height: "72px",
-//             borderRadius: "12px",
-//             background: "rgba(255,255,255,0.04)",
-//           }}
-//         />
-//         <div
-//           style={{
-//             height: "72px",
-//             borderRadius: "12px",
-//             background: "rgba(255,255,255,0.04)",
-//           }}
-//         />
-//       </div>
-//     </div>
-//   );
-// }
+function TransactionSkeleton() {
+  return (
+    <div className="space-y-4 animate-pulse">
+      <div
+        style={{
+          height: "16px",
+          width: "120px",
+          borderRadius: "6px",
+          background: "rgba(255,255,255,0.06)",
+        }}
+      />
+      <div
+        style={{
+          height: "60px",
+          borderRadius: "12px",
+          background: "rgba(255,255,255,0.04)",
+        }}
+      />
+      <div
+        style={{
+          height: "80px",
+          borderRadius: "12px",
+          background: "rgba(255,255,255,0.04)",
+        }}
+      />
+      <div
+        style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}
+      >
+        <div
+          style={{
+            height: "72px",
+            borderRadius: "12px",
+            background: "rgba(255,255,255,0.04)",
+          }}
+        />
+        <div
+          style={{
+            height: "72px",
+            borderRadius: "12px",
+            background: "rgba(255,255,255,0.04)",
+          }}
+        />
+      </div>
+    </div>
+  );
+}
