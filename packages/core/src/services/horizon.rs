@@ -295,10 +295,10 @@ impl HorizonClient {
         // Check cache first
         {
             let cache = self.toml_cache.read().ok()?;
-            if let Some((cached, fetched_at)) = cache.get(domain) {
-                if fetched_at.elapsed() < Duration::from_secs(3600) {
-                    return cached.clone();
-                }
+            if let Some((cached, fetched_at)) = cache.get(domain)
+                && fetched_at.elapsed() < Duration::from_secs(3600)
+            {
+                return cached.clone();
             }
         }
 
@@ -436,12 +436,12 @@ fn extract_cursor(href: Option<&str>) -> Option<String> {
 fn parse_org_name(toml: &str) -> Option<String> {
     for line in toml.lines() {
         let trimmed = line.trim();
-        if trimmed.starts_with("ORG_NAME") {
-            if let Some(eq_pos) = trimmed.find('=') {
-                let value = trimmed[eq_pos + 1..].trim().trim_matches('"').to_string();
-                if !value.is_empty() {
-                    return Some(value);
-                }
+        if trimmed.starts_with("ORG_NAME")
+            && let Some(eq_pos) = trimmed.find('=')
+        {
+            let value = trimmed[eq_pos + 1..].trim().trim_matches('"').to_string();
+            if !value.is_empty() {
+                return Some(value);
             }
         }
     }

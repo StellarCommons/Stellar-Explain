@@ -1,5 +1,5 @@
 use crate::models::memo::Memo;
-use crate::models::operation::{Operation, OtherOperation, PaymentOperation};
+use crate::models::operation::{Operation, PaymentOperation};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -57,7 +57,7 @@ impl Transaction {
 
     /// Checks if transaction has a memo attached.
     pub fn has_memo(&self) -> bool {
-        self.memo.as_ref().map_or(false, |m| !m.is_none())
+        self.memo.as_ref().is_some_and(|m| !m.is_none())
     }
 
     /// Returns the memo type as a string.

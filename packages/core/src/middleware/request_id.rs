@@ -9,6 +9,12 @@ use uuid::Uuid;
 #[derive(Clone, Debug)]
 pub struct RequestId(pub Uuid);
 
+impl Default for RequestId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RequestId {
     pub fn new() -> Self {
         Self(Uuid::new_v4())

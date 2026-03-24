@@ -105,10 +105,10 @@ impl<T: Clone> TransactionCache<T> {
         // First, check with read lock (fast path)
         {
             let cache = self.cache.read().unwrap();
-            if let Some(entry) = cache.get(key) {
-                if !entry.is_expired() {
-                    return Some(entry.value.clone());
-                }
+            if let Some(entry) = cache.get(key)
+                && !entry.is_expired()
+            {
+                return Some(entry.value.clone());
             }
         }
 

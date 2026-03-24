@@ -67,21 +67,21 @@ pub fn explain_set_options(op: &SetOptionsOperation) -> SetOptionsExplanation {
     }
 
     // Flags
-    if let Some(flags) = op.set_flags {
-        if flags > 0 {
-            changes.push(format!(
-                "enabled account flag(s): {}",
-                describe_flags(flags)
-            ));
-        }
+    if let Some(flags) = op.set_flags
+        && flags > 0
+    {
+        changes.push(format!(
+            "enabled account flag(s): {}",
+            describe_flags(flags)
+        ));
     }
-    if let Some(flags) = op.clear_flags {
-        if flags > 0 {
-            changes.push(format!(
-                "disabled account flag(s): {}",
-                describe_flags(flags)
-            ));
-        }
+    if let Some(flags) = op.clear_flags
+        && flags > 0
+    {
+        changes.push(format!(
+            "disabled account flag(s): {}",
+            describe_flags(flags)
+        ));
     }
 
     // Signer — weight 0 means remove, anything else means add/modify

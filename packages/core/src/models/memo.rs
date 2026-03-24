@@ -15,9 +15,11 @@ use serde::{Deserialize, Serialize};
 /// - Return: 32-byte hash for returns/refunds
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", content = "value")]
+#[derive(Default)]
 pub enum Memo {
     /// No memo attached to the transaction
     #[serde(rename = "none")]
+    #[default]
     None,
 
     /// Text memo: UTF-8 string up to 28 bytes
@@ -62,7 +64,7 @@ impl Memo {
     /// ```
     pub fn text(text: impl Into<String>) -> Option<Self> {
         let text = text.into();
-        if text.as_bytes().len() <= 28 {
+        if text.len() <= 28 {
             Some(Memo::Text(text))
         } else {
             None
@@ -164,12 +166,6 @@ impl Memo {
             Memo::Hash(hash) => hash.clone(),
             Memo::Return(hash) => hash.clone(),
         }
-    }
-}
-
-impl Default for Memo {
-    fn default() -> Self {
-        Memo::None
     }
 }
 
