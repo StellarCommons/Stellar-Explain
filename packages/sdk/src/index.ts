@@ -1,4 +1,5 @@
-export { StellarExplainClient, TimeoutError, ApiRequestError } from "./client/StellarExplainClient.js";
+export { StellarExplainClient } from "./client/StellarExplainClient.js";
+export { TimeoutError, ApiRequestError } from "./errors/index.js";
 export type {
   TransactionExplanation,
   AccountExplanation,
