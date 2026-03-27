@@ -2,6 +2,7 @@ import type {
   TransactionExplanation,
   AccountExplanation,
   ApiError,
+  FetchImpl,
   RequestOptions,
   StellarExplainClientOptions,
 } from "../types/index.js";
@@ -95,6 +96,7 @@ function cancellationPromise<T>(signal: AbortSignal): Promise<T> {
 export class StellarExplainClient {
   private readonly baseUrl: string;
   private readonly timeoutMs: number;
+  private readonly fetchImpl: FetchImpl;
 
   /**
    * In-flight deduplication map.
@@ -111,6 +113,7 @@ export class StellarExplainClient {
   constructor(options: StellarExplainClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, "");
     this.timeoutMs = options.timeoutMs ?? 30_000;
+    this.fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
   }
 
   // ── Public API ─────────────────────────────────────────────────────────────
@@ -230,7 +233,7 @@ export class StellarExplainClient {
     );
 
     try {
-      const res = await fetch(`${this.baseUrl}${path}`, {
+      const res = await this.fetchImpl(`${this.baseUrl}${path}`, {
         headers: { Accept: "application/json" },
         signal: timeoutController.signal,
       });

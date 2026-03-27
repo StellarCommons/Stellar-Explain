@@ -47,9 +47,21 @@ export interface RequestOptions {
   signal?: AbortSignal;
 }
 
+/** Minimal fetch-compatible function signature accepted by the client. */
+export type FetchImpl = (
+  input: string | URL | Request,
+  init?: RequestInit
+) => Promise<Response>;
+
 export interface StellarExplainClientOptions {
   /** Base URL of the Stellar Explain API (no trailing slash). */
   baseUrl: string;
   /** Request timeout in milliseconds. Defaults to 30 000. */
   timeoutMs?: number;
+  /**
+   * Custom fetch implementation. Defaults to globalThis.fetch.
+   * Pass undici's fetch (or the result of createUndiciFetch) for Node 16
+   * compatibility or custom connection-pool configuration.
+   */
+  fetchImpl?: FetchImpl;
 }
