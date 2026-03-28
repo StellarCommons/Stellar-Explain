@@ -92,6 +92,24 @@ Expected response:
 ok
 ```
 
+### GET /tx/:hash
+
+Returns a human-readable explanation of a Stellar transaction.
+
+```bash
+curl http://localhost:4000/tx/<transaction-hash>
+```
+
+### GET /tx/:hash/raw
+
+Returns the raw, unprocessed JSON response from Horizon for the given transaction hash. Useful for developers and power users who want direct access to the full Horizon data.
+
+```bash
+curl http://localhost:4000/tx/<transaction-hash>/raw
+```
+
+Applies the same error handling as `/tx/:hash` — 400 for invalid hashes, 404 for not found, 502 for upstream failures.
+
 ---
 
 ## 🧪 Testing
@@ -140,3 +158,25 @@ The backend will grow **one operation type at a time**.
 
 ---
 ```
+
+## 🔍 Structured Logging and Request Tracing
+
+The backend emits structured logs for each request. Logs include request-scoped tracing fields and timing metrics for Horizon fetches and explanation work.
+
+Set `LOG_FORMAT=json` to emit JSON logs:
+
+```bash
+LOG_FORMAT=json cargo run
+```
+
+### Log fields
+
+- `request_id`: UUID generated per request by middleware and also returned as `x-request-id` response header
+- `hash`: transaction hash for `/tx/{hash}` requests
+- `address`: account address for `/account/{address}` requests
+- `horizon_fetch_duration_ms`: time spent waiting on Horizon calls
+- `explain_duration_ms`: time spent generating explanation output (transaction explain route)
+- `total_duration_ms`: total handler response time
+- `status`: HTTP status code emitted by the handler
+- `upstream_error`: upstream failure marker when Horizon is unreachable or fails
+- `fee_stats_available`: whether Horizon `fee_stats` was available for the transaction explanation request

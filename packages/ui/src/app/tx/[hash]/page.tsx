@@ -1,156 +1,103 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
-import { Copy, Loader2 } from 'lucide-react';
+import { useEffect, useState, useCallback } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { fetchTransaction } from "@/lib/api";
+import type { TransactionExplanation } from "@/types";
+import { TransactionResult } from "@/components/TransactionResult";
+import ErrorDisplay from "@/components/ErrorDisplay";
+import AppShell from "@/components/AppShell";
+import { useAppShell } from "@/components/AppShellContext";
 
-interface Operation {
-  type: string;
-  from?: string;
-  to?: string;
-  amount?: string;
-  asset?: string;
-}
+function TxPageInner() {
+  const { hash } = useParams<{ hash: string }>();
+  const router = useRouter();
+  const { addEntry } = useAppShell();
 
-interface Transaction {
-  hash: string;
-  source_account: string;
-  memo?: string;
-  fee_charged: string;
-  created_at: string;
-  signatures: string[];
-  operations: Operation[];
-}
-
-export default function TransactionDetailsPage() {
-  const { hash } = useParams();
-  const [tx, setTx] = useState<Transaction | null>(null);
+  const [data, setData] = useState<TransactionExplanation | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  const load = useCallback(async () => {
+    if (!hash) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await fetchTransaction(hash);
+      setData(result);
+      addEntry("transaction", hash, result.summary);
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error(String(err)));
+    } finally {
+      setLoading(false);
+    }
+  }, [hash, addEntry]);
 
   useEffect(() => {
-    if (!hash) return;
-    const fetchTx = async () => {
-      try {
-        const res = await fetch(`/api/tx/${hash}`);
-        const data = await res.json();
-        setTx(data);
-      } catch (err) {
-        console.error('Failed to fetch transaction:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchTx();
-  }, [hash]);
-
-  if (loading)
-    return (
-      <div className="flex h-[80vh] items-center justify-center">
-        <Loader2 className="animate-spin text-purple-500" size={40} />
-      </div>
-    );
-
-  if (!tx)
-    return (
-      <div className="text-center mt-10 text-gray-500">
-        Transaction not found.
-      </div>
-    );
-
-  const copyHash = () => {
-    navigator.clipboard.writeText(tx.hash);
-  };
-
-  const formatDate = (dateString: string) =>
-    new Date(dateString).toLocaleString();
+    load();
+  }, [load]);
 
   return (
-    <div className="max-w-3xl mx-auto mt-10 p-6 bg-white rounded-2xl shadow-md border border-gray-100">
-      <h1 className="text-2xl font-semibold text-purple-600 mb-3">
-        Transaction Details
-      </h1>
+    <div style={{ paddingTop: "24px" }}>
+      {/* Back button */}
+      <button
+        onClick={() => router.push("/app")}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "6px",
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          color: "rgba(255,255,255,0.3)",
+          fontFamily: "'IBM Plex Sans', sans-serif",
+          fontSize: "12px",
+          padding: "0 0 20px",
+          transition: "color 0.15s ease",
+        }}
+        onMouseEnter={(e) => {
+          (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.7)";
+        }}
+        onMouseLeave={(e) => {
+          (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.3)";
+        }}
+      >
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+          <path d="M8 2L4 6l4 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        Back to search
+      </button>
 
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="font-medium text-gray-700">Hash:</span>
-          <div className="flex items-center gap-2">
-            <code className="text-sm text-gray-600 break-all">{tx.hash}</code>
-            <button
-              onClick={copyHash}
-              className="text-purple-500 hover:text-purple-700 transition"
-            >
-              <Copy size={16} />
-            </button>
-          </div>
-        </div>
-        <p>
-          <span className="font-medium text-gray-700">Source Account:</span>{' '}
-          {tx.source_account}
-        </p>
-        <p>
-          <span className="font-medium text-gray-700">Memo:</span>{' '}
-          {tx.memo || '—'}
-        </p>
-        <p>
-          <span className="font-medium text-gray-700">Fee:</span>{' '}
-          {tx.fee_charged} stroops
-        </p>
-        <p>
-          <span className="font-medium text-gray-700">Created:</span>{' '}
-          {formatDate(tx.created_at)}
-        </p>
-      </div>
+      {loading && <TransactionSkeleton />}
 
-      <div className="mt-6">
-        <h2 className="text-lg font-semibold text-purple-600 mb-2">
-          Signatures
-        </h2>
-        <ul className="space-y-1 text-sm text-gray-700">
-          {tx.signatures.map((sig, idx) => (
-            <li
-              key={idx}
-              className="bg-gray-50 p-2 rounded-md border border-gray-100"
-            >
-              {sig}
-            </li>
-          ))}
-        </ul>
-      </div>
+      {error && !loading && (
+        <ErrorDisplay error={error} identifier={hash} onRetry={load} />
+      )}
 
-      <div className="mt-6">
-        <h2 className="text-lg font-semibold text-purple-600 mb-2">
-          Operations
-        </h2>
-        <div className="space-y-3">
-          {tx.operations.map((op, idx) => (
-            <div
-              key={idx}
-              className="border border-gray-100 rounded-lg p-3 bg-gray-50"
-            >
-              <p className="text-sm">
-                <span className="font-medium text-gray-700">Type:</span>{' '}
-                {op.type}
-              </p>
-              {op.from && (
-                <p className="text-sm">
-                  <span className="font-medium text-gray-700">From:</span>{' '}
-                  {op.from}
-                </p>
-              )}
-              {op.to && (
-                <p className="text-sm">
-                  <span className="font-medium text-gray-700">To:</span> {op.to}
-                </p>
-              )}
-              {op.amount && (
-                <p className="text-sm">
-                  <span className="font-medium text-gray-700">Amount:</span>{' '}
-                  {op.amount} {op.asset || ''}
-                </p>
-              )}
-            </div>
-          ))}
-        </div>
+      {data && !loading && (
+        <TransactionResult data={data} />
+      )}
+    </div>
+  );
+}
+
+export default function TxPage() {
+  return (
+    <AppShell>
+      <TxPageInner />
+    </AppShell>
+  );
+}
+
+function TransactionSkeleton() {
+  return (
+    <div className="space-y-4 animate-pulse">
+      <div style={{ height: "16px", width: "120px", borderRadius: "6px", background: "rgba(255,255,255,0.06)" }} />
+      <div style={{ height: "60px", borderRadius: "12px", background: "rgba(255,255,255,0.04)" }} />
+      <div style={{ height: "80px", borderRadius: "12px", background: "rgba(255,255,255,0.04)" }} />
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+        <div style={{ height: "72px", borderRadius: "12px", background: "rgba(255,255,255,0.04)" }} />
+        <div style={{ height: "72px", borderRadius: "12px", background: "rgba(255,255,255,0.04)" }} />
       </div>
     </div>
   );

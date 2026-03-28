@@ -31,13 +31,17 @@ mod tests {
 
     #[test]
     fn defaults_to_public_network() {
-        std::env::remove_var("STELLAR_NETWORK");
+        unsafe {
+            std::env::remove_var("STELLAR_NETWORK");
+        }
         assert_eq!(StellarNetwork::from_env(), StellarNetwork::Public);
     }
 
     #[test]
     fn resolves_testnet_network() {
-        std::env::set_var("STELLAR_NETWORK", "testnet");
+        unsafe {
+            std::env::set_var("STELLAR_NETWORK", "testnet");
+        }
         assert_eq!(StellarNetwork::from_env(), StellarNetwork::Testnet);
     }
 
@@ -50,9 +54,6 @@ mod tests {
     #[test]
     fn testnet_network_url() {
         let net = StellarNetwork::Testnet;
-        assert_eq!(
-            net.horizon_url(),
-            "https://horizon-testnet.stellar.org"
-        );
+        assert_eq!(net.horizon_url(), "https://horizon-testnet.stellar.org");
     }
 }

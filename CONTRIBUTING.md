@@ -99,4 +99,76 @@ Here are some helpful resources:
 
 Thanks again for helping make **StellarCommons** better! ✨
 
+---
+
+## 📦 SDK Version Management (Changesets)
+
+The `@stellar-explain/sdk` package uses [Changesets](https://github.com/changesets/changesets)
+to manage semantic versioning and auto-generate `CHANGELOG.md` entries.
+
+### When do I need a changeset?
+
+Any PR that modifies `packages/sdk/` **and** changes the public API or behaviour
+visible to consumers needs a changeset. This includes:
+
+| Change type | Semver bump |
+|---|---|
+| Breaking API change (rename, removal, incompatible signature) | `major` |
+| New exported symbol, new option, new behaviour (backwards-compatible) | `minor` |
+| Bug fix, dependency update, documentation only | `patch` |
+
+Pure internal refactors with no observable difference to consumers do not
+require a changeset.
+
+### Step-by-step: adding a changeset to your PR
+
+1. **Install dependencies** (first time only):
+   ```bash
+   cd packages/sdk
+   npm install
+   ```
+
+2. **Run the interactive prompt** from the repo root or the SDK directory:
+   ```bash
+   # from repo root
+   npx changeset
+
+   # or from packages/sdk
+   npm run changeset
+   ```
+
+3. The CLI will ask you:
+   - Which package is affected → select `@stellar-explain/sdk`
+   - What type of bump → `patch`, `minor`, or `major`
+   - A short summary of the change (this becomes the changelog entry)
+
+4. A new file is created in `.changeset/` (e.g. `.changeset/teal-lions-laugh.md`).
+   **Commit this file as part of your PR.**
+
+   ```bash
+   git add .changeset/
+   git commit -m "chore: add changeset for <your change>"
+   ```
+
+5. Open your Pull Request as normal. The changeset file is reviewed along with
+   your code.
+
+### Release flow (maintainers only)
+
+When PRs with changeset files are merged to `main`, the
+[Release workflow](.github/workflows/release.yml) runs automatically:
+
+1. **If unreleased changesets exist** — the workflow opens (or updates) a
+   "Version Packages" PR that bumps `packages/sdk/package.json` and prepends
+   entries to `packages/sdk/CHANGELOG.md`.
+
+2. **When the "Version Packages" PR is merged** — the workflow runs
+   `changeset publish`, which tags the commit and publishes
+   `@stellar-explain/sdk` to npm.
+
+> The workflow requires two repository secrets:
+> - `GITHUB_TOKEN` — provided automatically by GitHub Actions.
+> - `NPM_TOKEN` — a granular npm access token with publish rights for
+>   `@stellar-explain/sdk`. Add it in **Settings → Secrets and variables →
+>   Actions**.
 

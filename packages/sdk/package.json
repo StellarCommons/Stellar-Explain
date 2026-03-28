@@ -1,0 +1,40 @@
+{
+  "name": "@stellar-explain/sdk",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for the Stellar Explain API",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./adapters/undiciFetch": {
+      "import": "./dist/adapters/undiciFetch.js",
+      "types": "./dist/adapters/undiciFetch.d.ts"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "changeset": "changeset",
+    "changeset:version": "changeset version",
+    "changeset:publish": "changeset publish"
+  },
+  "peerDependencies": {
+    "undici": ">=5"
+  },
+  "peerDependenciesMeta": {
+    "undici": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2",
+    "@changesets/changelog-github": "^0.5",
+    "typescript": "^5",
+    "undici": "^6"
+  }
+}

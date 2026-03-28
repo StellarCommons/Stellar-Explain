@@ -1,0 +1,54 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    name: Release SDK
+    runs-on: ubuntu-latest
+    # Only run when there is at least one .changeset/*.md file to process.
+    # The changesets/action below will either open a "Version Packages" PR
+    # (if unreleased changesets exist) or publish to npm (if the version PR
+    # was just merged and there are no pending changesets).
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Full history is required so changesets can diff tags correctly.
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install SDK dependencies
+        run: npm ci
+        working-directory: packages/sdk
+
+      - name: Build SDK
+        run: npm run build
+        working-directory: packages/sdk
+
+      - name: Create Release PR or Publish to npm
+        uses: changesets/action@v1
+        with:
+          # Command that changesets/action calls when it decides to publish.
+          publish: npm run changeset:publish --prefix packages/sdk
+          # Optional: customise the version-bump PR title / commit message.
+          title: "chore: version packages"
+          commit: "chore: version packages"
+        env:
+          # Required for opening/updating the version PR.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Required for `npm publish`. Create this secret in repo Settings →
+          # Secrets and variables → Actions → New repository secret.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
