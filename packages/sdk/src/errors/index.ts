@@ -32,6 +32,23 @@ export class TimeoutError extends Error {
 }
 
 /**
+ * Thrown when the upstream server returns a non-JSON response body where the
+ * SDK expected JSON.
+ *
+ * This commonly happens when a proxy or CDN returns an HTML error page instead
+ * of the API's normal JSON envelope.
+ */
+export class UpstreamError extends Error {
+  readonly statusCode: number;
+
+  constructor(message: string, statusCode: number) {
+    super(message);
+    this.name = "UpstreamError";
+    this.statusCode = statusCode;
+  }
+}
+
+/**
  * Thrown when the Stellar Explain API returns a non-2xx HTTP response.
  *
  * The `code` property contains the machine-readable error code from the

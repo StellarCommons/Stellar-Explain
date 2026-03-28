@@ -6,9 +6,13 @@ import type {
   RequestOptions,
   StellarExplainClientOptions,
 } from "../types/index.js";
-import { TimeoutError, ApiRequestError } from "../errors/index.js";
+import {
+  TimeoutError,
+  ApiRequestError,
+  UpstreamError,
+} from "../errors/index.js";
 
-export { TimeoutError, ApiRequestError };
+export { TimeoutError, ApiRequestError, UpstreamError };
 
 // ── Signal helpers (module-private) ────────────────────────────────────────
 
@@ -376,6 +380,7 @@ export class StellarExplainClient {
    * @returns A Promise that resolves to the parsed JSON body typed as `T`.
    * @throws {@link TimeoutError} if the request exceeds `timeoutMs`.
    * @throws {@link ApiRequestError} if the response status is not 2xx.
+   * @throws {@link UpstreamError} if the server responds with a non-JSON body.
    */
   private async fetchJson<T>(path: string): Promise<T> {
     const timeoutController = new AbortController();
@@ -393,7 +398,18 @@ export class StellarExplainClient {
         signal: timeoutController.signal,
       });
 
-      const data = (await res.json()) as T | ApiError;
+      const raw = await res.text();
+      let data: T | ApiError;
+
+      try {
+        data = JSON.parse(raw) as T | ApiError;
+      } catch {
+        const preview = raw.slice(0, 200);
+        throw new UpstreamError(
+          `Received non-JSON response from server (status ${res.status}): ${preview}`,
+          res.status
+        );
+      }
 
       if (!res.ok) {
         throw new ApiRequestError(data as ApiError);
@@ -401,7 +417,9 @@ export class StellarExplainClient {
 
       return data as T;
     } catch (err) {
-      if (err instanceof ApiRequestError) throw err;
+      if (err instanceof ApiRequestError || err instanceof UpstreamError) {
+        throw err;
+      }
 
       if (err instanceof Error && err.name === "AbortError") {
         throw new TimeoutError("Request timed out");
