@@ -94,6 +94,39 @@ export interface ApiError {
 }
 
 /**
+ * Minimal logger interface accepted by {@link StellarExplainClient}.
+ *
+ * Any object satisfying this shape can be passed as `options.logger` — a
+ * `console`-compatible object, a `pino` / `winston` instance, or a custom
+ * adapter all work without additional wrappers.
+ *
+ * @example Forwarding to `console`
+ * ```ts
+ * const client = new StellarExplainClient({
+ *   baseUrl: 'https://api.example.com',
+ *   logger: console,
+ * });
+ * ```
+ *
+ * @example Forwarding to `pino`
+ * ```ts
+ * import pino from 'pino';
+ * const client = new StellarExplainClient({
+ *   baseUrl: 'https://api.example.com',
+ *   logger: pino(),
+ * });
+ * ```
+ */
+export interface SdkLogger {
+  /** Emitted for cache hits/misses and request start/end timings. */
+  debug(message: string, context?: Record<string, unknown>): void;
+  /** Emitted on each retry attempt, including the attempt number and delay. */
+  warn(message: string, context?: Record<string, unknown>): void;
+  /** Emitted when all retries are exhausted and the error is final. */
+  error(message: string, context?: Record<string, unknown>): void;
+}
+
+/**
  * Per-call options accepted by {@link StellarExplainClient.explainTransaction}
  * and {@link StellarExplainClient.explainAccount}.
  */
@@ -153,4 +186,18 @@ export interface StellarExplainClientOptions {
    * ```
    */
   fetchImpl?: FetchImpl;
+
+  /**
+   * Optional logger for SDK debug output.
+   *
+   * When omitted, all logging is suppressed (no-op). Supply any object that
+   * satisfies {@link SdkLogger} — `console`, `pino`, `winston`, etc. — to
+   * route SDK output into your own logging infrastructure.
+   *
+   * @example
+   * ```ts
+   * new StellarExplainClient({ baseUrl: '...', logger: console });
+   * ```
+   */
+  logger?: SdkLogger;
 }

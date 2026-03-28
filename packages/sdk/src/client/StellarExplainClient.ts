@@ -4,6 +4,7 @@ import type {
   ApiError,
   FetchImpl,
   RequestOptions,
+  SdkLogger,
   StellarExplainClientOptions,
 } from "../types/index.js";
 import { TimeoutError, ApiRequestError } from "../errors/index.js";
@@ -78,6 +79,14 @@ function cancellationPromise<T>(signal: AbortSignal): Promise<T> {
   });
 }
 
+// ── Logger helpers ─────────────────────────────────────────────────────────
+
+const NOOP_LOGGER: SdkLogger = {
+  debug: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+};
+
 // ── Client ─────────────────────────────────────────────────────────────────
 
 /**
@@ -119,6 +128,7 @@ export class StellarExplainClient {
   private readonly baseUrl: string;
   private readonly timeoutMs: number;
   private readonly fetchImpl: FetchImpl;
+  private readonly logger: SdkLogger;
 
   /**
    * In-flight deduplication map.
@@ -167,6 +177,7 @@ export class StellarExplainClient {
     this.baseUrl = options.baseUrl.replace(/\/$/, "");
     this.timeoutMs = options.timeoutMs ?? 30_000;
     this.fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
+    this.logger = options.logger ?? NOOP_LOGGER;
   }
 
   // ── Public API ─────────────────────────────────────────────────────────────
@@ -282,6 +293,94 @@ export class StellarExplainClient {
     );
   }
 
+  /**
+   * Streams a Server-Sent Events (SSE) response for a Stellar transaction
+   * explanation, yielding each partial result as it arrives.
+   *
+   * Designed for long-running explain requests where the server may take time
+   * to produce a complete explanation. Each yielded string is the payload of
+   * one SSE `data:` line with the prefix stripped.
+   *
+   * @param hash - The 64-character hex-encoded Stellar transaction hash.
+   *
+   * @returns An `AsyncGenerator` that yields each `data:` payload as a string.
+   *
+   * @throws {@link ApiRequestError} if `hash` is not a valid 64-character hex
+   *   string, or if the server returns a non-2xx status.
+   * @throws {@link TimeoutError} if more than `timeoutMs` milliseconds elapse
+   *   between consecutive chunks (stream stall detection).
+   *
+   * @example Basic streaming
+   * ```ts
+   * for await (const chunk of client.explainTransactionStream('a1b2c3...')) {
+   *   process.stdout.write(chunk);
+   * }
+   * ```
+   */
+  async *explainTransactionStream(hash: string): AsyncGenerator<string> {
+    if (!/^[0-9a-fA-F]{64}$/.test(hash)) {
+      throw new ApiRequestError({
+        error: { code: "BAD_REQUEST", message: "Invalid transaction hash" },
+      });
+    }
+
+    const res = await this.fetchImpl(
+      `${this.baseUrl}/api/tx/${hash}/stream`,
+      { headers: { Accept: "text/event-stream" } }
+    );
+
+    if (!res.ok) {
+      const data = (await res.json()) as ApiError;
+      throw new ApiRequestError(data);
+    }
+
+    if (!res.body) {
+      throw new Error("Response body is null");
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    const readChunk = (): Promise<ReadableStreamReadResult<Uint8Array>> =>
+      new Promise((resolve, reject) => {
+        const timer = setTimeout(
+          () => reject(new TimeoutError("Request timed out")),
+          this.timeoutMs
+        );
+        reader.read().then(
+          (result) => { clearTimeout(timer); resolve(result); },
+          (err) => { clearTimeout(timer); reject(err); }
+        );
+      });
+
+    try {
+      while (true) {
+        const { done, value } = await readChunk();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            yield line.slice(6);
+          }
+        }
+      }
+
+      // Flush any final bytes left in the decoder
+      const tail = (buffer + decoder.decode()).trimEnd();
+      if (tail.startsWith("data: ")) {
+        yield tail.slice(6);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
   // ── Internals ──────────────────────────────────────────────────────────────
 
   /**
@@ -312,6 +411,11 @@ export class StellarExplainClient {
     }
 
     const existing = this.inFlight.get(key) as Promise<T> | undefined;
+    if (existing) {
+      this.logger.debug("cache hit", { key });
+    } else {
+      this.logger.debug("cache miss", { key });
+    }
     const networkPromise: Promise<T> =
       existing ?? this.startRequest(key, networkFactory);
 
@@ -387,6 +491,9 @@ export class StellarExplainClient {
       this.timeoutMs
     );
 
+    const start = Date.now();
+    this.logger.debug("request start", { path });
+
     try {
       const res = await this.fetchImpl(`${this.baseUrl}${path}`, {
         headers: { Accept: "application/json" },
@@ -410,6 +517,7 @@ export class StellarExplainClient {
       throw err;
     } finally {
       clearTimeout(timer);
+      this.logger.debug("request end", { path, durationMs: Date.now() - start });
     }
   }
 }
