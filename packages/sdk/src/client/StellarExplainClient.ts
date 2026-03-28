@@ -6,37 +6,24 @@ import type {
   RequestOptions,
   StellarExplainClientOptions,
 } from "../types/index.js";
+import { TimeoutError, ApiRequestError } from "../errors/index.js";
 
-// ── Errors ─────────────────────────────────────────────────────────────────
+export { TimeoutError, ApiRequestError };
 
-/** Thrown when a request times out or is cancelled by the consumer. */
-export class TimeoutError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "TimeoutError";
-  }
-}
-
-/** Thrown when the API returns a non-2xx response. */
-export class ApiRequestError extends Error {
-  readonly code: string;
-  constructor(apiError: ApiError) {
-    super(apiError.error.message);
-    this.name = "ApiRequestError";
-    this.code = apiError.error.code;
-  }
-}
-
-// ── Signal helpers ─────────────────────────────────────────────────────────
+// ── Signal helpers (module-private) ────────────────────────────────────────
 
 /**
  * Merges two AbortSignals into one that fires when either fires.
  *
- * Uses AbortSignal.any() where supported (Node ≥ 20, modern browsers).
- * Falls back to a manual AbortController with event listeners.
+ * Uses `AbortSignal.any()` where supported (Node ≥ 20, modern browsers).
+ * Falls back to a manual `AbortController` with one-shot event listeners.
  *
- * Returns the merged signal and a cleanup function that removes listeners
- * (no-op when AbortSignal.any() is used).
+ * @param a - First signal.
+ * @param b - Second signal.
+ * @returns An object containing the merged `signal` and a `cleanup` function
+ *   that removes the manually added listeners. Call `cleanup()` after the
+ *   operation settles to prevent listener leaks. No-op when `AbortSignal.any`
+ *   is available.
  */
 function mergeSignals(
   a: AbortSignal,
@@ -74,11 +61,11 @@ function mergeSignals(
 }
 
 /**
- * Returns a Promise that rejects with TimeoutError('Request cancelled')
+ * Returns a Promise that rejects with `TimeoutError('Request cancelled')`
  * as soon as `signal` fires, or immediately if it is already aborted.
  *
- * The listener is attached directly (or AbortSignal.any is used upstream),
- * satisfying the "use AbortSignal.any / manual listener" requirement.
+ * @param signal - The AbortSignal to watch.
+ * @returns A Promise that never resolves and rejects on abort.
  */
 function cancellationPromise<T>(signal: AbortSignal): Promise<T> {
   return new Promise<T>((_, reject) => {
@@ -93,6 +80,41 @@ function cancellationPromise<T>(signal: AbortSignal): Promise<T> {
 
 // ── Client ─────────────────────────────────────────────────────────────────
 
+/**
+ * HTTP client for the Stellar Explain API.
+ *
+ * ### Features
+ * - **In-flight deduplication** — identical concurrent requests share one HTTP
+ *   call; only the first caller triggers network I/O.
+ * - **Per-request timeout** — every call is guarded by a configurable timeout
+ *   (default 30 s). Exceeded requests throw {@link TimeoutError}.
+ * - **Request cancellation** — pass an `AbortSignal` to any method to cancel
+ *   your own promise without aborting the shared network request.
+ * - **Custom fetch** — supply any WHATWG-compatible `fetch` implementation
+ *   (e.g. `undici`) via `options.fetchImpl` for Node 16 support or advanced
+ *   connection-pool configuration.
+ *
+ * @example Minimal setup
+ * ```ts
+ * import { StellarExplainClient } from '@stellar-explain/sdk';
+ *
+ * const client = new StellarExplainClient({
+ *   baseUrl: 'https://stellar-explain.example.com',
+ * });
+ * ```
+ *
+ * @example Fully configured
+ * ```ts
+ * import { fetch } from 'undici';
+ * import { StellarExplainClient } from '@stellar-explain/sdk';
+ *
+ * const client = new StellarExplainClient({
+ *   baseUrl: 'https://stellar-explain.example.com',
+ *   timeoutMs: 10_000,   // 10-second timeout
+ *   fetchImpl: fetch,    // undici on Node 16
+ * });
+ * ```
+ */
 export class StellarExplainClient {
   private readonly baseUrl: string;
   private readonly timeoutMs: number;
@@ -101,15 +123,46 @@ export class StellarExplainClient {
   /**
    * In-flight deduplication map.
    *
-   * Key  → stable cache key string.
-   * Value → the shared Promise for the underlying network request.
+   * Key   → stable cache key string (e.g. `"tx:<hash>"`).
+   * Value → shared network Promise for that key.
    *
-   * Entries are removed only when the network request settles.
-   * Consumer cancellation never removes an entry — the HTTP request stays
-   * in-flight and may be shared with other consumers.
+   * Entries are removed only when the underlying network request settles.
+   * Consumer cancellation never removes an entry — the HTTP request remains
+   * in-flight and may be shared with other consumers awaiting the same key.
    */
   private readonly inFlight = new Map<string, Promise<unknown>>();
 
+  /**
+   * Creates a new `StellarExplainClient`.
+   *
+   * @param options - Configuration for the client instance.
+   * @param options.baseUrl - Base URL of the Stellar Explain API server, without
+   *   a trailing slash (e.g. `'https://stellar-explain.example.com'`).
+   * @param options.timeoutMs - Maximum milliseconds to wait for any single
+   *   request before throwing {@link TimeoutError}. Defaults to `30000`.
+   * @param options.fetchImpl - WHATWG-compatible `fetch` function to use for
+   *   all HTTP requests. Defaults to `globalThis.fetch`. Pass `undici`'s
+   *   `fetch` (or the result of `createUndiciFetch`) for Node 16 support or
+   *   custom connection-pool options.
+   *
+   * @example Minimal
+   * ```ts
+   * const client = new StellarExplainClient({
+   *   baseUrl: 'https://stellar-explain.example.com',
+   * });
+   * ```
+   *
+   * @example With all options
+   * ```ts
+   * import { fetch } from 'undici';
+   *
+   * const client = new StellarExplainClient({
+   *   baseUrl: 'https://stellar-explain.example.com',
+   *   timeoutMs: 10_000,
+   *   fetchImpl: fetch,
+   * });
+   * ```
+   */
   constructor(options: StellarExplainClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, "");
     this.timeoutMs = options.timeoutMs ?? 30_000;
@@ -118,6 +171,51 @@ export class StellarExplainClient {
 
   // ── Public API ─────────────────────────────────────────────────────────────
 
+  /**
+   * Fetches a human-readable explanation for a Stellar transaction.
+   *
+   * Identical concurrent calls for the same `hash` share a single HTTP request
+   * (in-flight deduplication). The shared request is not cancelled if one
+   * caller's `signal` fires — only that caller's returned Promise rejects.
+   *
+   * @param hash - The hex-encoded Stellar transaction hash to look up.
+   * @param options - Optional per-call settings.
+   * @param options.signal - An `AbortSignal` that, when aborted, causes the
+   *   returned Promise to reject with {@link TimeoutError}`('Request cancelled')`.
+   *   The underlying network request continues in-flight.
+   *
+   * @returns A Promise that resolves to a {@link TransactionExplanation}
+   *   describing the transaction's payments, fees, memo, and more.
+   *
+   * @throws {@link TimeoutError} when the request exceeds `timeoutMs` or the
+   *   caller's `AbortSignal` fires.
+   * @throws {@link ApiRequestError} when the API returns a non-2xx response
+   *   (e.g. `NOT_FOUND` for an unknown hash).
+   *
+   * @example Basic usage
+   * ```ts
+   * const tx = await client.explainTransaction(
+   *   'a1b2c3d4...',
+   * );
+   * console.log(tx.summary);
+   * ```
+   *
+   * @example With cancellation
+   * ```ts
+   * const controller = new AbortController();
+   * setTimeout(() => controller.abort(), 5_000);
+   *
+   * try {
+   *   const tx = await client.explainTransaction('a1b2c3d4...', {
+   *     signal: controller.signal,
+   *   });
+   * } catch (err) {
+   *   if (err instanceof TimeoutError) {
+   *     console.warn('Cancelled:', err.message);
+   *   }
+   * }
+   * ```
+   */
   explainTransaction(
     hash: string,
     options?: RequestOptions
@@ -129,6 +227,50 @@ export class StellarExplainClient {
     );
   }
 
+  /**
+   * Fetches a human-readable explanation for a Stellar account.
+   *
+   * Identical concurrent calls for the same `address` share a single HTTP
+   * request (in-flight deduplication). The shared request is not cancelled if
+   * one caller's `signal` fires — only that caller's returned Promise rejects.
+   *
+   * @param address - The Stellar account address (G… or M… encoded) to look up.
+   * @param options - Optional per-call settings.
+   * @param options.signal - An `AbortSignal` that, when aborted, causes the
+   *   returned Promise to reject with {@link TimeoutError}`('Request cancelled')`.
+   *   The underlying network request continues in-flight.
+   *
+   * @returns A Promise that resolves to an {@link AccountExplanation} describing
+   *   the account's balances, signers, flags, and home domain.
+   *
+   * @throws {@link TimeoutError} when the request exceeds `timeoutMs` or the
+   *   caller's `AbortSignal` fires.
+   * @throws {@link ApiRequestError} when the API returns a non-2xx response
+   *   (e.g. `NOT_FOUND` for an unknown address).
+   *
+   * @example Basic usage
+   * ```ts
+   * const account = await client.explainAccount('GABC...');
+   * console.log(account.summary);
+   * ```
+   *
+   * @example Inside a React effect
+   * ```ts
+   * useEffect(() => {
+   *   const controller = new AbortController();
+   *
+   *   client
+   *     .explainAccount(address, { signal: controller.signal })
+   *     .then(setAccount)
+   *     .catch((err) => {
+   *       if (!(err instanceof TimeoutError)) throw err;
+   *       // Component unmounted — ignore cancellation
+   *     });
+   *
+   *   return () => controller.abort();
+   * }, [address]);
+   * ```
+   */
   explainAccount(
     address: string,
     options?: RequestOptions
@@ -146,13 +288,19 @@ export class StellarExplainClient {
    * Ensures at most one network request is in-flight per cache key.
    *
    * When `consumerSignal` is provided:
-   *   - Merges it with the internal timeout signal (AbortSignal.any or manual
-   *     listener fallback) to build a combined cancellation signal.
-   *   - Races the shared network promise against that combined signal so the
-   *     consumer's returned Promise rejects immediately on either cancellation.
-   *   - The underlying network request and its dedup-map entry are unaffected:
-   *     the fetch only carries the timeout signal and the map entry is cleared
-   *     only when the network request itself settles.
+   * - Merges it with a fresh internal timeout signal using `mergeSignals`
+   *   (`AbortSignal.any` or manual-listener fallback).
+   * - Races the shared network Promise against the merged cancellation signal
+   *   so the caller's Promise rejects promptly on either cancellation.
+   * - The underlying `fetch` call and the dedup-map entry are unaffected:
+   *   the fetch only carries its own timeout signal, and the map entry is
+   *   cleared only when the network request itself settles.
+   *
+   * @param key - Stable string used to look up or store the in-flight Promise.
+   * @param networkFactory - Zero-arg function that issues the actual HTTP request.
+   * @param consumerSignal - Optional signal supplied by the caller.
+   * @returns A Promise that resolves/rejects with the network result or a
+   *   cancellation rejection.
    */
   private dedupe<T>(
     key: string,
@@ -171,9 +319,8 @@ export class StellarExplainClient {
       return networkPromise;
     }
 
-    // Build a timeout signal so the consumer's view also times out even if
-    // the consumer does not cancel.  Merge it with the consumer signal so
-    // either source aborts the race.
+    // Build a consumer-side timeout so callers with a signal still experience
+    // the configured timeout even if they never call abort() themselves.
     const timeoutController = new AbortController();
     const timer = setTimeout(
       () =>
@@ -188,11 +335,6 @@ export class StellarExplainClient {
       consumerSignal
     );
 
-    // Race the network result against the merged cancellation signal.
-    // When the consumer signal fires → TimeoutError('Request cancelled').
-    // When the timeout fires          → TimeoutError('Request cancelled')
-    //   (the network promise will also eventually reject with 'timed out'
-    //    but the consumer has already received a rejection via the race).
     return Promise.race([
       networkPromise,
       cancellationPromise<T>(mergedSignal),
@@ -202,7 +344,14 @@ export class StellarExplainClient {
     });
   }
 
-  /** Issues the actual network request and manages the inFlight map entry. */
+  /**
+   * Stores `networkFactory()` in the in-flight map and removes the entry once
+   * the Promise settles (resolve or reject).
+   *
+   * @param key - Cache key under which the Promise is stored.
+   * @param networkFactory - Factory that issues the HTTP request.
+   * @returns The shared network Promise.
+   */
   private startRequest<T>(
     key: string,
     networkFactory: () => Promise<T>
@@ -215,12 +364,18 @@ export class StellarExplainClient {
   }
 
   /**
-   * Low-level JSON fetch guarded by the internal timeout only.
+   * Performs a single JSON `GET` request to `path`, guarded by the internal
+   * timeout only.
    *
-   * The consumer signal is deliberately NOT passed to fetch() here — that
-   * would abort the network request on cancellation, causing the dedup entry
-   * to be cleared prematurely.  Consumer cancellation is handled upstream in
-   * dedupe() via Promise.race.
+   * The consumer signal is deliberately **not** forwarded to `fetch()` — doing
+   * so would abort the network request on consumer cancellation and clear the
+   * dedup-map entry prematurely. Consumer cancellation is handled upstream in
+   * `dedupe()` via `Promise.race`.
+   *
+   * @param path - URL path relative to `baseUrl` (must start with `/`).
+   * @returns A Promise that resolves to the parsed JSON body typed as `T`.
+   * @throws {@link TimeoutError} if the request exceeds `timeoutMs`.
+   * @throws {@link ApiRequestError} if the response status is not 2xx.
    */
   private async fetchJson<T>(path: string): Promise<T> {
     const timeoutController = new AbortController();
