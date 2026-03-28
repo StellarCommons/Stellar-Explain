@@ -14,6 +14,13 @@ import {
   SdkLogger,
   StellarExplainClientOptions,
 } from "../types/index.js";
+import {
+  TimeoutError,
+  ApiRequestError,
+  UpstreamError,
+} from "../errors/index.js";
+
+export { TimeoutError, ApiRequestError, UpstreamError };
 import { isValidTransactionHash, pLimit } from "../utils/index.js";
 
 /** Default TTL for cached transaction explanations (5 minutes). */
@@ -402,6 +409,30 @@ export class StellarExplainClient {
     return results;
   }
 
+  /**
+   * Performs a single JSON `GET` request to `path`, guarded by the internal
+   * timeout only.
+   *
+   * The consumer signal is deliberately **not** forwarded to `fetch()` — doing
+   * so would abort the network request on consumer cancellation and clear the
+   * dedup-map entry prematurely. Consumer cancellation is handled upstream in
+   * `dedupe()` via `Promise.race`.
+   *
+   * @param path - URL path relative to `baseUrl` (must start with `/`).
+   * @returns A Promise that resolves to the parsed JSON body typed as `T`.
+   * @throws {@link TimeoutError} if the request exceeds `timeoutMs`.
+   * @throws {@link ApiRequestError} if the response status is not 2xx.
+   * @throws {@link UpstreamError} if the server responds with a non-JSON body.
+   */
+  private async fetchJson<T>(path: string): Promise<T> {
+    const timeoutController = new AbortController();
+    const timer = setTimeout(
+      () =>
+        timeoutController.abort(
+          new DOMException("Request timed out", "TimeoutError")
+        ),
+      this.timeoutMs
+    );
   private async request(url: string): Promise<unknown> {
     const init = await this.plugins.runBeforeRequest(url, {});
 
@@ -421,6 +452,18 @@ export class StellarExplainClient {
       throw error;
     }
 
+      const raw = await res.text();
+      let data: T | ApiError;
+
+      try {
+        data = JSON.parse(raw) as T | ApiError;
+      } catch {
+        const preview = raw.slice(0, 200);
+        throw new UpstreamError(
+          `Received non-JSON response from server (status ${res.status}): ${preview}`,
+          res.status
+        );
+      }
     response = await this.plugins.runAfterResponse(response);
 
     if (!response.ok) {
@@ -433,6 +476,11 @@ export class StellarExplainClient {
       throw error;
     }
 
+      return data as T;
+    } catch (err) {
+      if (err instanceof ApiRequestError || err instanceof UpstreamError) {
+        throw err;
+      }
     return response.json();
   }
 
