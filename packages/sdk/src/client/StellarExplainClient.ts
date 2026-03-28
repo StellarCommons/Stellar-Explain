@@ -1,14 +1,23 @@
-import type {
+import { MemoryCache } from "../cache/MemoryCache.js";
+import { PluginRegistry } from "../plugins/index.js";
+import {
+  CacheAdapter,
+  InvalidInputError,
+  SdkPlugin,
+  StellarExplainClientConfig,
+  StellarExplainError,
   TransactionExplanation,
   AccountExplanation,
   ApiError,
   FetchImpl,
   RequestOptions,
+  SdkLogger,
   StellarExplainClientOptions,
 } from "../types/index.js";
-import { TimeoutError, ApiRequestError } from "../errors/index.js";
+import { isValidTransactionHash, pLimit } from "../utils/index.js";
 
-export { TimeoutError, ApiRequestError };
+/** Default TTL for cached transaction explanations (5 minutes). */
+const DEFAULT_TTL_SECONDS = 300;
 
 // ── Signal helpers (module-private) ────────────────────────────────────────
 
@@ -78,6 +87,14 @@ function cancellationPromise<T>(signal: AbortSignal): Promise<T> {
   });
 }
 
+// ── Logger helpers ─────────────────────────────────────────────────────────
+
+const NOOP_LOGGER: SdkLogger = {
+  debug: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+};
+
 // ── Client ─────────────────────────────────────────────────────────────────
 
 /**
@@ -119,6 +136,7 @@ export class StellarExplainClient {
   private readonly baseUrl: string;
   private readonly timeoutMs: number;
   private readonly fetchImpl: FetchImpl;
+  private readonly logger: SdkLogger;
 
   /**
    * In-flight deduplication map.
@@ -167,119 +185,124 @@ export class StellarExplainClient {
     this.baseUrl = options.baseUrl.replace(/\/$/, "");
     this.timeoutMs = options.timeoutMs ?? 30_000;
     this.fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
+    this.logger = options.logger ?? NOOP_LOGGER;
+export class StellarExplainClient {
+  private readonly baseUrl: string;
+  private readonly plugins: PluginRegistry;
+  private readonly cache: CacheAdapter;
+  private readonly inFlight = new Map<string, Promise<unknown>>();
+
+  constructor(config: StellarExplainClientConfig) {
+    this.baseUrl = config.baseUrl.replace(/\/$/, "");
+    this.plugins = new PluginRegistry(config.plugins);
+    this.cache = config.cache ?? new MemoryCache();
   }
 
-  // ── Public API ─────────────────────────────────────────────────────────────
+  explainTransaction(hash: string): Promise<TransactionExplanation> {
+    const cacheKey = `tx:${hash}`;
+    const cached = this.cache.get<TransactionExplanation>(cacheKey);
+    if (cached !== null) return Promise.resolve(cached);
+
+    return this.dedupe(cacheKey, () =>
+      this.request(`${this.baseUrl}/api/tx/${hash}`)
+    ).then((result) => {
+      this.cache.set(cacheKey, result, DEFAULT_TTL_SECONDS);
+      return result as TransactionExplanation;
+    });
+  }
+
+  explainAccount(accountId: string): Promise<unknown> {
+    return this.dedupe(`account:${accountId}`, () =>
+      this.request(`${this.baseUrl}/api/account/${accountId}`)
+    );
+  }
 
   /**
-   * Fetches a human-readable explanation for a Stellar transaction.
+   * Streams a Server-Sent Events (SSE) response for a Stellar transaction
+   * explanation, yielding each partial result as it arrives.
    *
-   * Identical concurrent calls for the same `hash` share a single HTTP request
-   * (in-flight deduplication). The shared request is not cancelled if one
-   * caller's `signal` fires — only that caller's returned Promise rejects.
+   * Designed for long-running explain requests where the server may take time
+   * to produce a complete explanation. Each yielded string is the payload of
+   * one SSE `data:` line with the prefix stripped.
    *
-   * @param hash - The hex-encoded Stellar transaction hash to look up.
-   * @param options - Optional per-call settings.
-   * @param options.signal - An `AbortSignal` that, when aborted, causes the
-   *   returned Promise to reject with {@link TimeoutError}`('Request cancelled')`.
-   *   The underlying network request continues in-flight.
+   * @param hash - The 64-character hex-encoded Stellar transaction hash.
    *
-   * @returns A Promise that resolves to a {@link TransactionExplanation}
-   *   describing the transaction's payments, fees, memo, and more.
+   * @returns An `AsyncGenerator` that yields each `data:` payload as a string.
    *
-   * @throws {@link TimeoutError} when the request exceeds `timeoutMs` or the
-   *   caller's `AbortSignal` fires.
-   * @throws {@link ApiRequestError} when the API returns a non-2xx response
-   *   (e.g. `NOT_FOUND` for an unknown hash).
+   * @throws {@link ApiRequestError} if `hash` is not a valid 64-character hex
+   *   string, or if the server returns a non-2xx status.
+   * @throws {@link TimeoutError} if more than `timeoutMs` milliseconds elapse
+   *   between consecutive chunks (stream stall detection).
    *
-   * @example Basic usage
+   * @example Basic streaming
    * ```ts
-   * const tx = await client.explainTransaction(
-   *   'a1b2c3d4...',
-   * );
-   * console.log(tx.summary);
-   * ```
-   *
-   * @example With cancellation
-   * ```ts
-   * const controller = new AbortController();
-   * setTimeout(() => controller.abort(), 5_000);
-   *
-   * try {
-   *   const tx = await client.explainTransaction('a1b2c3d4...', {
-   *     signal: controller.signal,
-   *   });
-   * } catch (err) {
-   *   if (err instanceof TimeoutError) {
-   *     console.warn('Cancelled:', err.message);
-   *   }
+   * for await (const chunk of client.explainTransactionStream('a1b2c3...')) {
+   *   process.stdout.write(chunk);
    * }
    * ```
    */
-  explainTransaction(
-    hash: string,
-    options?: RequestOptions
-  ): Promise<TransactionExplanation> {
-    return this.dedupe<TransactionExplanation>(
-      `tx:${hash}`,
-      () => this.fetchJson<TransactionExplanation>(`/api/tx/${hash}`),
-      options?.signal
-    );
-  }
+  async *explainTransactionStream(hash: string): AsyncGenerator<string> {
+    if (!/^[0-9a-fA-F]{64}$/.test(hash)) {
+      throw new ApiRequestError({
+        error: { code: "BAD_REQUEST", message: "Invalid transaction hash" },
+      });
+    }
 
-  /**
-   * Fetches a human-readable explanation for a Stellar account.
-   *
-   * Identical concurrent calls for the same `address` share a single HTTP
-   * request (in-flight deduplication). The shared request is not cancelled if
-   * one caller's `signal` fires — only that caller's returned Promise rejects.
-   *
-   * @param address - The Stellar account address (G… or M… encoded) to look up.
-   * @param options - Optional per-call settings.
-   * @param options.signal - An `AbortSignal` that, when aborted, causes the
-   *   returned Promise to reject with {@link TimeoutError}`('Request cancelled')`.
-   *   The underlying network request continues in-flight.
-   *
-   * @returns A Promise that resolves to an {@link AccountExplanation} describing
-   *   the account's balances, signers, flags, and home domain.
-   *
-   * @throws {@link TimeoutError} when the request exceeds `timeoutMs` or the
-   *   caller's `AbortSignal` fires.
-   * @throws {@link ApiRequestError} when the API returns a non-2xx response
-   *   (e.g. `NOT_FOUND` for an unknown address).
-   *
-   * @example Basic usage
-   * ```ts
-   * const account = await client.explainAccount('GABC...');
-   * console.log(account.summary);
-   * ```
-   *
-   * @example Inside a React effect
-   * ```ts
-   * useEffect(() => {
-   *   const controller = new AbortController();
-   *
-   *   client
-   *     .explainAccount(address, { signal: controller.signal })
-   *     .then(setAccount)
-   *     .catch((err) => {
-   *       if (!(err instanceof TimeoutError)) throw err;
-   *       // Component unmounted — ignore cancellation
-   *     });
-   *
-   *   return () => controller.abort();
-   * }, [address]);
-   * ```
-   */
-  explainAccount(
-    address: string,
-    options?: RequestOptions
-  ): Promise<AccountExplanation> {
-    return this.dedupe<AccountExplanation>(
-      `account:${address}`,
-      () => this.fetchJson<AccountExplanation>(`/api/account/${address}`),
-      options?.signal
+    const res = await this.fetchImpl(
+      `${this.baseUrl}/api/tx/${hash}/stream`,
+      { headers: { Accept: "text/event-stream" } }
     );
+
+    if (!res.ok) {
+      const data = (await res.json()) as ApiError;
+      throw new ApiRequestError(data);
+    }
+
+    if (!res.body) {
+      throw new Error("Response body is null");
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    const readChunk = (): Promise<ReadableStreamReadResult<Uint8Array>> =>
+      new Promise((resolve, reject) => {
+        const timer = setTimeout(
+          () => reject(new TimeoutError("Request timed out")),
+          this.timeoutMs
+        );
+        reader.read().then(
+          (result) => { clearTimeout(timer); resolve(result); },
+          (err) => { clearTimeout(timer); reject(err); }
+        );
+      });
+
+    try {
+      while (true) {
+        const { done, value } = await readChunk();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            yield line.slice(6);
+          }
+        }
+      }
+
+      // Flush any final bytes left in the decoder
+      const tail = (buffer + decoder.decode()).trimEnd();
+      if (tail.startsWith("data: ")) {
+        yield tail.slice(6);
+      }
+    } finally {
+      reader.releaseLock();
+    }
   }
 
   // ── Internals ──────────────────────────────────────────────────────────────
@@ -312,6 +335,11 @@ export class StellarExplainClient {
     }
 
     const existing = this.inFlight.get(key) as Promise<T> | undefined;
+    if (existing) {
+      this.logger.debug("cache hit", { key });
+    } else {
+      this.logger.debug("cache miss", { key });
+    }
     const networkPromise: Promise<T> =
       existing ?? this.startRequest(key, networkFactory);
 
@@ -333,83 +361,104 @@ export class StellarExplainClient {
     const { signal: mergedSignal, cleanup } = mergeSignals(
       timeoutController.signal,
       consumerSignal
+  async batchExplainTransactions(
+    hashes: string[],
+    options?: { concurrency?: number }
+  ): Promise<Array<TransactionExplanation | StellarExplainError>> {
+    const concurrency = options?.concurrency ?? 3;
+    const results = new Array<TransactionExplanation | StellarExplainError>(
+      hashes.length
     );
+    const pending: Array<{ index: number; hash: string }> = [];
 
-    return Promise.race([
-      networkPromise,
-      cancellationPromise<T>(mergedSignal),
-    ]).finally(() => {
-      clearTimeout(timer);
-      cleanup();
+    for (let i = 0; i < hashes.length; i++) {
+      const hash = hashes[i];
+      if (!isValidTransactionHash(hash)) {
+        results[i] = new InvalidInputError(hash);
+      } else {
+        const cached = this.cache.get<TransactionExplanation>(`tx:${hash}`);
+        if (cached !== null) {
+          results[i] = cached;
+        } else {
+          pending.push({ index: i, hash });
+        }
+      }
+    }
+
+    const tasks = pending.map(({ index, hash }) => async () => {
+      try {
+        results[index] = await this.explainTransaction(hash);
+      } catch (err) {
+        results[index] =
+          err instanceof StellarExplainError
+            ? err
+            : new StellarExplainError(
+                err instanceof Error ? err.message : "Unknown error"
+              );
+      }
     });
+
+    await pLimit(tasks, concurrency);
+    return results;
   }
 
-  /**
-   * Stores `networkFactory()` in the in-flight map and removes the entry once
-   * the Promise settles (resolve or reject).
-   *
-   * @param key - Cache key under which the Promise is stored.
-   * @param networkFactory - Factory that issues the HTTP request.
-   * @returns The shared network Promise.
-   */
-  private startRequest<T>(
-    key: string,
-    networkFactory: () => Promise<T>
-  ): Promise<T> {
-    const promise = networkFactory().finally(() => {
-      this.inFlight.delete(key);
-    });
-    this.inFlight.set(key, promise);
-    return promise;
-  }
+  private async request(url: string): Promise<unknown> {
+    const init = await this.plugins.runBeforeRequest(url, {});
 
-  /**
-   * Performs a single JSON `GET` request to `path`, guarded by the internal
-   * timeout only.
-   *
-   * The consumer signal is deliberately **not** forwarded to `fetch()` — doing
-   * so would abort the network request on consumer cancellation and clear the
-   * dedup-map entry prematurely. Consumer cancellation is handled upstream in
-   * `dedupe()` via `Promise.race`.
-   *
-   * @param path - URL path relative to `baseUrl` (must start with `/`).
-   * @returns A Promise that resolves to the parsed JSON body typed as `T`.
-   * @throws {@link TimeoutError} if the request exceeds `timeoutMs`.
-   * @throws {@link ApiRequestError} if the response status is not 2xx.
-   */
-  private async fetchJson<T>(path: string): Promise<T> {
-    const timeoutController = new AbortController();
-    const timer = setTimeout(
-      () =>
-        timeoutController.abort(
-          new DOMException("Request timed out", "TimeoutError")
-        ),
-      this.timeoutMs
-    );
+    const start = Date.now();
+    this.logger.debug("request start", { path });
 
+    let response: Response;
     try {
-      const res = await this.fetchImpl(`${this.baseUrl}${path}`, {
-        headers: { Accept: "application/json" },
-        signal: timeoutController.signal,
-      });
-
-      const data = (await res.json()) as T | ApiError;
-
-      if (!res.ok) {
-        throw new ApiRequestError(data as ApiError);
-      }
-
-      return data as T;
+      response = await fetch(url, init);
     } catch (err) {
-      if (err instanceof ApiRequestError) throw err;
+      const error = new StellarExplainError(
+        err instanceof Error ? err.message : "Network error",
+        undefined,
+        url
+      );
+      this.plugins.runOnError(error);
+      throw error;
+    }
 
-      if (err instanceof Error && err.name === "AbortError") {
-        throw new TimeoutError("Request timed out");
-      }
+    response = await this.plugins.runAfterResponse(response);
+
+    if (!response.ok) {
+      const error = new StellarExplainError(
+        `Request failed: ${response.status}`,
+        response.status,
+        url
+      );
+      this.plugins.runOnError(error);
+      throw error;
+    }
+
+    return response.json();
+  }
+
+  private dedupe(key: string, fn: () => Promise<unknown>): Promise<unknown> {
+    const existing = this.inFlight.get(key);
+    if (existing) return existing;
 
       throw err;
     } finally {
       clearTimeout(timer);
+      this.logger.debug("request end", { path, durationMs: Date.now() - start });
     }
+    const promise = fn().finally(() => {
+      this.inFlight.delete(key);
+    });
+
+    this.inFlight.set(key, promise);
+    return promise;
   }
 }
+
+export type {
+  CacheAdapter,
+  InvalidInputError,
+  SdkPlugin,
+  StellarExplainClientConfig,
+  StellarExplainError,
+  TransactionExplanation,
+};
