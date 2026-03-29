@@ -14,8 +14,8 @@ export { PersistentCache } from "./cache/PersistentCache.js";
 
 // MemoryCache is intentionally NOT exported — internal use only.
 
-export type { CacheAdapter } from "./types/index.js";
 export type {
+  CacheAdapter,
   SdkErrorCode,
   PaymentExplanation,
   TransactionExplanation,
@@ -23,6 +23,7 @@ export type {
   Signer,
   AccountExplanation,
   HealthResponse,
+  ApiError,
   StellarExplainClientConfig,
   SdkLogger,
   SdkPlugin,
