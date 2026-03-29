@@ -1,3 +1,49 @@
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export interface RetryOptions {
+  /** Maximum number of additional attempts after the first call fails. */
+  maxRetries: number;
+  /** Base delay in ms before the first retry; doubles each subsequent retry. */
+  retryDelay: number;
+  /**
+   * Optional predicate called with each thrown error.
+   * Return `false` to stop retrying and re-throw immediately.
+   * Defaults to always retrying.
+   */
+  shouldRetry?: (err: unknown) => boolean;
+}
+
+/**
+ * Calls `fn` and retries up to `options.maxRetries` times on failure.
+ * Delay before the n-th retry = `retryDelay * 2^(n-1)` (exponential backoff).
+ * If `retryDelay` is 0, retries fire immediately.
+ */
+export async function withRetry<T>(
+  fn: () => Promise<T>,
+  options: RetryOptions,
+): Promise<T> {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= options.maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err;
+      if (attempt >= options.maxRetries) break;
+      if (options.shouldRetry !== undefined && !options.shouldRetry(err)) {
+        throw err;
+      }
+      const delay = options.retryDelay * Math.pow(2, attempt);
+      if (delay > 0) {
+        await sleep(delay);
+      }
+    }
+  }
+
+  throw lastError;
+}
 import { InvalidInputError } from "../errors/index.js";
 
 /**
