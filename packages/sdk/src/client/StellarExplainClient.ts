@@ -1,7 +1,6 @@
 import { MemoryCache } from "../cache/MemoryCache.js";
 import { PluginRegistry } from "../plugins/index.js";
 import {
-  InvalidInputError,
   NetworkError,
   NotFoundError,
   RateLimitError,
@@ -9,6 +8,11 @@ import {
   TimeoutError,
   UpstreamError,
 } from "../errors/index.js";
+import {
+  validateTransactionHash,
+  validateAccountAddress,
+  withRetry,
+} from "../utils/index.js";
 import type {
   AccountExplanation,
   ApiError,
@@ -19,6 +23,8 @@ import type {
   StellarExplainClientConfig,
   TransactionExplanation,
 } from "../types/index.js";
+
+const DEFAULT_BASE_URL = "https://api.stellarexplain.io";
 
 /** Default TTL for cached responses: 5 minutes in milliseconds. */
 const DEFAULT_TTL_MS = 5 * 60 * 1000;
@@ -63,13 +69,13 @@ export class StellarExplainClient {
   /** In-flight deduplication map: cache key → shared network Promise. */
   private readonly inFlight = new Map<string, Promise<unknown>>();
 
-  constructor(config: StellarExplainClientConfig) {
-    this.baseUrl = config.baseUrl.replace(/\/$/, "");
-    this.timeoutMs = config.timeoutMs ?? 30_000;
-    this.fetchImpl = config.fetchImpl ?? globalThis.fetch.bind(globalThis);
-    this.logger = config.logger ?? NOOP_LOGGER;
-    this.plugins = new PluginRegistry(config.plugins);
-    this.cache = config.cache ?? new MemoryCache(DEFAULT_TTL_MS);
+  constructor(config?: StellarExplainClientConfig) {
+    this.baseUrl = (config?.baseUrl ?? DEFAULT_BASE_URL).replace(/\/$/, "");
+    this.timeoutMs = config?.timeoutMs ?? 30_000;
+    this.fetchImpl = config?.fetchImpl ?? globalThis.fetch.bind(globalThis);
+    this.logger = config?.logger ?? NOOP_LOGGER;
+    this.plugins = new PluginRegistry(config?.plugins);
+    this.cache = config?.cache ?? new MemoryCache(DEFAULT_TTL_MS);
   }
 
   /**
@@ -82,9 +88,7 @@ export class StellarExplainClient {
    * @throws {@link UpstreamError} on unexpected non-JSON responses.
    */
   async explainTransaction(hash: string): Promise<TransactionExplanation> {
-    if (!/^[0-9a-fA-F]{64}$/.test(hash)) {
-      throw new InvalidInputError(`Invalid transaction hash: "${hash}"`);
-    }
+    validateTransactionHash(hash);
 
     const key = `tx:${hash}`;
     const cached = this.cache.get<TransactionExplanation>(key);
@@ -94,8 +98,11 @@ export class StellarExplainClient {
     }
 
     const result = await this.dedupe(key, () =>
-      this.fetchJson<TransactionExplanation>(
-        `${this.baseUrl}/api/tx/${hash}`,
+      withRetry(
+        () => this.fetchJson<TransactionExplanation>(`${this.baseUrl}/api/tx/${hash}`),
+        2,
+        500,
+        (err) => !(err instanceof NotFoundError),
       ),
     );
 
@@ -112,6 +119,8 @@ export class StellarExplainClient {
    * @throws {@link UpstreamError} on unexpected non-JSON responses.
    */
   async explainAccount(accountId: string): Promise<AccountExplanation> {
+    validateAccountAddress(accountId);
+
     const key = `account:${accountId}`;
     const cached = this.cache.get<AccountExplanation>(key);
     if (cached !== null) {
@@ -120,8 +129,11 @@ export class StellarExplainClient {
     }
 
     const result = await this.dedupe(key, () =>
-      this.fetchJson<AccountExplanation>(
-        `${this.baseUrl}/api/account/${accountId}`,
+      withRetry(
+        () => this.fetchJson<AccountExplanation>(`${this.baseUrl}/api/account/${accountId}`),
+        2,
+        500,
+        (err) => !(err instanceof NotFoundError),
       ),
     );
 
@@ -137,6 +149,11 @@ export class StellarExplainClient {
    */
   async health(): Promise<HealthResponse> {
     return this.fetchJson<HealthResponse>(`${this.baseUrl}/health`);
+  }
+
+  /** Clears all cached responses. */
+  clearCache(): void {
+    this.cache.clear();
   }
 
   // ── Internals ──────────────────────────────────────────────────────────────
