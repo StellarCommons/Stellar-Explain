@@ -1,0 +1,41 @@
+# Source files — compiled output in dist/ is all consumers need
+src/
+
+# Test infrastructure
+tests/
+coverage/
+
+# Examples & scripts
+examples/
+scripts/
+
+# Build & bundler config
+rollup.config.ts
+rollup.config.js
+vitest.config.ts
+vitest.config.js
+*.config.ts
+*.config.js
+
+# API documentation tooling
+api-extractor.json
+
+# Changesets
+.changeset/
+
+# TypeScript project config
+tsconfig.json
+tsconfig.*.json
+
+# Linter / formatter config
+.eslintrc.json
+.eslintrc.js
+.eslintrc.cjs
+.prettierrc
+.prettierrc.json
+.prettierrc.js
+
+# Editor & OS noise
+.editorconfig
+.DS_Store
+*.log
