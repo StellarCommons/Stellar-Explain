@@ -1,4 +1,4 @@
-import { SdkPlugin, StellarExplainError } from "../types/index.js";
+import type { SdkPlugin } from "../types/index.js";
 
 export class PluginRegistry {
   private readonly plugins: SdkPlugin[];
@@ -27,7 +27,7 @@ export class PluginRegistry {
     return current;
   }
 
-  runOnError(error: StellarExplainError): void {
+  runOnError(error: Error): void {
     for (const plugin of this.plugins) {
       if (plugin.onError) {
         plugin.onError(error);

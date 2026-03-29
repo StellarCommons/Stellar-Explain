@@ -1,96 +1,138 @@
-import type { ApiError } from "../types/index.js";
+import type { SdkErrorCode } from "../types/index.js";
 
 /**
- * Thrown when a request exceeds the configured timeout or is explicitly
- * cancelled by the consumer via an {@link AbortSignal}.
+ * Base class for all SDK errors.
+ *
+ * Every error thrown by `StellarExplainClient` extends this class, so you can
+ * catch broadly with `instanceof StellarExplainError` or narrowly with the
+ * specific subclass.
+ *
+ * @example
+ * ```ts
+ * import { StellarExplainError, NotFoundError } from '@stellar-explain/sdk';
+ *
+ * try {
+ *   await client.explainTransaction(hash);
+ * } catch (err) {
+ *   if (err instanceof NotFoundError) {
+ *     console.error('not found');
+ *   } else if (err instanceof StellarExplainError) {
+ *     console.error('sdk error:', err.code, err.message);
+ *   }
+ * }
+ * ```
+ */
+export class StellarExplainError extends Error {
+  /** Machine-readable error code. */
+  readonly code: SdkErrorCode;
+  /** HTTP status code, if the error originated from an HTTP response. */
+  readonly statusCode?: number;
+
+  constructor(message: string, code: SdkErrorCode, statusCode?: number) {
+    super(message);
+    this.name = "StellarExplainError";
+    this.code = code;
+    this.statusCode = statusCode;
+    Object.setPrototypeOf(this, StellarExplainError.prototype);
+  }
+}
+
+/**
+ * Thrown when the API returns HTTP 404 for a transaction or account lookup.
+ *
+ * @example
+ * ```ts
+ * if (err instanceof NotFoundError) {
+ *   console.error('Resource not found');
+ * }
+ * ```
+ */
+export class NotFoundError extends StellarExplainError {
+  constructor(message = "Resource not found") {
+    super(message, "NOT_FOUND", 404);
+    this.name = "NotFoundError";
+    Object.setPrototypeOf(this, NotFoundError.prototype);
+  }
+}
+
+/**
+ * Thrown when the API returns HTTP 429 Too Many Requests.
+ *
+ * Check `retryAfter` to know how many seconds to wait before retrying.
+ *
+ * @example
+ * ```ts
+ * if (err instanceof RateLimitError) {
+ *   const wait = err.retryAfter ?? 60;
+ *   await sleep(wait * 1000);
+ * }
+ * ```
+ */
+export class RateLimitError extends StellarExplainError {
+  /**
+   * Seconds to wait before retrying, parsed from the `Retry-After` response
+   * header. `undefined` when the header was absent.
+   */
+  readonly retryAfter?: number;
+
+  constructor(message = "Rate limit exceeded", retryAfter?: number) {
+    super(message, "RATE_LIMITED", 429);
+    this.name = "RateLimitError";
+    this.retryAfter = retryAfter;
+    Object.setPrototypeOf(this, RateLimitError.prototype);
+  }
+}
+
+/**
+ * Thrown when a request exceeds the configured `timeoutMs` or is cancelled
+ * by the caller via an `AbortSignal`.
  *
  * The `message` field distinguishes the two cases:
- * - `'Request timed out'`  — the internal timeout elapsed before the server responded.
- * - `'Request cancelled'`  — the caller's `AbortSignal` fired before the response arrived.
- *
- * @example
- * ```ts
- * import { StellarExplainClient, TimeoutError } from '@stellar-explain/sdk';
- *
- * const client = new StellarExplainClient({ baseUrl: 'https://api.example.com' });
- *
- * try {
- *   const tx = await client.explainTransaction(hash);
- * } catch (err) {
- *   if (err instanceof TimeoutError) {
- *     // err.message === 'Request timed out'  |  'Request cancelled'
- *     console.error('Request did not complete:', err.message);
- *   }
- * }
- * ```
+ * - `'Request timed out'`  — the internal timeout elapsed.
+ * - `'Request cancelled'`  — the caller's `AbortSignal` fired.
  */
-export class TimeoutError extends Error {
-  constructor(message: string) {
-    super(message);
+export class TimeoutError extends StellarExplainError {
+  constructor(message = "Request timed out") {
+    super(message, "TIMEOUT");
     this.name = "TimeoutError";
+    Object.setPrototypeOf(this, TimeoutError.prototype);
   }
 }
 
 /**
- * Thrown when the upstream server returns a non-JSON response body where the
- * SDK expected JSON.
- *
- * This commonly happens when a proxy or CDN returns an HTML error page instead
- * of the API's normal JSON envelope.
+ * Thrown when a network-level failure prevents the request from completing
+ * (e.g. DNS resolution failure, TCP connection refused).
  */
-export class UpstreamError extends Error {
-  readonly statusCode: number;
+export class NetworkError extends StellarExplainError {
+  constructor(message = "Network error") {
+    super(message, "NETWORK_ERROR");
+    this.name = "NetworkError";
+    Object.setPrototypeOf(this, NetworkError.prototype);
+  }
+}
 
-  constructor(message: string, statusCode: number) {
-    super(message);
+/**
+ * Thrown when the upstream server returns a non-JSON body where the SDK
+ * expected a JSON envelope, or when an unexpected upstream error occurs.
+ *
+ * The `statusCode` property contains the HTTP status returned by the server.
+ */
+export class UpstreamError extends StellarExplainError {
+  constructor(message = "Upstream error", statusCode?: number) {
+    super(message, "UPSTREAM_ERROR", statusCode);
     this.name = "UpstreamError";
-    this.statusCode = statusCode;
+    Object.setPrototypeOf(this, UpstreamError.prototype);
   }
 }
 
 /**
- * Thrown when the Stellar Explain API returns a non-2xx HTTP response.
- *
- * The `code` property contains the machine-readable error code from the
- * response body (e.g. `'NOT_FOUND'`, `'BAD_REQUEST'`, `'UPSTREAM_ERROR'`),
- * suitable for programmatic branching. The inherited `message` property
- * contains the human-readable description returned by the API.
- *
- * @example
- * ```ts
- * import { StellarExplainClient, ApiRequestError } from '@stellar-explain/sdk';
- *
- * const client = new StellarExplainClient({ baseUrl: 'https://api.example.com' });
- *
- * try {
- *   const tx = await client.explainTransaction('invalid-hash');
- * } catch (err) {
- *   if (err instanceof ApiRequestError) {
- *     switch (err.code) {
- *       case 'NOT_FOUND':
- *         console.error('Transaction not found on the Stellar network.');
- *         break;
- *       case 'BAD_REQUEST':
- *         console.error('Invalid input:', err.message);
- *         break;
- *       default:
- *         console.error('API error:', err.message);
- *     }
- *   }
- * }
- * ```
+ * Thrown when a caller supplies invalid input (e.g. a malformed transaction
+ * hash) before a network request is even made.
  */
-export class ApiRequestError extends Error {
-  /**
-   * Machine-readable error code returned by the API.
-   *
-   * Common values: `'NOT_FOUND'`, `'BAD_REQUEST'`, `'UPSTREAM_ERROR'`.
-   */
-  readonly code: string;
-
-  constructor(apiError: ApiError) {
-    super(apiError.error.message);
-    this.name = "ApiRequestError";
-    this.code = apiError.error.code;
+export class InvalidInputError extends StellarExplainError {
+  constructor(message = "Invalid input") {
+    super(message, "INVALID_INPUT");
+    this.name = "InvalidInputError";
+    Object.setPrototypeOf(this, InvalidInputError.prototype);
   }
 }
