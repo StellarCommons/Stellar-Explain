@@ -9,6 +9,7 @@ import {
   TimeoutError,
   UpstreamError,
 } from "../errors/index.js";
+import { withRetry } from "../utils/index.js";
 import type {
   AccountExplanation,
   ApiError,
@@ -55,6 +56,8 @@ const NOOP_LOGGER: SdkLogger = {
 export class StellarExplainClient {
   private readonly baseUrl: string;
   private readonly timeoutMs: number;
+  private readonly retries: number;
+  private readonly retryDelay: number;
   private readonly fetchImpl: FetchImpl;
   private readonly logger: SdkLogger;
   private readonly plugins: PluginRegistry;
@@ -66,6 +69,8 @@ export class StellarExplainClient {
   constructor(config: StellarExplainClientConfig) {
     this.baseUrl = config.baseUrl.replace(/\/$/, "");
     this.timeoutMs = config.timeoutMs ?? 30_000;
+    this.retries = config.retries ?? 0;
+    this.retryDelay = config.retryDelay ?? 1_000;
     this.fetchImpl = config.fetchImpl ?? globalThis.fetch.bind(globalThis);
     this.logger = config.logger ?? NOOP_LOGGER;
     this.plugins = new PluginRegistry(config.plugins);
@@ -94,7 +99,7 @@ export class StellarExplainClient {
     }
 
     const result = await this.dedupe(key, () =>
-      this.fetchJson<TransactionExplanation>(
+      this.fetchJsonWithRetry<TransactionExplanation>(
         `${this.baseUrl}/api/tx/${hash}`,
       ),
     );
@@ -112,6 +117,10 @@ export class StellarExplainClient {
    * @throws {@link UpstreamError} on unexpected non-JSON responses.
    */
   async explainAccount(accountId: string): Promise<AccountExplanation> {
+    if (!/^G[A-Z2-7]{55}$/.test(accountId)) {
+      throw new InvalidInputError(`Invalid account address: "${accountId}"`);
+    }
+
     const key = `account:${accountId}`;
     const cached = this.cache.get<AccountExplanation>(key);
     if (cached !== null) {
@@ -120,7 +129,7 @@ export class StellarExplainClient {
     }
 
     const result = await this.dedupe(key, () =>
-      this.fetchJson<AccountExplanation>(
+      this.fetchJsonWithRetry<AccountExplanation>(
         `${this.baseUrl}/api/account/${accountId}`,
       ),
     );
@@ -158,6 +167,15 @@ export class StellarExplainClient {
 
     this.inFlight.set(key, promise as Promise<unknown>);
     return promise;
+  }
+
+  /** Wraps `fetchJson` with the configured retry/backoff policy. */
+  private fetchJsonWithRetry<T>(url: string): Promise<T> {
+    return withRetry(() => this.fetchJson<T>(url), {
+      maxRetries: this.retries,
+      retryDelay: this.retryDelay,
+      shouldRetry: (err) => !(err instanceof NotFoundError),
+    });
   }
 
   /**

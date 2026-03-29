@@ -237,4 +237,18 @@ export interface StellarExplainClientConfig {
    * Supply a custom `CacheAdapter` to use a different backend.
    */
   cache?: CacheAdapter;
+
+  /**
+   * Number of additional retry attempts after a failed request.
+   * `NotFoundError` (HTTP 404) is never retried regardless of this value.
+   * @default 0
+   */
+  retries?: number;
+
+  /**
+   * Base delay in milliseconds before the first retry.
+   * Each subsequent retry doubles the delay (exponential backoff).
+   * @default 1000
+   */
+  retryDelay?: number;
 }
