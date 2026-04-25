@@ -1,51 +1,37 @@
 #!/usr/bin/env node
 import { Command } from "commander";
-import chalk from "chalk";
-import { StellarExplainClient } from "@stellar-explain/sdk";
-import { setConfig } from "./lib/config";
-import { formatPaymentsTable } from "./formatters/transaction";
-import { formatBalancesTable, formatSignersTable } from "./formatters/account";
+import { resolveBaseUrl } from "./lib/config.js";
+import { registerTx } from "./commands/tx.js";
+import { registerAccount } from "./commands/account.js";
+import { registerHealth } from "./commands/health.js";
+import { InvalidInputError } from "./lib/errors.js";
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { version } = require("../package.json") as { version: string };
 
 const program = new Command();
 
 program
   .name("stellar-explain")
-  .description("CLI for the Stellar Explain API")
-  .version("0.1.0")
-  .option("--no-color", "Disable chalk color output")
-  .hook("preAction", (cmd) => {
-    const opts = cmd.opts();
-    setConfig({ noColor: opts.color === false });
-  });
+  .version(version)
+  .option("--url <url>", "API base URL")
+  .option("--timeout <ms>", "Request timeout in ms", (v) => parseInt(v, 10), 10000) // #276
+  .option("--verbose", "Log request details to stderr", false)                       // #277
+  .option("--json", "Output raw JSON", false);
 
-program
-  .command("tx <hash>")
-  .description("Explain a transaction and show its payments as a table")
-  .option("--base-url <url>", "API base URL", "http://localhost:3000")
-  .action(async (hash: string, opts) => {
-    const client = new StellarExplainClient({ baseUrl: opts.baseUrl });
-    const tx = await client.explainTransaction(hash);
-    console.log(chalk.bold(`\nTransaction: ${tx.hash}`));
-    console.log(chalk.dim(tx.summary), "\n");
-    console.log(formatPaymentsTable(tx));
-  });
+// Resolve --url after parsing
+program.hook("preAction", (thisCommand) => {
+  const opts = thisCommand.opts<{ url?: string }>();
+  if (!opts.url) thisCommand.setOptionValue("url", resolveBaseUrl());
+});
 
-program
-  .command("account <address>")
-  .description("Explain an account, showing balances and signers as tables")
-  .option("--base-url <url>", "API base URL", "http://localhost:3000")
-  .action(async (address: string, opts) => {
-    const client = new StellarExplainClient({ baseUrl: opts.baseUrl });
-    const acc = await client.explainAccount(address);
-    console.log(chalk.bold(`\nAccount: ${acc.account_id}`));
-    console.log(chalk.dim(acc.summary), "\n");
-    console.log(chalk.underline("Balances"));
-    console.log(formatBalancesTable(acc), "\n");
-    console.log(chalk.underline("Signers"));
-    console.log(formatSignersTable(acc));
-  });
+registerTx(program);
+registerAccount(program);
+registerHealth(program);
 
-program.parseAsync(process.argv).catch((err) => {
-  console.error(chalk.red("Error:"), err.message);
-  process.exit(1);
+program.parseAsync(process.argv).catch((err: unknown) => {
+  const msg = err instanceof Error ? err.message : String(err);
+  const code = err instanceof InvalidInputError ? 2 : 1;
+  process.stderr.write(`Error: ${msg}\n`);
+  process.exit(code);
 });

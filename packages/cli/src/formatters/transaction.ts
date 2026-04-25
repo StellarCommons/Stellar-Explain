@@ -1,44 +1,26 @@
-import chalk from "chalk";
-import { TransactionExplanation, PaymentExplanation } from "@stellar-explain/sdk";
-import { getConfig } from "../lib/config";
+import type { TransactionExplanation } from "../types/index.js";
 
-function truncate(str: string, len: number): string {
-  return str.length > len ? str.slice(0, len - 1) + "…" : str;
-}
+export function formatTransaction(tx: TransactionExplanation): string {
+  const lines: string[] = [
+    `Transaction: ${tx.hash}`,
+    `Status:      ${tx.status}`,
+    `Summary:     ${tx.summary}`,
+    `Ledger:      ${tx.ledger}`,
+    `Closed at:   ${tx.created_at}`,
+    `Fee:         ${tx.fee_charged} stroops`,
+  ];
 
-function row(from: string, to: string, amount: string, asset: string): string {
-  const c = getConfig();
-  const f = c.noColor ? (s: string) => s : chalk.cyan;
-  return [
-    f(truncate(from, 20)).padEnd(22),
-    f(truncate(to, 20)).padEnd(22),
-    amount.padStart(14),
-    asset.padEnd(12),
-  ].join("  ");
-}
+  if (tx.memo) lines.push(`Memo:        ${tx.memo}`);
 
-function header(): string {
-  const c = getConfig();
-  const h = c.noColor ? (s: string) => s : chalk.bold.white;
-  return [
-    h("From".padEnd(22)),
-    h("To".padEnd(22)),
-    h("Amount".padStart(14)),
-    h("Asset".padEnd(12)),
-  ].join("  ");
-}
-
-export function formatPaymentsTable(tx: TransactionExplanation): string {
-  if (tx.payments.length === 0) return chalk.dim("No payments in this transaction.");
-
-  const divider = "─".repeat(76);
-  const lines: string[] = [header(), divider];
-
-  for (const p of tx.payments) {
-    lines.push(row(p.from, p.to, p.amount, p.asset));
+  if (tx.payments.length > 0) {
+    lines.push("", "Payments:");
+    for (const p of tx.payments) {
+      lines.push(`  ${p.from} → ${p.to}  ${p.amount} ${p.asset}`);
+    }
   }
 
-  lines.push(divider);
-  lines.push(`  ${tx.payments.length} payment(s)  ·  ${tx.status}  ·  ledger ${tx.ledger}`);
+  if (tx.skipped_operations > 0)
+    lines.push(``, `Skipped ops: ${tx.skipped_operations}`);
+
   return lines.join("\n");
 }
