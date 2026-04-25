@@ -1,39 +1,17 @@
-import { getHealth } from "../lib/client";
-import { NetworkError } from "../lib/errors";
+import type { Command } from "commander";
+import { createClient } from "../lib/client.js";
 
-export interface HealthResult {
-  status: "ok" | "degraded" | "down";
-  latencyMs: number;
-  timestamp: string;
-}
-
-/**
- * Pings the Stellar Explain API and returns health status.
- * Throws NetworkError if the API is unreachable.
- */
-export async function healthCommand(baseUrl: string): Promise<HealthResult> {
-  const start = Date.now();
-
-  try {
-    const data = await getHealth(baseUrl);
-    const latencyMs = Date.now() - start;
-
-    return {
-      status: data.status ?? "ok",
-      latencyMs,
-      timestamp: new Date().toISOString(),
-    };
-  } catch (err) {
-    if (err instanceof NetworkError) throw err;
-    throw new NetworkError(`Health check failed: ${(err as Error).message}`);
-  }
-}
-
-export function formatHealthOutput(result: HealthResult): string {
-  const icon = result.status === "ok" ? "✅" : result.status === "degraded" ? "⚠️" : "❌";
-  return [
-    `${icon} API status: ${result.status}`,
-    `   Latency:   ${result.latencyMs}ms`,
-    `   Checked:   ${result.timestamp}`,
-  ].join("\n");
+export function registerHealth(program: Command): void {
+  program
+    .command("health")
+    .description("Check API health status")
+    .action(async () => {
+      const opts = program.opts<{ url: string; timeout: number; verbose: boolean; json: boolean }>();
+      const client = createClient({ baseUrl: opts.url, timeout: opts.timeout, verbose: opts.verbose });
+      const h = await client.getHealth();
+      if (opts.json) { console.log(JSON.stringify(h, null, 2)); return; }
+      console.log(`Status:   ${h.status}`);
+      console.log(`Horizon:  ${h.horizon_reachable ? "reachable" : "unreachable"}`);
+      console.log(`Version:  ${h.version}`);
+    });
 }

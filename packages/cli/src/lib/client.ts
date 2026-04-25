@@ -1,42 +1,53 @@
-import { NetworkError, NotFoundError } from "./errors";
+import { NetworkError, NotFoundError } from "./errors.js";
+import type {
+  TransactionExplanation,
+  AccountExplanation,
+  HealthResponse,
+} from "../types/index.js";
 
-const DEFAULT_BASE_URL = "https://api.stellar-explain.io";
+export interface ClientOptions {
+  baseUrl: string;
+  timeout: number;  // #276
+  verbose: boolean; // #277
+}
 
-async function request<T>(url: string): Promise<T> {
-  let res: Response;
+async function request<T>(
+  url: string,
+  opts: ClientOptions,
+): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), opts.timeout);
+  const start = Date.now();
 
   try {
-    res = await fetch(url);
-  } catch {
-    throw new NetworkError(`Unable to reach ${url}`);
+    const res = await fetch(url, { signal: controller.signal });
+    const duration = Date.now() - start;
+
+    if (opts.verbose) {
+      process.stderr.write(`[verbose] ${url} ${res.status} ${duration}ms\n`);
+    }
+
+    if (res.status === 404) throw new NotFoundError(`Not found: ${url}`);
+    if (!res.ok) throw new NetworkError(`HTTP ${res.status}: ${url}`);
+
+    return res.json() as Promise<T>;
+  } catch (err) {
+    if (err instanceof NotFoundError || err instanceof NetworkError) throw err;
+    if ((err as Error).name === "AbortError")
+      throw new NetworkError(`Request timed out after ${opts.timeout}ms`);
+    throw new NetworkError(`Request failed: ${(err as Error).message}`);
+  } finally {
+    clearTimeout(timer);
   }
-
-  if (res.status === 404) throw new NotFoundError(`Resource not found: ${url}`);
-  if (!res.ok) throw new NetworkError(`HTTP ${res.status} from ${url}`);
-
-  return res.json() as Promise<T>;
 }
 
-export function buildUrl(base: string, path: string): string {
-  return `${base.replace(/\/$/, "")}${path}`;
-}
-
-export async function getHealth(
-  base = DEFAULT_BASE_URL
-): Promise<{ status: string }> {
-  return request(buildUrl(base, "/health"));
-}
-
-export async function getTransaction(
-  hash: string,
-  base = DEFAULT_BASE_URL
-): Promise<unknown> {
-  return request(buildUrl(base, `/tx/${hash}`));
-}
-
-export async function getAccount(
-  address: string,
-  base = DEFAULT_BASE_URL
-): Promise<unknown> {
-  return request(buildUrl(base, `/account/${address}`));
+export function createClient(opts: ClientOptions) {
+  return {
+    getTransaction: (hash: string) =>
+      request<TransactionExplanation>(`${opts.baseUrl}/tx/${hash}`, opts),
+    getAccount: (address: string) =>
+      request<AccountExplanation>(`${opts.baseUrl}/account/${address}`, opts),
+    getHealth: () =>
+      request<HealthResponse>(`${opts.baseUrl}/health`, opts),
+  };
 }
