@@ -92,6 +92,24 @@ Expected response:
 ok
 ```
 
+### GET /tx/:hash
+
+Returns a human-readable explanation of a Stellar transaction.
+
+```bash
+curl http://localhost:4000/tx/<transaction-hash>
+```
+
+### GET /tx/:hash/raw
+
+Returns the raw, unprocessed JSON response from Horizon for the given transaction hash. Useful for developers and power users who want direct access to the full Horizon data.
+
+```bash
+curl http://localhost:4000/tx/<transaction-hash>/raw
+```
+
+Applies the same error handling as `/tx/:hash` — 400 for invalid hashes, 404 for not found, 502 for upstream failures.
+
 ---
 
 ## 🧪 Testing

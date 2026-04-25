@@ -4,7 +4,7 @@ use utoipa::OpenApi;
 #[openapi(
     paths(
         health::health,
-        tx::get_tx_explanation
+        tx::get_tx_explanation,
     ),
     components(
         schemas(
@@ -19,6 +19,6 @@ use utoipa::OpenApi;
 )]
 pub struct ApiDoc;
 
-pub mod tx;
 pub mod account;
 pub mod health;
+pub mod tx;

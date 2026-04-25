@@ -1,16 +1,16 @@
 use axum::{
-    extract::{Extension, Path, State},
     Json,
+    extract::{Extension, Path, State},
 };
 use serde::Serialize;
-use utoipa::ToSchema;
 use std::sync::Arc;
 use std::time::Instant;
 use tracing::{error, info, info_span};
+use utoipa::ToSchema;
 
 use crate::{
     errors::AppError,
-    explain::transaction::{explain_transaction, TransactionExplanation},
+    explain::transaction::{TransactionExplanation, explain_transaction_with_ledger},
     middleware::request_id::RequestId,
     services::{explain::map_transaction_to_domain, horizon::HorizonClient},
 };
@@ -22,7 +22,6 @@ pub struct TxExplanationResponse {
     pub explanation: String,
 }
 
-
 #[utoipa::path(
     get,
     path = "/tx/{hash}",
@@ -31,6 +30,7 @@ pub struct TxExplanationResponse {
     ),
     responses(
         (status = 200, description = "Transaction explanation", body = TxExplanationResponse),
+        (status = 400, description = "Invalid transaction hash"),
         (status = 404, description = "Transaction not found"),
         (status = 500, description = "Internal server error")
     )
@@ -53,6 +53,21 @@ pub async fn get_tx_explanation(
         hash = %hash,
         "incoming_request"
     );
+
+    if !is_valid_transaction_hash(&hash) {
+        let app_error = AppError::BadRequest(
+            "Invalid transaction hash format. Expected 64-character hexadecimal hash.".to_string(),
+        );
+        info!(
+            request_id = %request_id,
+            hash = %hash,
+            status = app_error.status_code().as_u16(),
+            total_duration_ms = request_started_at.elapsed().as_millis() as u64,
+            error = ?app_error,
+            "request_completed"
+        );
+        return Err(app_error);
+    }
 
     // Fetch transaction, operations, and fee stats in parallel
     let horizon_started_at = Instant::now();
@@ -105,12 +120,20 @@ pub async fn get_tx_explanation(
         }
     };
 
-    // fee_stats is Option<FeeStats> — None if Horizon /fee_stats is unavailable
-    // explain_transaction degrades gracefully when it is None
+    // Capture ledger fields before tx is consumed by map_transaction_to_domain
+    let created_at = tx.created_at.clone();
+    let ledger = tx.ledger;
 
+    // fee_stats is Option<FeeStats> — None if Horizon /fee_stats is unavailable
     let domain_tx = map_transaction_to_domain(tx, ops);
     let explain_started_at = Instant::now();
-    let explanation = match explain_transaction(&domain_tx, fee_stats.as_ref()) {
+
+    let explanation = match explain_transaction_with_ledger(
+        &domain_tx,
+        fee_stats.as_ref(),
+        created_at.as_deref(),
+        ledger,
+    ) {
         Ok(explanation) => explanation,
         Err(err) => {
             let app_error: AppError = err.into();
@@ -138,4 +161,8 @@ pub async fn get_tx_explanation(
     );
 
     Ok(Json(explanation))
+}
+
+fn is_valid_transaction_hash(hash: &str) -> bool {
+    hash.len() == 64 && hash.chars().all(|c| c.is_ascii_hexdigit())
 }

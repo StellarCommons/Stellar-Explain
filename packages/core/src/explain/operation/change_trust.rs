@@ -52,7 +52,12 @@ pub fn explain_change_trust(op: &ChangeTrustOperation) -> ChangeTrustExplanation
 mod tests {
     use super::*;
 
-    fn make_change_trust(trustor: &str, asset_code: &str, asset_issuer: &str, limit: &str) -> ChangeTrustOperation {
+    fn make_change_trust(
+        trustor: &str,
+        asset_code: &str,
+        asset_issuer: &str,
+        limit: &str,
+    ) -> ChangeTrustOperation {
         ChangeTrustOperation {
             id: "test_op_id".to_string(),
             trustor: trustor.to_string(),
@@ -64,12 +69,7 @@ mod tests {
 
     #[test]
     fn test_explain_change_trust_adds_trust() {
-        let op = make_change_trust(
-            "GAAAA",
-            "USDC",
-            "GBBB",
-            "10000",
-        );
+        let op = make_change_trust("GAAAA", "USDC", "GBBB", "10000");
         let explanation = explain_change_trust(&op);
 
         assert!(!explanation.is_removal);
@@ -86,12 +86,7 @@ mod tests {
 
     #[test]
     fn test_explain_change_trust_removes_trust() {
-        let op = make_change_trust(
-            "GAAAA",
-            "USDC",
-            "GBBB",
-            "0",
-        );
+        let op = make_change_trust("GAAAA", "USDC", "GBBB", "0");
         let explanation = explain_change_trust(&op);
 
         assert!(explanation.is_removal);

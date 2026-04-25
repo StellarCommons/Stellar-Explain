@@ -1,5 +1,6 @@
 use crate::models::fee::FeeStats;
 use crate::models::operation::PaymentOperation;
+use crate::services::labels::resolve_label;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -30,10 +31,18 @@ pub struct PaymentExplanation {
 /// Use this when fee stats are unavailable. fee_note will be None.
 pub fn explain_payment(op: &PaymentOperation) -> PaymentExplanation {
     let asset = format_asset(op);
-    let from = op.source_account.clone().unwrap_or_else(|| "Unknown".to_string());
+    let from = op
+        .source_account
+        .clone()
+        .unwrap_or_else(|| "Unknown".to_string());
     let to = op.destination.clone();
+    let from_display = format_account_for_summary(&from);
+    let to_display = format_account_for_summary(&to);
 
-    let summary = format!("{} sent {} {} to {}", from, op.amount, asset, to);
+    let summary = format!(
+        "{} sent {} {} to {}",
+        from_display, op.amount, asset, to_display
+    );
 
     PaymentExplanation {
         summary,
@@ -55,10 +64,18 @@ pub fn explain_payment_with_fee(
     network_fees: &FeeStats,
 ) -> PaymentExplanation {
     let asset = format_asset(op);
-    let from = op.source_account.clone().unwrap_or_else(|| "Unknown".to_string());
+    let from = op
+        .source_account
+        .clone()
+        .unwrap_or_else(|| "Unknown".to_string());
     let to = op.destination.clone();
+    let from_display = format_account_for_summary(&from);
+    let to_display = format_account_for_summary(&to);
 
-    let summary = format!("{} sent {} {} to {}", from, op.amount, asset, to);
+    let summary = format!(
+        "{} sent {} {} to {}",
+        from_display, op.amount, asset, to_display
+    );
 
     let xlm = FeeStats::stroops_to_xlm(fee_charged);
 
@@ -96,6 +113,17 @@ fn format_asset(op: &PaymentOperation) -> String {
                 "Unknown".to_string()
             }
         }
+    }
+}
+
+fn format_account_for_summary(address: &str) -> String {
+    if address == "Unknown" {
+        return "Unknown".to_string();
+    }
+
+    match resolve_label(address) {
+        Some(label) => format!("{} ({})", label, address),
+        None => address.to_string(),
     }
 }
 
@@ -220,7 +248,52 @@ mod tests {
         assert_eq!(explanation.to, "GRECIPIENT");
         assert_eq!(explanation.amount, "100.5");
         assert_eq!(explanation.asset, "XLM (native)");
-        assert_eq!(explanation.summary, "GSENDER sent 100.5 XLM (native) to GRECIPIENT");
+        assert_eq!(
+            explanation.summary,
+            "GSENDER sent 100.5 XLM (native) to GRECIPIENT"
+        );
+    }
+
+    #[test]
+    fn test_explain_payment_labels_known_addresses_in_summary() {
+        let op = create_test_payment(
+            Some("GCOINBASEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_string()),
+            "GBINANCEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_string(),
+            "native".to_string(),
+            None,
+            None,
+            "500".to_string(),
+        );
+
+        let explanation = explain_payment(&op);
+        assert!(
+            explanation
+                .summary
+                .contains("Coinbase (GCOINBASEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA)")
+        );
+        assert!(
+            explanation
+                .summary
+                .contains("Binance (GBINANCEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA)")
+        );
+    }
+
+    #[test]
+    fn test_explain_payment_summary_uses_raw_for_unknown_addresses() {
+        let op = create_test_payment(
+            Some("GNOTINMAPAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_string()),
+            "GDESTUNKNOWNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_string(),
+            "native".to_string(),
+            None,
+            None,
+            "12".to_string(),
+        );
+
+        let explanation = explain_payment(&op);
+        assert_eq!(
+            explanation.summary,
+            "GNOTINMAPAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA sent 12 XLM (native) to GDESTUNKNOWNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        );
     }
 
     #[test]

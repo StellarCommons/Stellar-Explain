@@ -2,22 +2,30 @@
 //!
 //! Internal representation of Stellar operations, independent of Horizon JSON.
 
+use crate::models::memo::Memo;
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone)]
+pub struct Transaction {
+    pub hash: String,
+    pub successful: bool,
+    pub fee_charged: u64,
+    pub operations: Vec<Operation>,
+    pub memo: Memo,
+}
+
 /// Represents a Stellar operation.
-///
-/// For v1, we support Payment, ChangeTrust, and CreateAccount operations.
-/// Other operation types are preserved but not explained.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Operation {
     Payment(PaymentOperation),
-    ManageSellOffer(ManageOfferOperation),
-    ManageBuyOffer(ManageOfferOperation),
-    PathPaymentStrictSend(PathPaymentOperation),
-    PathPaymentStrictReceive(PathPaymentOperation),
-    ChangeTrust(ChangeTrustOperation),
+    SetOptions(SetOptionsOperation),
     CreateAccount(CreateAccountOperation),
+    ChangeTrust(ChangeTrustOperation),
+    ManageOffer(ManageOfferOperation),
+    PathPayment(PathPaymentOperation),
+    Clawback(ClawbackOperation),
+    ClawbackClaimableBalance(ClawbackClaimableBalanceOperation),
     Other(OtherOperation),
 }
 
@@ -33,12 +41,56 @@ pub struct PaymentOperation {
     pub amount: String,
 }
 
+/// A set_options operation that configures account settings.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct SetOptionsOperation {
+    pub id: String,
+    pub source_account: Option<String>,
+    pub inflation_dest: Option<String>,
+    pub clear_flags: Option<u32>,
+    pub set_flags: Option<u32>,
+    pub master_weight: Option<u32>,
+    pub low_threshold: Option<u32>,
+    pub med_threshold: Option<u32>,
+    pub high_threshold: Option<u32>,
+    pub home_domain: Option<String>,
+    pub signer_key: Option<String>,
+    pub signer_weight: Option<u32>,
+}
+
+/// A create_account operation that funds and activates a new Stellar account.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CreateAccountOperation {
+    pub id: String,
+    /// The account that funds the new account.
+    pub funder: String,
+    /// The newly created account address.
+    pub new_account: String,
+    /// Starting XLM balance sent to the new account.
+    pub starting_balance: String,
+}
+
+/// A change_trust operation that adds, updates, or removes a trust line.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ChangeTrustOperation {
+    pub id: String,
+    /// The account opting in or out of holding the asset.
+    pub trustor: String,
+    pub asset_code: String,
+    pub asset_issuer: String,
+    /// Trust limit. "0" means remove the trust line.
+    pub limit: String,
+}
+
+/// Whether the offer intends to sell or buy the named asset.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
 pub enum OfferType {
     Sell,
     Buy,
 }
 
+/// A manage_offer (or manage_buy_offer) operation.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ManageOfferOperation {
     pub id: String,
@@ -47,16 +99,20 @@ pub struct ManageOfferOperation {
     pub buying_asset: String,
     pub amount: String,
     pub price: String,
+    /// 0 = new offer, non-zero = update or cancel.
     pub offer_id: u64,
     pub offer_type: OfferType,
 }
 
+/// Whether the path payment fixes the send amount or the receive amount.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
 pub enum PathPaymentType {
     StrictSend,
     StrictReceive,
 }
 
+/// A path_payment_strict_send or path_payment_strict_receive operation.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PathPaymentOperation {
     pub id: String,
@@ -66,32 +122,32 @@ pub struct PathPaymentOperation {
     pub send_amount: String,
     pub dest_asset: String,
     pub dest_amount: String,
+    /// Intermediate assets in the conversion path.
     pub path: Vec<String>,
     pub payment_type: PathPaymentType,
-/// A create_account operation that funds and activates a new Stellar account.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct CreateAccountOperation {
-    pub id: String,
-    pub funder: String,
-    pub new_account: String,
-    pub starting_balance: String,
 }
 
-/// A change_trust operation that opts an account in or out of holding a non-native asset.
-///
-/// Setting limit to "0" removes the trust line; any other value adds or updates it.
+/// A clawback operation that recovers regulated asset funds from a holder.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct ChangeTrustOperation {
+pub struct ClawbackOperation {
     pub id: String,
-    pub trustor: String,
+    pub source_account: Option<String>,
+    /// The account the funds are clawed back from.
+    pub from: String,
     pub asset_code: String,
     pub asset_issuer: String,
-    pub limit: String,
+    pub amount: String,
 }
 
-/// Placeholder for non-payment operations.
-///
-/// These are preserved in the transaction model but not explained in v1.
+/// A clawback_claimable_balance operation.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ClawbackClaimableBalanceOperation {
+    pub id: String,
+    pub source_account: Option<String>,
+    pub balance_id: String,
+}
+
+/// Placeholder for operation types we do not yet explain.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct OtherOperation {
     pub id: String,
@@ -99,32 +155,201 @@ pub struct OtherOperation {
 }
 
 impl Operation {
-    /// Returns true if this operation is a payment.
     pub fn is_payment(&self) -> bool {
         matches!(self, Operation::Payment(_))
     }
 
-    /// Returns true if this operation is a change_trust.
-    pub fn is_change_trust(&self) -> bool {
-        matches!(self, Operation::ChangeTrust(_))
+    pub fn is_set_options(&self) -> bool {
+        matches!(self, Operation::SetOptions(_))
     }
 
-    /// Returns true if this operation is a create_account.
-    pub fn is_create_account(&self) -> bool {
-        matches!(self, Operation::CreateAccount(_))
-    }
-
-    /// Returns the operation ID.
     pub fn id(&self) -> &str {
         match self {
             Operation::Payment(p) => &p.id,
-            Operation::ManageSellOffer(o) => &o.id,
-            Operation::ManageBuyOffer(o) => &o.id,
-            Operation::PathPaymentStrictSend(p) => &p.id,
-            Operation::PathPaymentStrictReceive(p) => &p.id,
+            Operation::SetOptions(s) => &s.id,
+            Operation::CreateAccount(c) => &c.id,
             Operation::ChangeTrust(c) => &c.id,
-            Operation::CreateAccount(ca) => &ca.id,
+            Operation::ManageOffer(m) => &m.id,
+            Operation::PathPayment(p) => &p.id,
+            Operation::Clawback(c) => &c.id,
+            Operation::ClawbackClaimableBalance(c) => &c.id,
             Operation::Other(o) => &o.id,
+        }
+    }
+}
+
+use crate::services::horizon::HorizonOperation;
+
+/// Format an asset from Horizon's separate code/issuer/type fields into
+/// a single display string: "XLM (native)" or "USDC (GISSUER...)".
+fn format_asset(
+    asset_type: Option<&str>,
+    asset_code: Option<&str>,
+    asset_issuer: Option<&str>,
+) -> String {
+    match asset_type {
+        Some("native") | None => "XLM (native)".to_string(),
+        _ => match (asset_code, asset_issuer) {
+            (Some(code), Some(issuer)) => format!("{} ({})", code, issuer),
+            (Some(code), None) => code.to_string(),
+            _ => "Unknown".to_string(),
+        },
+    }
+}
+
+impl From<HorizonOperation> for Operation {
+    fn from(op: HorizonOperation) -> Self {
+        match op.operation_type.as_str() {
+            "payment" => Operation::Payment(PaymentOperation {
+                id: op.id,
+                source_account: op.from.clone().or(op.source_account.clone()),
+                destination: op.to.unwrap_or_default(),
+                asset_type: op.asset_type.unwrap_or_else(|| "native".to_string()),
+                asset_code: op.asset_code,
+                asset_issuer: op.asset_issuer,
+                amount: op.amount.unwrap_or_else(|| "0".to_string()),
+            }),
+            "set_options" => Operation::SetOptions(SetOptionsOperation {
+                id: op.id,
+                source_account: op.source_account,
+                inflation_dest: op.inflation_dest,
+                // Horizon sends flags as Vec<u32> — fold into a single bitmask
+                clear_flags: op
+                    .clear_flags
+                    .and_then(|v| v.into_iter().reduce(|a, b| a | b)),
+                set_flags: op
+                    .set_flags
+                    .and_then(|v| v.into_iter().reduce(|a, b| a | b)),
+                master_weight: op.master_key_weight,
+                low_threshold: op.low_threshold,
+                med_threshold: op.med_threshold,
+                high_threshold: op.high_threshold,
+                home_domain: op.home_domain,
+                signer_key: op.signer_key,
+                signer_weight: op.signer_weight,
+            }),
+            "create_account" => Operation::CreateAccount(CreateAccountOperation {
+                id: op.id,
+                funder: op.funder.unwrap_or_else(|| "Unknown".to_string()),
+                new_account: op.account.unwrap_or_default(),
+                starting_balance: op.starting_balance.unwrap_or_else(|| "0".to_string()),
+            }),
+            "change_trust" => Operation::ChangeTrust(ChangeTrustOperation {
+                id: op.id,
+                trustor: op.source_account.unwrap_or_else(|| "Unknown".to_string()),
+                asset_code: op.asset_code.unwrap_or_default(),
+                asset_issuer: op.asset_issuer.unwrap_or_default(),
+                limit: op.limit.unwrap_or_else(|| "0".to_string()),
+            }),
+            "manage_offer" | "manage_sell_offer" | "create_passive_sell_offer" => {
+                let selling = format_asset(
+                    op.selling_asset_type.as_deref(),
+                    op.selling_asset_code.as_deref(),
+                    op.selling_asset_issuer.as_deref(),
+                );
+                let buying = format_asset(
+                    op.buying_asset_type.as_deref(),
+                    op.buying_asset_code.as_deref(),
+                    op.buying_asset_issuer.as_deref(),
+                );
+                Operation::ManageOffer(ManageOfferOperation {
+                    id: op.id,
+                    seller: op.source_account.unwrap_or_else(|| "Unknown".to_string()),
+                    selling_asset: selling,
+                    buying_asset: buying,
+                    amount: op.amount.unwrap_or_else(|| "0".to_string()),
+                    price: op.price.unwrap_or_default(),
+                    offer_id: op.offer_id.and_then(|s| s.parse::<u64>().ok()).unwrap_or(0),
+                    offer_type: OfferType::Sell,
+                })
+            }
+            "manage_buy_offer" => {
+                let selling = format_asset(
+                    op.selling_asset_type.as_deref(),
+                    op.selling_asset_code.as_deref(),
+                    op.selling_asset_issuer.as_deref(),
+                );
+                let buying = format_asset(
+                    op.buying_asset_type.as_deref(),
+                    op.buying_asset_code.as_deref(),
+                    op.buying_asset_issuer.as_deref(),
+                );
+                Operation::ManageOffer(ManageOfferOperation {
+                    id: op.id,
+                    seller: op.source_account.unwrap_or_else(|| "Unknown".to_string()),
+                    selling_asset: selling,
+                    buying_asset: buying,
+                    amount: op.amount.unwrap_or_else(|| "0".to_string()),
+                    price: op.price.unwrap_or_default(),
+                    offer_id: op.offer_id.and_then(|s| s.parse::<u64>().ok()).unwrap_or(0),
+                    offer_type: OfferType::Buy,
+                })
+            }
+            "path_payment_strict_send" => {
+                let send_asset = format_asset(
+                    op.source_asset_type.as_deref(),
+                    op.source_asset_code.as_deref(),
+                    op.source_asset_issuer.as_deref(),
+                );
+                let dest_asset = format_asset(
+                    op.asset_type.as_deref(),
+                    op.asset_code.as_deref(),
+                    op.asset_issuer.as_deref(),
+                );
+                Operation::PathPayment(PathPaymentOperation {
+                    id: op.id,
+                    source_account: op.from.clone().or(op.source_account.clone()),
+                    destination: op.to.unwrap_or_default(),
+                    send_asset,
+                    send_amount: op.source_amount.unwrap_or_else(|| "0".to_string()),
+                    dest_asset,
+                    dest_amount: op.amount.unwrap_or_else(|| "0".to_string()),
+                    path: vec![],
+                    payment_type: PathPaymentType::StrictSend,
+                })
+            }
+            "path_payment_strict_receive" => {
+                let send_asset = format_asset(
+                    op.source_asset_type.as_deref(),
+                    op.source_asset_code.as_deref(),
+                    op.source_asset_issuer.as_deref(),
+                );
+                let dest_asset = format_asset(
+                    op.asset_type.as_deref(),
+                    op.asset_code.as_deref(),
+                    op.asset_issuer.as_deref(),
+                );
+                Operation::PathPayment(PathPaymentOperation {
+                    id: op.id,
+                    source_account: op.from.clone().or(op.source_account.clone()),
+                    destination: op.to.unwrap_or_default(),
+                    send_asset,
+                    send_amount: op.source_amount.unwrap_or_else(|| "0".to_string()),
+                    dest_asset,
+                    dest_amount: op.amount.unwrap_or_else(|| "0".to_string()),
+                    path: vec![],
+                    payment_type: PathPaymentType::StrictReceive,
+                })
+            }
+            "clawback" => Operation::Clawback(ClawbackOperation {
+                id: op.id,
+                source_account: op.source_account,
+                from: op.from.unwrap_or_default(),
+                asset_code: op.asset_code.unwrap_or_default(),
+                asset_issuer: op.asset_issuer.unwrap_or_default(),
+                amount: op.amount.unwrap_or_else(|| "0".to_string()),
+            }),
+            "clawback_claimable_balance" => {
+                Operation::ClawbackClaimableBalance(ClawbackClaimableBalanceOperation {
+                    id: op.id,
+                    source_account: op.source_account,
+                    balance_id: op.balance_id.unwrap_or_default(),
+                })
+            }
+            _ => Operation::Other(OtherOperation {
+                id: op.id,
+                operation_type: op.operation_type,
+            }),
         }
     }
 }
@@ -144,14 +369,23 @@ mod tests {
             asset_issuer: None,
             amount: "100.0".to_string(),
         });
-
         let other = Operation::Other(OtherOperation {
             id: "67890".to_string(),
             operation_type: "create_account".to_string(),
         });
-
         assert!(payment.is_payment());
         assert!(!other.is_payment());
+    }
+
+    #[test]
+    fn test_is_set_options() {
+        let set_opts = Operation::SetOptions(SetOptionsOperation {
+            id: "op1".to_string(),
+            home_domain: Some("example.com".to_string()),
+            ..Default::default()
+        });
+        assert!(set_opts.is_set_options());
+        assert!(!set_opts.is_payment());
     }
 
     #[test]
@@ -165,141 +399,50 @@ mod tests {
             asset_issuer: None,
             amount: "100.0".to_string(),
         });
-
         assert_eq!(payment.id(), "12345");
     }
-}
 
-use crate::services::horizon::{HorizonOperation, HorizonPathAsset};
-
-fn format_asset(
-    asset_type: Option<String>,
-    asset_code: Option<String>,
-    asset_issuer: Option<String>,
-) -> String {
-    match asset_type.as_deref() {
-        Some("native") => "XLM (native)".to_string(),
-        _ => match (asset_code, asset_issuer) {
-            (Some(code), Some(issuer)) => format!("{} ({})", code, issuer),
-            (Some(code), None) => code,
-            _ => "Unknown".to_string(),
-        },
+    #[test]
+    fn test_set_options_id() {
+        let op = Operation::SetOptions(SetOptionsOperation {
+            id: "set-op-99".to_string(),
+            ..Default::default()
+        });
+        assert_eq!(op.id(), "set-op-99");
     }
-}
 
-fn format_offer_asset(
-    asset_type: Option<String>,
-    asset_code: Option<String>,
-    asset_issuer: Option<String>,
-) -> String {
-    format_asset(asset_type, asset_code, asset_issuer)
-}
+    #[test]
+    fn test_create_account_id() {
+        let op = Operation::CreateAccount(CreateAccountOperation {
+            id: "ca-1".to_string(),
+            funder: "GFUNDER".to_string(),
+            new_account: "GNEW".to_string(),
+            starting_balance: "100".to_string(),
+        });
+        assert_eq!(op.id(), "ca-1");
+    }
 
-fn format_path(path: Option<Vec<HorizonPathAsset>>) -> Vec<String> {
-    path.unwrap_or_default()
-        .into_iter()
-        .map(|a| format_asset(Some(a.asset_type), a.asset_code, a.asset_issuer))
-        .collect()
-}
+    #[test]
+    fn test_change_trust_id() {
+        let op = Operation::ChangeTrust(ChangeTrustOperation {
+            id: "ct-1".to_string(),
+            trustor: "GTRUSTEE".to_string(),
+            asset_code: "USDC".to_string(),
+            asset_issuer: "GISSUER".to_string(),
+            limit: "1000".to_string(),
+        });
+        assert_eq!(op.id(), "ct-1");
+    }
 
-impl From<HorizonOperation> for Operation {
-    fn from(op: HorizonOperation) -> Self {
-        match op.type_i.as_str() {
-            "payment" => Operation::Payment(PaymentOperation {
-                id: op.id,
-                source_account: op.from,
-                destination: op.to.unwrap_or_default(),
-                asset_type: op.asset_type.unwrap_or_else(|| "native".to_string()),
-                asset_code: op.asset_code,
-                asset_issuer: op.asset_issuer,
-                amount: op.amount.unwrap_or_else(|| "0".to_string()),
-            }),
-            "manage_sell_offer" => Operation::ManageSellOffer(ManageOfferOperation {
-                id: op.id,
-                seller: op.source_account.unwrap_or_default(),
-                selling_asset: format_offer_asset(
-                    op.selling_asset_type,
-                    op.selling_asset_code,
-                    op.selling_asset_issuer,
-                ),
-                buying_asset: format_offer_asset(
-                    op.buying_asset_type,
-                    op.buying_asset_code,
-                    op.buying_asset_issuer,
-                ),
-                amount: op.amount.unwrap_or_else(|| "0".to_string()),
-                price: op.price.unwrap_or_default(),
-                offer_id: op.offer_id.unwrap_or(0),
-                offer_type: OfferType::Sell,
-            }),
-            "manage_buy_offer" => Operation::ManageBuyOffer(ManageOfferOperation {
-                id: op.id,
-                seller: op.source_account.unwrap_or_default(),
-                selling_asset: format_offer_asset(
-                    op.selling_asset_type,
-                    op.selling_asset_code,
-                    op.selling_asset_issuer,
-                ),
-                buying_asset: format_offer_asset(
-                    op.buying_asset_type,
-                    op.buying_asset_code,
-                    op.buying_asset_issuer,
-                ),
-                amount: op.amount.unwrap_or_else(|| "0".to_string()),
-                price: op.price.unwrap_or_default(),
-                offer_id: op.offer_id.unwrap_or(0),
-                offer_type: OfferType::Buy,
-            }),
-            "path_payment_strict_send" => {
-                let path = format_path(op.path);
-                Operation::PathPaymentStrictSend(PathPaymentOperation {
-                    id: op.id,
-                    source_account: op.from.or(op.source_account),
-                    destination: op.to.unwrap_or_default(),
-                    send_asset: format_asset(op.source_asset_type, op.source_asset_code, op.source_asset_issuer),
-                    send_amount: op.source_amount.unwrap_or_else(|| "0".to_string()),
-                    dest_asset: format_asset(op.asset_type, op.asset_code, op.asset_issuer),
-                    dest_amount: op.amount.unwrap_or_else(|| "0".to_string()),
-                    path,
-                    payment_type: PathPaymentType::StrictSend,
-                })
-            }
-            "path_payment_strict_receive" => {
-                let path = format_path(op.path);
-                Operation::PathPaymentStrictReceive(PathPaymentOperation {
-                    id: op.id,
-                    source_account: op.from.or(op.source_account),
-                    destination: op.to.unwrap_or_default(),
-                    send_asset: format_asset(op.source_asset_type, op.source_asset_code, op.source_asset_issuer),
-                    send_amount: op.source_amount.unwrap_or_else(|| "0".to_string()),
-                    dest_asset: format_asset(op.asset_type, op.asset_code, op.asset_issuer),
-                    dest_amount: op.amount.unwrap_or_else(|| "0".to_string()),
-                    path,
-                    payment_type: PathPaymentType::StrictReceive,
-                })
-            }
-            _ => Operation::Other(OtherOperation {
-            })
-        } else if op.type_i == "change_trust" {
-            Operation::ChangeTrust(ChangeTrustOperation {
-                id: op.id,
-                trustor: op.trustor.unwrap_or_default(),
-                asset_code: op.asset_code.unwrap_or_default(),
-                asset_issuer: op.asset_issuer.unwrap_or_default(),
-                limit: op.limit.unwrap_or_else(|| "0".to_string()),
-            })
-        } else if op.type_i == "create_account" {
-            Operation::CreateAccount(CreateAccountOperation {
-                id: op.id,
-                funder: op.funder.unwrap_or_default(),
-                new_account: op.account.unwrap_or_default(),
-                starting_balance: op.starting_balance.unwrap_or_else(|| "0".to_string()),
-            })
-        } else {
-            Operation::Other(OtherOperation {
-                id: op.id,
-                operation_type: op.type_i,
-            }),
-        }
+    #[test]
+    fn test_format_asset_native() {
+        let result = format_asset(Some("native"), None, None);
+        assert_eq!(result, "XLM (native)");
+    }
+
+    #[test]
+    fn test_format_asset_credit() {
+        let result = format_asset(Some("credit_alphanum4"), Some("USDC"), Some("GISSUER"));
+        assert_eq!(result, "USDC (GISSUER)");
     }
 }

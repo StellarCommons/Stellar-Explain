@@ -1,26 +1,23 @@
 {
   "name": "@stellar-explain/cli",
   "version": "0.1.0",
-  "description": "CLI for Stellar Explain",
-  "bin": {
-    "stellar-explain": "dist/index.js"
-  },
+  "description": "CLI for the Stellar Explain API",
+  "engines": { "node": ">=18.0.0" },
+  "bin": { "stellar-explain": "dist/index.js" },
+  "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "dev": "ts-node src/index.ts",
+    "dev": "tsc --watch",
     "start": "node dist/index.js",
-    "lint": "eslint src",
+    "lint": "eslint src --ext .ts",
     "format": "prettier --write src",
     "typecheck": "tsc --noEmit"
   },
-  "engines": {
-    "node": ">=18.0.0"
-  },
   "dependencies": {
-    "commander": "^12.0.0"
+    "commander": "12.1.0"
   },
   "devDependencies": {
-    "typescript": "^5.4.0",
-    "@types/node": "^20.0.0"
+    "@types/node": "20.14.0",
+    "typescript": "5.4.5"
   }
 }
