@@ -15,13 +15,14 @@ program
   .name("stellar-explain")
   .version(version)
   .option("--url <url>", "API base URL")
-  .option("--timeout <ms>", "Request timeout in ms", (v) => parseInt(v, 10), 10000)
-  .option("--verbose", "Log request details to stderr", false)
+  .option("--timeout <ms>", "Request timeout in ms", (v) => parseInt(v, 10), 10000) // #276
+  .option("--verbose", "Log request details to stderr", false)                       // #277
   .option("--json", "Output raw JSON", false);
 
+// Resolve --url after parsing
 program.hook("preAction", (thisCommand) => {
   const opts = thisCommand.opts<{ url?: string }>();
-  thisCommand.setOptionValue("url", resolveBaseUrl(opts.url));
+  if (!opts.url) thisCommand.setOptionValue("url", resolveBaseUrl());
 });
 
 registerTx(program);
@@ -29,10 +30,8 @@ registerAccount(program);
 registerHealth(program);
 
 program.parseAsync(process.argv).catch((err: unknown) => {
-  if (err instanceof InvalidInputError) {
-    process.stderr.write(`Error: ${(err as Error).message}\n`);
-    process.exit(1);
-  }
-  process.stderr.write(`Unexpected error: ${(err as Error).message}\n`);
-  process.exit(1);
+  const msg = err instanceof Error ? err.message : String(err);
+  const code = err instanceof InvalidInputError ? 2 : 1;
+  process.stderr.write(`Error: ${msg}\n`);
+  process.exit(code);
 });
