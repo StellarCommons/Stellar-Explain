@@ -1,5 +1,3 @@
-// Mirrors the Stellar Explain API response shapes for use across CLI commands.
-
 export interface PaymentExplanation {
   from: string;
   to: string;
@@ -47,11 +45,4 @@ export interface HealthResponse {
   status: "ok" | "degraded" | "down";
   horizon_reachable: boolean;
   version: string;
-}
-
-export interface ApiError {
-  error: {
-    code: string;
-    message: string;
-  };
 }

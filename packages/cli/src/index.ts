@@ -1,47 +1,37 @@
-// CLI entry point. Registers global --url and --json flags on every command.
+#!/usr/bin/env node
+import { Command } from "commander";
+import { resolveBaseUrl } from "./lib/config.js";
+import { registerTx } from "./commands/tx.js";
+import { registerAccount } from "./commands/account.js";
+import { registerHealth } from "./commands/health.js";
+import { InvalidInputError } from "./lib/errors.js";
 
-import { txCommand, accountCommand, healthCommand, GlobalFlags } from "./commands/index";
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { version } = require("../package.json") as { version: string };
 
-const args = process.argv.slice(2);
+const program = new Command();
 
-function parseFlags(argv: string[]): { positional: string[]; flags: GlobalFlags } {
-  const flags: GlobalFlags = {};
-  const positional: string[] = [];
+program
+  .name("stellar-explain")
+  .version(version)
+  .option("--url <url>", "API base URL")
+  .option("--timeout <ms>", "Request timeout in ms", (v) => parseInt(v, 10), 10000) // #276
+  .option("--verbose", "Log request details to stderr", false)                       // #277
+  .option("--json", "Output raw JSON", false);
 
-  for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--url" && argv[i + 1]) {
-      flags.url = argv[++i];
-    } else if (argv[i] === "--json") {
-      flags.json = true;
-    } else {
-      positional.push(argv[i]);
-    }
-  }
+// Resolve --url after parsing
+program.hook("preAction", (thisCommand) => {
+  const opts = thisCommand.opts<{ url?: string }>();
+  if (!opts.url) thisCommand.setOptionValue("url", resolveBaseUrl());
+});
 
-  return { positional, flags };
-}
+registerTx(program);
+registerAccount(program);
+registerHealth(program);
 
-async function main(): Promise<void> {
-  const { positional, flags } = parseFlags(args);
-  const [command, arg] = positional;
-
-  switch (command) {
-    case "tx":
-      if (!arg) { console.error("Usage: stellar-explain tx <hash> [--url <url>] [--json]"); process.exit(1); }
-      await txCommand(arg, flags);
-      break;
-    case "account":
-      if (!arg) { console.error("Usage: stellar-explain account <id> [--url <url>] [--json]"); process.exit(1); }
-      await accountCommand(arg, flags);
-      break;
-    case "health":
-      await healthCommand(flags);
-      break;
-    default:
-      console.error("Commands: tx <hash> | account <id> | health");
-      console.error("Flags:    --url <baseUrl>  --json");
-      process.exit(1);
-  }
-}
-
-main().catch((err) => { console.error(err.message); process.exit(1); });
+program.parseAsync(process.argv).catch((err: unknown) => {
+  const msg = err instanceof Error ? err.message : String(err);
+  const code = err instanceof InvalidInputError ? 2 : 1;
+  process.stderr.write(`Error: ${msg}\n`);
+  process.exit(code);
+});
