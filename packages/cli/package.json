@@ -2,8 +2,12 @@
   "name": "@stellar-explain/cli",
   "version": "0.1.0",
   "description": "CLI for the Stellar Explain API",
-  "engines": { "node": ">=18.0.0" },
-  "bin": { "stellar-explain": "dist/index.js" },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "bin": {
+    "stellar-explain": "dist/index.js"
+  },
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
@@ -18,6 +22,7 @@
   },
   "devDependencies": {
     "@types/node": "20.14.0",
-    "typescript": "5.4.5"
+    "typescript": "5.4.5",
+    "vitest": "^4.1.5"
   }
 }
