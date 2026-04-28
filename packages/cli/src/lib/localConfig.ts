@@ -11,7 +11,13 @@ export interface LocalConfig {
 export function loadLocalConfig(): LocalConfig {
   const filePath = path.resolve(process.cwd(), CONFIG_FILE);
   if (!fs.existsSync(filePath)) return {};
-  return JSON.parse(fs.readFileSync(filePath, "utf8")) as LocalConfig;
+  try {
+    const raw = fs.readFileSync(filePath, "utf8");
+    return JSON.parse(raw) as LocalConfig;
+  } catch {
+    process.stderr.write(`[warn] Could not read ${CONFIG_FILE} — using defaults\n`);
+    return {};
+  }
 }
 
 export function saveLocalConfig(config: LocalConfig): void {

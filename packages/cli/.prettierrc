@@ -4,4 +4,9 @@
   "printWidth": 100,
   "trailingComma": "all",
   "tabWidth": 2
+  "singleQuote": true,
+  "trailingComma": "all",
+  "printWidth": 100,
+  "tabWidth": 2,
+  "arrowParens": "always"
 }
