@@ -1,6 +1,11 @@
 src/
 tests/
 coverage/
+*.config.ts
+*.config.js
+.prettierrc
+.prettierignore
+tsconfig.json
 .prettierrc
 .prettierignore
 .eslintrc*
