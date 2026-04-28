@@ -9,3 +9,10 @@ export class NetworkError extends Error {
 export class InvalidInputError extends Error {
   constructor(msg: string) { super(msg); this.name = "InvalidInputError"; }
 }
+
+export class NonJsonResponseError extends Error {
+  constructor(status: number, preview: string) {
+    super(`HTTP ${status}: non-JSON response — ${preview}`);
+    this.name = "NonJsonResponseError";
+  }
+}
