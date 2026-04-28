@@ -28,7 +28,20 @@ async function request<T>(
     }
 
     if (res.status === 404) throw new NotFoundError(`Not found: ${url}`);
-    if (!res.ok) throw new NetworkError(`HTTP ${res.status}: ${url}`);
+    if (!res.ok) {
+      const contentType = res.headers.get("content-type") ?? "";
+      if (!contentType.includes("application/json")) {
+        const text = await res.text();
+        throw new NetworkError(`HTTP ${res.status}: non-JSON response — ${text.slice(0, 120)}`);
+      }
+      throw new NetworkError(`HTTP ${res.status}: ${url}`);
+    }
+
+    const contentType = res.headers.get("content-type") ?? "";
+    if (!contentType.includes("application/json")) {
+      const text = await res.text();
+      throw new NetworkError(`Expected JSON but got: ${text.slice(0, 120)}`);
+    }
 
     return res.json() as Promise<T>;
   } catch (err) {

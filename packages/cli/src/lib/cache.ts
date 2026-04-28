@@ -36,7 +36,12 @@ export function clearCache(): void {
 }
 
 export function setCache<T>(input: string, data: T): void {
-  fs.mkdirSync(CACHE_DIR, { recursive: true });
+  try {
+    fs.mkdirSync(CACHE_DIR, { recursive: true });
+  } catch {
+    process.stderr.write(`[warn] Could not create cache directory ${CACHE_DIR} — skipping cache\n`);
+    return;
+  }
   const file = path.join(CACHE_DIR, cacheKey(input) + ".json");
   fs.writeFileSync(file, JSON.stringify(data), "utf8");
 }
