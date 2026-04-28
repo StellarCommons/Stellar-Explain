@@ -1,0 +1,10 @@
+src/
+tests/
+coverage/
+.prettierrc
+.prettierignore
+.eslintrc*
+tsconfig.json
+vitest.config.ts
+*.test.ts
+*.spec.ts
