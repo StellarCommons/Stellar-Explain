@@ -58,9 +58,9 @@ pub fn explain_account_with_org_name(
 
     let summary = match (&home_domain, &org_name) {
         (Some(domain), Some(name)) => {
-            format!("{base_summary} Account operated by {} ({}).", name, domain)
+            format!("{base_summary} Account operated by {name} ({domain}).")
         }
-        (Some(domain), None) => format!("{base_summary} Home domain: {}.", domain),
+        (Some(domain), None) => format!("{base_summary} Home domain: {domain}."),
         (None, _) => base_summary,
     };
 
@@ -117,7 +117,7 @@ mod tests {
         for i in 0..extra_assets {
             balances.push(Balance {
                 asset_type: "credit_alphanum4".to_string(),
-                asset_code: Some(format!("ASSET{}", i)),
+                asset_code: Some(format!("ASSET{i}")),
                 asset_issuer: Some("GISSUER".to_string()),
                 balance: "10.0000000".to_string(),
             });

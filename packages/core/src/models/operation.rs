@@ -190,7 +190,7 @@ fn format_asset(
     match asset_type {
         Some("native") | None => "XLM (native)".to_string(),
         _ => match (asset_code, asset_issuer) {
-            (Some(code), Some(issuer)) => format!("{} ({})", code, issuer),
+            (Some(code), Some(issuer)) => format!("{code} ({issuer})"),
             (Some(code), None) => code.to_string(),
             _ => "Unknown".to_string(),
         },

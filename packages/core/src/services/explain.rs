@@ -29,10 +29,10 @@ pub fn map_transaction_to_domain(
 fn map_memo(memo_type: Option<&str>, memo_value: Option<&str>) -> Option<Memo> {
     match memo_type {
         None | Some("none") => None,
-        Some("text") => memo_value.and_then(|v| Memo::text(v)),
+        Some("text") => memo_value.and_then(Memo::text),
         Some("id") => memo_value.and_then(|v| v.parse::<u64>().ok()).map(Memo::id),
-        Some("hash") => memo_value.map(|v| Memo::hash(v)),
-        Some("return") => memo_value.map(|v| Memo::return_hash(v)),
+        Some("hash") => memo_value.map(Memo::hash),
+        Some("return") => memo_value.map(Memo::return_hash),
         Some(_) => None,
     }
 }

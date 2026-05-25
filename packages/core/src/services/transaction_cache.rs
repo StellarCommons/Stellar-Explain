@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
@@ -53,6 +53,7 @@ impl<T> CacheEntry<T> {
     }
 
     /// Get remaining time until expiration
+    #[allow(dead_code)]
     fn time_until_expiry(&self) -> Duration {
         self.ttl.saturating_sub(self.created_at.elapsed())
     }
@@ -475,7 +476,7 @@ mod tests {
 
         for network in networks {
             let key = CacheKey::new("same_hash".to_string(), network);
-            cache.insert(key, format!("{:?}", network));
+            cache.insert(key, format!("{network:?}"));
         }
 
         assert_eq!(cache.len(), 4);
@@ -487,8 +488,8 @@ mod tests {
 
         // Add many entries
         for i in 0..1000 {
-            let key = CacheKey::new(format!("tx_{}", i), Network::Public);
-            cache.insert(key, format!("value_{}", i));
+            let key = CacheKey::new(format!("tx_{i}"), Network::Public);
+            cache.insert(key, format!("value_{i}"));
         }
 
         assert_eq!(cache.len(), 1000);

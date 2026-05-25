@@ -34,7 +34,7 @@ pub fn explain_set_options(op: &SetOptionsOperation) -> SetOptionsExplanation {
 
     // Inflation destination
     if let Some(ref dest) = op.inflation_dest {
-        changes.push(format!("set inflation destination to {}", dest));
+        changes.push(format!("set inflation destination to {dest}"));
     }
 
     // Master key weight
@@ -42,19 +42,19 @@ pub fn explain_set_options(op: &SetOptionsOperation) -> SetOptionsExplanation {
         if weight == 0 {
             changes.push("disabled the master key".to_string());
         } else {
-            changes.push(format!("set master key weight to {}", weight));
+            changes.push(format!("set master key weight to {weight}"));
         }
     }
 
     // Thresholds
     if let Some(low) = op.low_threshold {
-        changes.push(format!("set low threshold to {}", low));
+        changes.push(format!("set low threshold to {low}"));
     }
     if let Some(med) = op.med_threshold {
-        changes.push(format!("set medium threshold to {}", med));
+        changes.push(format!("set medium threshold to {med}"));
     }
     if let Some(high) = op.high_threshold {
-        changes.push(format!("set high threshold to {}", high));
+        changes.push(format!("set high threshold to {high}"));
     }
 
     // Home domain
@@ -62,7 +62,7 @@ pub fn explain_set_options(op: &SetOptionsOperation) -> SetOptionsExplanation {
         if domain.is_empty() {
             changes.push("cleared the home domain".to_string());
         } else {
-            changes.push(format!("set home domain to {}", domain));
+            changes.push(format!("set home domain to {domain}"));
         }
     }
 
@@ -89,13 +89,13 @@ pub fn explain_set_options(op: &SetOptionsOperation) -> SetOptionsExplanation {
         let short_key = shorten_key(key);
         match op.signer_weight {
             Some(0) => {
-                changes.push(format!("removed signer {}", short_key));
+                changes.push(format!("removed signer {short_key}"));
             }
             Some(weight) => {
-                changes.push(format!("added signer {} with weight {}", short_key, weight));
+                changes.push(format!("added signer {short_key} with weight {weight}"));
             }
             None => {
-                changes.push(format!("modified signer {}", short_key));
+                changes.push(format!("modified signer {short_key}"));
             }
         }
     }
@@ -112,10 +112,7 @@ pub fn explain_set_options(op: &SetOptionsOperation) -> SetOptionsExplanation {
 /// Build the final summary string.
 fn build_summary(account: &str, changes: &[String]) -> String {
     if changes.is_empty() {
-        return format!(
-            "{} submitted a set_options operation with no recognised changes.",
-            account
-        );
+        return format!("{account} submitted a set_options operation with no recognised changes.");
     }
     format!(
         "{} updated their account: {}",

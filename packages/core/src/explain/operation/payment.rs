@@ -82,11 +82,10 @@ pub fn explain_payment_with_fee(
     let fee_note = if network_fees.is_high_fee(fee_charged) {
         let multiplier = fee_charged / network_fees.base_fee.max(1);
         Some(format!(
-            "Fee paid: {} XLM (above average — {}x base fee).",
-            xlm, multiplier
+            "Fee paid: {xlm} XLM (above average — {multiplier}x base fee)."
         ))
     } else {
-        Some(format!("Fee paid: {} XLM (standard).", xlm))
+        Some(format!("Fee paid: {xlm} XLM (standard)."))
     };
 
     PaymentExplanation {
@@ -105,7 +104,7 @@ fn format_asset(op: &PaymentOperation) -> String {
         _ => {
             if let Some(code) = &op.asset_code {
                 if let Some(issuer) = &op.asset_issuer {
-                    format!("{} ({})", code, issuer)
+                    format!("{code} ({issuer})")
                 } else {
                     code.clone()
                 }
@@ -122,7 +121,7 @@ fn format_account_for_summary(address: &str) -> String {
     }
 
     match resolve_label(address) {
-        Some(label) => format!("{} ({})", label, address),
+        Some(label) => format!("{label} ({address})"),
         None => address.to_string(),
     }
 }

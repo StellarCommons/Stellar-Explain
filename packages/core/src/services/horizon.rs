@@ -121,6 +121,7 @@ impl HorizonAccount {
 pub struct HorizonClient {
     client: Client,
     base_url: String,
+    #[allow(clippy::type_complexity)]
     toml_cache: Arc<RwLock<HashMap<String, (Option<String>, Instant)>>>,
 }
 
@@ -260,7 +261,7 @@ impl HorizonClient {
             self.base_url, address, limit, order
         );
         if let Some(c) = cursor {
-            url.push_str(&format!("&cursor={}", c));
+            url.push_str(&format!("&cursor={c}"));
         }
 
         let res = self
@@ -302,7 +303,7 @@ impl HorizonClient {
             }
         }
 
-        let toml_url = format!("{}/.well-known/stellar.toml", domain);
+        let toml_url = format!("{domain}/.well-known/stellar.toml");
         let res = self
             .client
             .get(&toml_url)
@@ -429,7 +430,7 @@ struct HorizonEmbeddedAccountTransactions {
 
 fn extract_cursor(href: Option<&str>) -> Option<String> {
     let href = href?;
-    let cursor_param = href.split('&').find(|p| p.starts_with("cursor="))?;
+    let cursor_param = href.split(['?', '&']).find(|p| p.starts_with("cursor="))?;
     Some(cursor_param.trim_start_matches("cursor=").to_string())
 }
 

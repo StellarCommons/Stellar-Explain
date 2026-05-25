@@ -31,14 +31,10 @@ pub fn explain_memo(memo: &Memo) -> Option<String> {
     match memo {
         Memo::None => None,
 
-        Memo::Text(text) => Some(format!(
-            "This transaction includes a text memo: \"{}\"",
-            text
-        )),
+        Memo::Text(text) => Some(format!("This transaction includes a text memo: \"{text}\"")),
 
         Memo::Id(id) => Some(format!(
-            "This transaction includes an ID memo: {}. This is typically used as a reference number, customer ID, or invoice number.",
-            id
+            "This transaction includes an ID memo: {id}. This is typically used as a reference number, customer ID, or invoice number."
         )),
 
         Memo::Hash(hash) => Some(format!(
