@@ -23,3 +23,20 @@ export function resolveBaseUrl(flagUrl?: string): string {
   warnIfInsecure(url);
   return url;
 }
+
+export function validateUrl(url: string): string {
+  try {
+    new URL(url);
+  } catch {
+    throw new Error(`Invalid URL: ${url}`);
+  }
+  return url;
+}
+
+export function loadConfig(url?: string): { baseUrl: string } {
+  return { baseUrl: resolveBaseUrl(url) };
+}
+
+export function buildUrl(base: string, path: string): string {
+  return base.replace(/\/$/, "") + "/" + path.replace(/^\//, "");
+}
