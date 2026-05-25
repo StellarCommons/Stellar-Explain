@@ -23,8 +23,8 @@ function fetchLatestVersion(): Promise<string> {
 
 function isNewer(latest: string, current: string): boolean {
   const parse = (v: string) => v.replace(/^v/, "").split(".").map(Number);
-  const [lMaj, lMin, lPat] = parse(latest);
-  const [cMaj, cMin, cPat] = parse(current);
+  const [lMaj = 0, lMin = 0, lPat = 0] = parse(latest);
+  const [cMaj = 0, cMin = 0, cPat = 0] = parse(current);
   if (lMaj !== cMaj) return lMaj > cMaj;
   if (lMin !== cMin) return lMin > cMin;
   return lPat > cPat;
