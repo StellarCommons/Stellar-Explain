@@ -1,6 +1,7 @@
 "use client";
 
 import { AppShellContext, AppShellContextValue } from "./AppShellContext";
+import StarLogo from "@/components/StarLogo";
 
 
 interface Props {
@@ -60,18 +61,7 @@ export default function AppShell({ children }: Props) {
             }}
           >
             <div className="w-7 h-7 rounded-lg bg-sky-400/10 border border-sky-400/30 flex items-center justify-center">
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                className="text-sky-400"
-              >
-                <circle cx="12" cy="12" r="3" />
-                <path d="M12 2v3m0 14v3M2 12h3m14 0h3m-3.5-6.5-2 2m-9 9-2 2m0-13 2 2m9 9 2 2" />
-              </svg>
+              <StarLogo size={14} />
             </div>
             <span
               className="text-base font-semibold tracking-tight text-white/90"

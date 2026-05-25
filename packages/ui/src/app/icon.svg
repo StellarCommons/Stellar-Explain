@@ -1,0 +1,133 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <defs>
+
+    <!-- ── Backgrounds ─────────────────────────────────────── -->
+    <radialGradient id="bg" cx="50%" cy="35%" r="70%">
+      <stop offset="0%"   stop-color="#0e1621"/>
+      <stop offset="100%" stop-color="#080c12"/>
+    </radialGradient>
+
+    <!-- ── Star fill: white-hot core → sky-blue arms ─────── -->
+    <radialGradient id="starFill" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#ffffff"/>
+      <stop offset="18%"  stop-color="#e0f2fe"/>
+      <stop offset="52%"  stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#0ea5e9" stop-opacity="0.15"/>
+    </radialGradient>
+
+    <!-- ── Core bloom ──────────────────────────────────────── -->
+    <radialGradient id="coreFill" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#ffffff"/>
+      <stop offset="55%"  stop-color="#bae6fd" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#38bdf8"  stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- ── Filters ─────────────────────────────────────────── -->
+    <!-- Wide diffuse halo behind the star -->
+    <filter id="halo" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="2.2"/>
+    </filter>
+
+    <!-- Tighter bloom around the core -->
+    <filter id="bloom" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="0.9"/>
+    </filter>
+
+    <!-- Very wide ambient cloud -->
+    <filter id="ambient" x="-150%" y="-150%" width="400%" height="400%">
+      <feGaussianBlur stdDeviation="4"/>
+    </filter>
+
+    <!-- Glow-merge: blurred + sharp composite -->
+    <filter id="glowMerge" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="1.4" result="blurred"/>
+      <feMerge>
+        <feMergeNode in="blurred"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+  </defs>
+
+  <!-- ════════════════════════════════════════════════════════
+       LAYER 1 — Background
+       ════════════════════════════════════════════════════════ -->
+  <rect width="32" height="32" rx="7" fill="url(#bg)"/>
+
+  <!-- ════════════════════════════════════════════════════════
+       LAYER 2 — Ambient blue cloud (deepest glow)
+       ════════════════════════════════════════════════════════ -->
+  <circle cx="16" cy="16" r="7" fill="#38bdf8" opacity="0.11" filter="url(#ambient)"/>
+
+  <!-- ════════════════════════════════════════════════════════
+       LAYER 3 — Star halo  (blurred copy, creates the bloom)
+       Outer R=11.5, Inner R=3.0  →  sharp Stellar 4-point star
+       Inner-point coords at 45°: 3×0.7071 ≈ 2.12
+       ════════════════════════════════════════════════════════ -->
+  <path
+    d="M16 4.5
+       L18.12 13.88
+       L27.5 16
+       L18.12 18.12
+       L16 27.5
+       L13.88 18.12
+       L4.5 16
+       L13.88 13.88 Z"
+    fill="#38bdf8"
+    opacity="0.42"
+    filter="url(#halo)"
+  />
+
+  <!-- ════════════════════════════════════════════════════════
+       LAYER 4 — Main star body  (sharp, gradient-filled)
+       ════════════════════════════════════════════════════════ -->
+  <path
+    d="M16 4.5
+       L18.12 13.88
+       L27.5 16
+       L18.12 18.12
+       L16 27.5
+       L13.88 18.12
+       L4.5 16
+       L13.88 13.88 Z"
+    fill="url(#starFill)"
+    filter="url(#glowMerge)"
+  />
+
+  <!-- ════════════════════════════════════════════════════════
+       LAYER 5 — Core bloom  (soft radial on top of star)
+       ════════════════════════════════════════════════════════ -->
+  <circle cx="16" cy="16" r="4.2" fill="url(#coreFill)" filter="url(#bloom)"/>
+
+  <!-- ════════════════════════════════════════════════════════
+       LAYER 6 — Bright centre dot  (the "point source")
+       ════════════════════════════════════════════════════════ -->
+  <circle cx="16" cy="16" r="1.5" fill="#ffffff" opacity="0.96"/>
+
+  <!-- ════════════════════════════════════════════════════════
+       LAYER 7 — Subtle dashed orbit ring
+       ════════════════════════════════════════════════════════ -->
+  <circle
+    cx="16" cy="16" r="11"
+    stroke="#38bdf8"
+    stroke-width="0.3"
+    stroke-dasharray="2 3.5"
+    opacity="0.22"
+  />
+
+  <!-- ════════════════════════════════════════════════════════
+       LAYER 8 — Constellation accent dots
+       ════════════════════════════════════════════════════════ -->
+  <!-- Corner anchors -->
+  <circle cx="6.5"  cy="6.5"  r="0.75" fill="#7dd3fc" opacity="0.72"/>
+  <circle cx="25.5" cy="6.5"  r="0.50" fill="#7dd3fc" opacity="0.50"/>
+  <circle cx="25.5" cy="25.5" r="0.75" fill="#7dd3fc" opacity="0.72"/>
+  <circle cx="6.5"  cy="25.5" r="0.50" fill="#7dd3fc" opacity="0.50"/>
+
+  <!-- Floating micro-stars between ring and corners -->
+  <circle cx="10"   cy="4.2"  r="0.40" fill="#bae6fd" opacity="0.60"/>
+  <circle cx="27.8" cy="11"   r="0.35" fill="#bae6fd" opacity="0.50"/>
+  <circle cx="22"   cy="27.8" r="0.40" fill="#bae6fd" opacity="0.60"/>
+  <circle cx="4.2"  cy="21"   r="0.35" fill="#bae6fd" opacity="0.50"/>
+
+</svg>
