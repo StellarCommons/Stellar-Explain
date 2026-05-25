@@ -13,7 +13,9 @@ function mockFetchResponse(status: number, body: unknown) {
     Promise.resolve({
       status,
       ok: status >= 200 && status < 300,
+      headers: { get: (_name: string) => "application/json" },
       json: () => Promise.resolve(body),
+      text: () => Promise.resolve(JSON.stringify(body)),
     }),
   );
 }

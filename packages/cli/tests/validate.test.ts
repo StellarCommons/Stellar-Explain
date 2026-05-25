@@ -1,13 +1,13 @@
 import {
   isValidStellarAddress,
   isValidTransactionHash,
-} from '../../src/lib/validate';
+} from '../src/lib/validate';
 
 describe('validate helpers', () => {
   describe('isValidTransactionHash', () => {
     it('returns true for valid transaction hash', () => {
       const hash =
-        'a3f5c2b9d8e1f4a6b7c8d9e0f123456789abcdef123456789abcdef12345678';
+        'a3f5c2b9d8e1f4a6b7c8d9e0f123456789abcdef123456789abcdef123456789';
 
       expect(isValidTransactionHash(hash)).toBe(true);
     });
