@@ -37,11 +37,11 @@ _${bin}() {
     '--url[API base URL]:url:' \\
     '--json[Output raw JSON]' \\
     '1: :->command'
-  case \$state in
+  case $state in
     command) _describe 'command' commands ;;
   esac
 }
-_${bin} "\$@"
+_${bin} "$@"
 `.trim();
 }
 
