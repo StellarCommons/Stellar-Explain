@@ -13,13 +13,6 @@ jobs:
   release:
     name: Release SDK
     runs-on: ubuntu-latest
-    # Only run when packages/sdk exists. The directory is not yet in the repo;
-    # this guard prevents the job from crashing with "No such file or directory"
-    # until the SDK package is added.
-    if: hashFiles('packages/sdk/package.json') != ''
-    # The changesets/action below will either open a "Version Packages" PR
-    # (if unreleased changesets exist) or publish to npm (if the version PR
-    # was just merged and there are no pending changesets).
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -27,21 +20,39 @@ jobs:
           # Full history is required so changesets can diff tags correctly.
           fetch-depth: 0
 
+      # Gate all subsequent steps on packages/sdk existing.
+      # The SDK package has not been scaffolded yet; this prevents the job
+      # from crashing with "No such file or directory" on every push to main.
+      # Once packages/sdk/package.json is added, all steps below will run.
+      - name: Check if SDK package exists
+        id: sdk-check
+        run: |
+          if [ -f packages/sdk/package.json ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "packages/sdk not found — skipping SDK release"
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Setup Node
+        if: steps.sdk-check.outputs.exists == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 20
           registry-url: "https://registry.npmjs.org"
 
       - name: Install SDK dependencies
+        if: steps.sdk-check.outputs.exists == 'true'
         run: npm ci
         working-directory: packages/sdk
 
       - name: Build SDK
+        if: steps.sdk-check.outputs.exists == 'true'
         run: npm run build
         working-directory: packages/sdk
 
       - name: Create Release PR or Publish to npm
+        if: steps.sdk-check.outputs.exists == 'true'
         uses: changesets/action@v1
         with:
           # Command that changesets/action calls when it decides to publish.
