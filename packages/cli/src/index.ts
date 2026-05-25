@@ -9,7 +9,7 @@ import { registerBatch } from "./commands/batch.js";
 import { InvalidInputError } from "./lib/errors.js";
 
 // #99 — Node version check
-const [major] = process.version.replace("v", "").split(".").map(Number);
+const [major = 0] = process.version.replace("v", "").split(".").map(Number);
 if (major < 18) {
   process.stderr.write(`Error: Node.js 18 or higher is required (found ${process.version}).\n`);
   process.exit(1);

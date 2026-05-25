@@ -1,14 +1,16 @@
-'use client";';
+'use client';
+import Footer from '@/components/landing/Footer';
 import HeroSection from '@/components/landing/HeroSection';
 import HowItWorksSection from '@/components/landing/HowItWorksSection';
 import Navbar from '@/components/landing/Navbar';
+import OpenSourceSection from '@/components/landing/OpenSourceSection';
 import UseCasesSection from '@/components/landing/UseCasesSection';
 import WhatWeDecodeSection from '@/components/landing/WhatWeDecodeSection';
 
 export default function LandingPage() {
   return (
     <div
-      className="min-h-screen bg-[#080c12] text-white overflow-x-hidden"
+      className="min-h-screen bg-[#080c12] text-white overflow-x-clip"
       style={{ fontFamily: "'IBM Plex Sans', system-ui, sans-serif" }}
     >
       {/* ── Background layers ── */}
@@ -48,6 +50,8 @@ export default function LandingPage() {
       <HowItWorksSection />
       <WhatWeDecodeSection />
       <UseCasesSection />
+      <OpenSourceSection />
+      <Footer />
     </div>
   );
 }

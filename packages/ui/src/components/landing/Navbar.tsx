@@ -3,7 +3,8 @@ import React from 'react'
 
 function Navbar() {
   return (
-     <nav className="relative z-20 flex items-center justify-between px-6 sm:px-10 py-5 max-w-6xl mx-auto">
+     <nav className="sticky top-0 z-50 w-full bg-[#080c12]/95 backdrop-blur-sm border-b border-white/5">
+      <div className="flex items-center justify-between px-6 sm:px-10 py-5 max-w-6xl mx-auto">
         <div className="flex items-center gap-2.5">
           <div className="w-7 h-7 rounded-lg bg-sky-400/10 border border-sky-400/30 flex items-center justify-center">
             <svg
@@ -46,6 +47,7 @@ function Navbar() {
             Open App →
           </Link>
         </div>
+      </div>
       </nav>
   )
 }
