@@ -207,7 +207,7 @@ pub async fn get_account_explanation(
         let domain_url = if domain.starts_with("http") {
             domain.clone()
         } else {
-            format!("https://{}", domain)
+            format!("https://{domain}")
         };
         horizon_client
             .fetch_stellar_toml_org_name(&domain_url)

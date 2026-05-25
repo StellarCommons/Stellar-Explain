@@ -53,6 +53,7 @@ impl<T> CacheEntry<T> {
     }
 
     /// Get remaining time until expiration
+    #[allow(dead_code)]
     fn time_until_expiry(&self) -> Duration {
         self.ttl.saturating_sub(self.created_at.elapsed())
     }
@@ -105,10 +106,10 @@ impl<T: Clone> TransactionCache<T> {
         // First, check with read lock (fast path)
         {
             let cache = self.cache.read().unwrap();
-            if let Some(entry) = cache.get(key)
-                && !entry.is_expired()
-            {
-                return Some(entry.value.clone());
+            if let Some(entry) = cache.get(key) {
+                if !entry.is_expired() {
+                    return Some(entry.value.clone());
+                }
             }
         }
 
@@ -475,7 +476,7 @@ mod tests {
 
         for network in networks {
             let key = CacheKey::new("same_hash".to_string(), network);
-            cache.insert(key, format!("{:?}", network));
+            cache.insert(key, format!("{network:?}"));
         }
 
         assert_eq!(cache.len(), 4);
@@ -487,8 +488,8 @@ mod tests {
 
         // Add many entries
         for i in 0..1000 {
-            let key = CacheKey::new(format!("tx_{}", i), Network::Public);
-            cache.insert(key, format!("value_{}", i));
+            let key = CacheKey::new(format!("tx_{i}"), Network::Public);
+            cache.insert(key, format!("value_{i}"));
         }
 
         assert_eq!(cache.len(), 1000);

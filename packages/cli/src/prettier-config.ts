@@ -3,8 +3,6 @@
  * Issue #332 — Add Prettier config to the CLI package.
  */
 
-import fs from "fs";
-import path from "path";
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -14,28 +12,7 @@ interface PrettierConfig {
   printWidth: number;
   trailingComma: string;
   tabWidth: number;
-}
-
-const EXPECTED: PrettierConfig = {
-  semi: true,
-  singleQuote: false,
-  printWidth: 100,
-  trailingComma: "all",
-  tabWidth: 2,
-};
-
-export function loadPrettierConfig(root: string): PrettierConfig | null {
-  const configPath = path.join(root, ".prettierrc");
-  if (!fs.existsSync(configPath)) return null;
-  try {
-    return JSON.parse(fs.readFileSync(configPath, "utf-8")) as PrettierConfig;
-  } catch {
-    return null;
-  }
-  trailingComma: string;
-  printWidth: number;
-  tabWidth: number;
-  arrowParens: string;
+  arrowParens?: string;
 }
 
 const DEFAULTS: PrettierConfig = {
@@ -45,6 +22,14 @@ const DEFAULTS: PrettierConfig = {
   printWidth: 100,
   tabWidth: 2,
   arrowParens: 'always',
+};
+
+const EXPECTED: PrettierConfig = {
+  semi: true,
+  singleQuote: false,
+  printWidth: 100,
+  trailingComma: 'all',
+  tabWidth: 2,
 };
 
 export function loadPrettierConfig(packageDir: string): PrettierConfig {
@@ -63,6 +48,7 @@ export function validatePrettierConfig(config: PrettierConfig): string[] {
     if (actual !== expected) {
       errors.push(`"${key}": expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
     }
+  }
   if (config.printWidth < 40 || config.printWidth > 200) {
     errors.push(`printWidth ${config.printWidth} is out of range [40, 200]`);
   }
@@ -77,16 +63,14 @@ export function validatePrettierConfig(config: PrettierConfig): string[] {
 
 export function checkPrettierSetup(root: string): void {
   const config = loadPrettierConfig(root);
-  if (!config) {
-    console.error("Missing .prettierrc in", root);
-    process.exit(1);
-  }
   const errors = validatePrettierConfig(config);
   if (errors.length > 0) {
-    console.error("Prettier config mismatch:\n" + errors.join("\n"));
+    console.error('Prettier config mismatch:\n' + errors.join('\n'));
     process.exit(1);
   }
-  console.log("Prettier config OK");
+  console.log('Prettier config OK');
+}
+
 export function describePrettierConfig(config: PrettierConfig): string {
   const parts = [
     `printWidth=${config.printWidth}`,

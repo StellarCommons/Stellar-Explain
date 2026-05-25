@@ -85,10 +85,8 @@ pub fn explain_clawback_claimable_balance(
 
     let short_id = shorten_id(&op.balance_id);
 
-    let summary = format!(
-        "The asset issuer clawed back claimable balance {}. {}",
-        short_id, CLAWBACK_CONTEXT
-    );
+    let summary =
+        format!("The asset issuer clawed back claimable balance {short_id}. {CLAWBACK_CONTEXT}");
 
     ClawbackClaimableBalanceExplanation {
         summary,

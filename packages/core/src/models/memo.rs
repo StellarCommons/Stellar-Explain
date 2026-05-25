@@ -173,10 +173,10 @@ impl std::fmt::Display for Memo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Memo::None => write!(f, "No memo"),
-            Memo::Text(text) => write!(f, "Text: {}", text),
-            Memo::Id(id) => write!(f, "ID: {}", id),
-            Memo::Hash(hash) => write!(f, "Hash: {}", hash),
-            Memo::Return(hash) => write!(f, "Return: {}", hash),
+            Memo::Text(text) => write!(f, "Text: {text}"),
+            Memo::Id(id) => write!(f, "ID: {id}"),
+            Memo::Hash(hash) => write!(f, "Hash: {hash}"),
+            Memo::Return(hash) => write!(f, "Return: {hash}"),
         }
     }
 }
