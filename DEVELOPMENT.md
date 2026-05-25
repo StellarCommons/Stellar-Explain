@@ -1,191 +1,141 @@
-# Stellar Explain — Local Development Guide
-
-This guide walks you through running the full Stellar Explain stack locally:
-the Rust backend and the Next.js frontend, connected and working together.
+# Stellar Explain — Development Guide
 
 ---
 
 ## Architecture
 
 ```
-Browser → Next.js (localhost:3000) → Rust Backend (localhost:4000) → Stellar Horizon API
+Browser → Next.js (localhost:3000) → Rust Backend → Stellar Horizon API
+                                     (Render or local)
 ```
 
 The browser never talks directly to the Rust backend. All API calls go through
-Next.js proxy routes (`/api/*`) which forward them to the backend server-side.
+Next.js proxy routes (`/api/*`) which forward them server-side.
 
 ---
 
-## Prerequisites
+## Quick Start — Use the Hosted Backend (Recommended)
 
-Before you start, make sure you have the following installed:
+The Rust backend is already deployed on Render. Frontend and CLI contributors
+don't need Rust installed at all.
+
+| Endpoint | URL |
+|----------|-----|
+| Health | `GET https://stellar-explain-core.onrender.com/health` |
+| Transaction | `GET https://stellar-explain-core.onrender.com/tx/:hash` |
+| Account | `GET https://stellar-explain-core.onrender.com/account/:address` |
+
+### Step 1 — Clone and install
+
+```bash
+git clone https://github.com/StellarCommons/Stellar-Explain.git
+cd Stellar-Explain
+npm install       # from monorepo root
+```
+
+### Step 2 — Configure the frontend
+
+Create `packages/ui/.env.local`:
+```
+# Points to the deployed Render backend — server-side only, never exposed to the browser
+API_URL=https://stellar-explain-core.onrender.com
+```
+
+### Step 3 — Start the frontend
+
+```bash
+cd packages/ui
+npm run dev
+```
+
+Open http://localhost:3000 — it proxies all API calls to the Render backend automatically.
+
+### Step 4 — Verify
+
+```bash
+# Through the Next.js proxy
+curl http://localhost:3000/api/health
+
+# Direct backend smoke-test
+curl https://stellar-explain-core.onrender.com/tx/b9d0b2292c4e09e8eb22d036171491e87b8d2086bf8b265874c8d182cb9c9020
+```
+
+---
+
+## Local Rust Backend (Backend Contributors)
+
+Only needed if you're working on `packages/core`.
+
+### Prerequisites
 
 | Tool | Minimum Version | Install |
 |------|----------------|---------|
-| Rust | 1.75+ | https://rustup.rs |
+| Rust | 1.88+ | https://rustup.rs |
 | Node.js | 18+ | https://nodejs.org |
 | npm | 9+ | Comes with Node.js |
-| Git | Any | https://git-scm.com |
 
-Verify your versions:
 ```bash
-rustc --version
-node --version
-npm --version
+rustc --version   # should be 1.88+
+rustup update     # upgrade if needed
 ```
 
----
+### Step 1 — Create the backend env file
 
-## Running the Rust Backend
-
-### Step 1 — Navigate to the core package
-```bash
-cd packages/core
-```
-
-### Step 2 — Create your environment file
-
-Copy the example env file:
-```bash
-cp .env.example .env
-```
-
-Or create `.env` manually with these contents:
+Create `packages/core/.env`:
 ```
 STELLAR_NETWORK=testnet
 HORIZON_URL=https://horizon-testnet.stellar.org
 CORS_ORIGIN=http://localhost:3000
 ```
 
-| Variable | Description |
-|----------|-------------|
-| `STELLAR_NETWORK` | Which network to use — `testnet` or `public` |
-| `HORIZON_URL` | The Horizon API endpoint for the chosen network |
-| `CORS_ORIGIN` | The frontend URL allowed to make requests to the backend |
+### Step 2 — Start the backend
 
-### Step 3 — Start the backend
 ```bash
+cd packages/core
 cargo run
 ```
 
-The first run will compile all dependencies — this takes about 60 seconds.
-Subsequent runs are much faster.
-
-You should see:
+First compile takes ~60 seconds; subsequent runs are fast. You'll see:
 ```
 Allowing CORS from: http://localhost:3000
 Using Horizon URL: https://horizon-testnet.stellar.org
 Stellar Explain backend running on 0.0.0.0:4000
 ```
 
-### Step 4 — Verify the backend is running
+### Step 3 — Verify the backend
 
-Open a new terminal and run:
 ```bash
 curl http://localhost:4000/health
-```
-Expected response: `ok`
-
-### Step 5 — Test a real transaction
-
-Use this known testnet transaction hash to confirm the full pipeline works:
-```bash
 curl http://localhost:4000/tx/b9d0b2292c4e09e8eb22d036171491e87b8d2086bf8b265874c8d182cb9c9020
 ```
 
-Expected: a JSON response with `transaction_hash`, `successful`, `summary`,
-and `payment_explanations`. If you see this, your backend is fully working.
+### Step 4 — Point the frontend at local backend
 
----
-
-## Running the Next.js Frontend
-
-> Make sure the Rust backend is already running before starting this step.
-
-### Step 1 — Navigate to the ui package
-```bash
-cd packages/ui
+Update `packages/ui/.env.local`:
 ```
-
-### Step 2 — Install dependencies
-```bash
-npm install
-```
-
-### Step 3 — Create your environment file
-
-Create `.env.local` in `packages/ui/` with these contents:
-```
-# URL of the Rust backend — server-side only, never exposed to the browser
 API_URL=http://localhost:4000
 ```
 
-> Note: This variable is `API_URL` not `NEXT_PUBLIC_API_URL` — it is intentionally
-> server-side only. The browser never sees the backend URL directly.
-
-### Step 4 — Start the frontend
+Then start the frontend (`npm run dev` in `packages/ui`) and verify the proxy:
 ```bash
-npm run dev
-```
-
-You should see:
-```
-▲ Next.js 15.x.x
-- Local: http://localhost:3000
-```
-
-### Step 5 — Verify the proxy is working
-
-Test that the Next.js proxy routes are forwarding requests to the backend:
-
-```bash
-# Health check through the proxy
 curl http://localhost:3000/api/health
-
-# Transaction explanation through the proxy
-curl http://localhost:3000/api/tx/b9d0b2292c4e09e8eb22d036171491e87b8d2086bf8b265874c8d182cb9c9020
 ```
-
-Both should return the same responses as the direct backend calls.
-If they do, the full stack is connected. ✅
 
 ---
 
-## Running Both at Once (docker-compose)
-
-If you have Docker installed, you can run the entire stack with one command
-from the monorepo root:
+## CLI
 
 ```bash
-docker-compose up --build
+cd packages/cli
+npm install
+npm run build
+
+# Point at Render backend
+./bin/stellar-explain tx b9d0b2292c4e09e8eb22d036171491e87b8d2086bf8b265874c8d182cb9c9020
+
+# Or point at local backend
+./bin/stellar-explain --url http://localhost:4000 tx <hash>
 ```
-
-- Frontend: http://localhost:3000
-- Backend: http://localhost:4000
-
-See `docker-compose.yml` for configuration details.
-
-> docker-compose support is tracked in INT #4.
-> If that issue hasn't been merged yet, use the manual steps above.
-
----
-
-## Verifying Your Full Setup
-
-Once both services are running, open your browser and navigate to:
-```
-http://localhost:3000
-```
-
-Paste this testnet transaction hash into the search bar:
-```
-b9d0b2292c4e09e8eb22d036171491e87b8d2086bf8b265874c8d182cb9c9020
-```
-
-You should see a human-readable explanation of the transaction.
-
-To confirm the browser is using the proxy correctly, open DevTools → Network tab
-and verify all requests show `localhost:3000` — not `localhost:4000`.
 
 ---
 
@@ -203,47 +153,60 @@ packages/
 │   │   ├── config/                # Network configuration
 │   │   └── errors.rs              # Structured error types
 │   ├── Cargo.toml
+│   ├── Dockerfile                 # Multi-stage: rust:1.88-alpine → alpine:3.22
 │   └── .env                       # Local env (not committed)
 │
-└── ui/                            # Next.js frontend
+├── ui/                            # Next.js 15 frontend
+│   ├── src/
+│   │   ├── app/
+│   │   │   ├── api/               # Proxy routes → Rust backend (server-side)
+│   │   │   │   ├── tx/[hash]/
+│   │   │   │   ├── account/[address]/
+│   │   │   │   └── health/
+│   │   │   ├── tx/[hash]/         # Transaction explanation page
+│   │   │   └── page.tsx           # Landing page
+│   │   └── lib/
+│   │       └── api.ts             # Typed API client
+│   ├── package.json
+│   └── .env.local                 # API_URL (not committed)
+│
+└── cli/                           # Node.js CLI
     ├── src/
-    │   ├── app/
-    │   │   ├── api/               # Proxy routes to Rust backend
-    │   │   │   ├── tx/[hash]/     # GET /api/tx/:hash
-    │   │   │   ├── account/[address]/ # GET /api/account/:address
-    │   │   │   └── health/        # GET /api/health
-    │   │   ├── tx/[hash]/         # Transaction explanation page
-    │   │   └── page.tsx           # Homepage
-    │   └── lib/
-    │       └── api.ts             # Typed API client
-    ├── package.json
-    └── .env.local                 # Local env (not committed)
+    │   ├── commands/              # tx, account, health
+    │   └── lib/                   # client, config, errors, validate
+    └── tests/
 ```
+
+---
+
+## Deployment
+
+The backend is deployed via **Render Blueprint** (`render.yaml` at repo root).
+
+- Runtime: Docker (`packages/core/Dockerfile`)
+- Rust version: 1.88 (required for let-chains)
+- Keep-alive: GitHub Actions cron every 5 min (`.github/workflows/keep-alive.yml`)
+- Health check: `GET /health`
 
 ---
 
 ## Troubleshooting
 
-**CORS errors in the browser console**
-- Make sure `CORS_ORIGIN=http://localhost:3000` is set in `packages/core/.env`
-- Restart the Rust backend after changing `.env`
-- Confirm the backend is running: `curl http://localhost:4000/health`
+**Frontend showing 502 / connection refused**
+- If using Render backend: check https://stellar-explain-core.onrender.com/health — it may be cold-starting (takes ~30s)
+- If using local backend: make sure `cargo run` is running in `packages/core`
 
-**Frontend showing 502 Bad Gateway**
-- The Rust backend is not running
-- Start it with `cargo run` in `packages/core`
+**CORS errors in browser console**
+- Make sure `CORS_ORIGIN` in `packages/core/.env` matches the frontend URL exactly
+- Restart the Rust backend after changing `.env`
 
 **`cargo run` fails to compile**
-- Make sure your Rust version is 1.75+: `rustc --version`
-- Run `rustup update` to get the latest stable version
+- Rust 1.88+ is required: `rustc --version`
+- Upgrade with: `rustup update`
 
 **`npm run dev` fails**
-- Make sure Node.js is 18+: `node --version`
-- Delete `node_modules` and reinstall: `rm -rf node_modules && npm install`
-
-**Transaction returns empty or unexpected data**
-- You may be on the wrong network — check `STELLAR_NETWORK` in your `.env`
-- The testnet hash above only works on testnet
+- Node.js 18+ required: `node --version`
+- Reinstall: `rm -rf node_modules && npm install`
 
 ---
 
@@ -254,4 +217,4 @@ packages/
 3. Make your changes and test locally using this guide
 4. Open a pull request from your fork into `StellarCommons/Stellar-Explain`
 
-For available issues to work on, see the project's issue tracker.
+For available issues, see the project's issue tracker.
