@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: stellar-explain-core
+    runtime: docker
+    dockerfilePath: packages/core/Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: STELLAR_NETWORK
+        value: testnet
+      - key: HORIZON_URL
+        value: https://horizon-testnet.stellar.org
+      - key: CORS_ORIGIN
+        value: https://stellar-explain.vercel.app
+      - key: RUST_LOG
+        value: info
