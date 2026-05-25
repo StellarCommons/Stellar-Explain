@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import "./globals.css";
+import NetworkStatusBanner from "@/components/NetworkStatusBanner";
+// import NetworkStatusBanner from "@/components/NetworkStatusBanner";
 
 const ibmPlexMono = IBM_Plex_Mono({
   variable: "--font-mono",
@@ -26,7 +28,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${ibmPlexMono.variable} ${ibmPlexSans.variable} antialiased`}>
+      <body
+        className={`${ibmPlexMono.variable} ${ibmPlexSans.variable} antialiased`}
+        suppressHydrationWarning
+      >
+        {" "}
+        <NetworkStatusBanner />
         {children}
       </body>
     </html>

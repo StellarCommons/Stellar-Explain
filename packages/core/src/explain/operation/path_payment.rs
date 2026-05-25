@@ -15,13 +15,20 @@ pub struct PathPaymentExplanation {
 }
 
 pub fn explain_path_payment(op: &PathPaymentOperation) -> PathPaymentExplanation {
-    let sender = op.source_account.clone().unwrap_or_else(|| "Unknown".to_string());
+    let sender = op
+        .source_account
+        .clone()
+        .unwrap_or_else(|| "Unknown".to_string());
 
     let path_description = if op.path.is_empty() {
         None
     } else {
         let n = op.path.len();
-        Some(format!("via {} intermediate asset{}", n, if n == 1 { "" } else { "s" }))
+        Some(format!(
+            "via {} intermediate asset{}",
+            n,
+            if n == 1 { "" } else { "s" }
+        ))
     };
 
     let conversion = if op.send_asset == op.dest_asset {
@@ -100,7 +107,10 @@ mod tests {
         };
         let result = explain_path_payment(&op);
         assert!(result.summary.contains("converted to 45 USDC (GISSUER)"));
-        assert_eq!(result.path_description, Some("via 1 intermediate asset".to_string()));
+        assert_eq!(
+            result.path_description,
+            Some("via 1 intermediate asset".to_string())
+        );
     }
 
     #[test]
@@ -114,14 +124,19 @@ mod tests {
         };
         let result = explain_path_payment(&op);
         assert!(result.summary.contains("via 2 intermediate assets"));
-        assert_eq!(result.path_description, Some("via 2 intermediate assets".to_string()));
+        assert_eq!(
+            result.path_description,
+            Some("via 2 intermediate assets".to_string())
+        );
     }
 
     #[test]
     fn test_strict_send() {
         let result = explain_path_payment(&base_op());
         assert_eq!(result.payment_type, "strict_send");
-        assert!(result.summary.contains("GAAAA sent 50 XLM (native) which was converted to 45 USDC (GISSUER) received by GBBB"));
+        assert!(result.summary.contains(
+            "GAAAA sent 50 XLM (native) which was converted to 45 USDC (GISSUER) received by GBBB"
+        ));
     }
 
     #[test]

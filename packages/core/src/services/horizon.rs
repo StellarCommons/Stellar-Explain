@@ -5,8 +5,8 @@ use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
 use crate::errors::HorizonError;
-use crate::models::fee::FeeStats;
 use crate::models::account::{Account, AccountFlags, Balance};
+use crate::models::fee::FeeStats;
 
 // ── Horizon response structs ───────────────────────────────────────────────
 
@@ -106,7 +106,11 @@ impl HorizonAccount {
                 auth_immutable: self.flags.auth_immutable,
                 auth_clawback_enabled: self.flags.auth_clawback_enabled,
             },
-            home_domain: if self.home_domain.is_empty() { None } else { Some(self.home_domain) },
+            home_domain: if self.home_domain.is_empty() {
+                None
+            } else {
+                Some(self.home_domain)
+            },
         }
     }
 }
@@ -129,10 +133,7 @@ impl HorizonClient {
         }
     }
 
-    pub async fn fetch_transaction(
-        &self,
-        hash: &str,
-    ) -> Result<HorizonTransaction, HorizonError> {
+    pub async fn fetch_transaction(&self, hash: &str) -> Result<HorizonTransaction, HorizonError> {
         let url = format!("{}/transactions/{}", self.base_url, hash);
 
         let res = self
@@ -246,7 +247,14 @@ impl HorizonClient {
         limit: u32,
         cursor: Option<&str>,
         order: &str,
-    ) -> Result<(Vec<HorizonAccountTransaction>, Option<String>, Option<String>), HorizonError> {
+    ) -> Result<
+        (
+            Vec<HorizonAccountTransaction>,
+            Option<String>,
+            Option<String>,
+        ),
+        HorizonError,
+    > {
         let mut url = format!(
             "{}/accounts/{}/transactions?limit={}&order={}",
             self.base_url, address, limit, order
@@ -269,12 +277,10 @@ impl HorizonClient {
                     .await
                     .map_err(|_| HorizonError::InvalidResponse)?;
 
-                let next_cursor = extract_cursor(
-                    wrapper._links.next.as_ref().and_then(|l| l.href.as_deref()),
-                );
-                let prev_cursor = extract_cursor(
-                    wrapper._links.prev.as_ref().and_then(|l| l.href.as_deref()),
-                );
+                let next_cursor =
+                    extract_cursor(wrapper._links.next.as_ref().and_then(|l| l.href.as_deref()));
+                let prev_cursor =
+                    extract_cursor(wrapper._links.prev.as_ref().and_then(|l| l.href.as_deref()));
 
                 Ok((wrapper._embedded.records, next_cursor, prev_cursor))
             }
@@ -289,10 +295,10 @@ impl HorizonClient {
         // Check cache first
         {
             let cache = self.toml_cache.read().ok()?;
-            if let Some((cached, fetched_at)) = cache.get(domain) {
-                if fetched_at.elapsed() < Duration::from_secs(3600) {
-                    return cached.clone();
-                }
+            if let Some((cached, fetched_at)) = cache.get(domain)
+                && fetched_at.elapsed() < Duration::from_secs(3600)
+            {
+                return cached.clone();
             }
         }
 
@@ -430,12 +436,12 @@ fn extract_cursor(href: Option<&str>) -> Option<String> {
 fn parse_org_name(toml: &str) -> Option<String> {
     for line in toml.lines() {
         let trimmed = line.trim();
-        if trimmed.starts_with("ORG_NAME") {
-            if let Some(eq_pos) = trimmed.find('=') {
-                let value = trimmed[eq_pos + 1..].trim().trim_matches('"').to_string();
-                if !value.is_empty() {
-                    return Some(value);
-                }
+        if trimmed.starts_with("ORG_NAME")
+            && let Some(eq_pos) = trimmed.find('=')
+        {
+            let value = trimmed[eq_pos + 1..].trim().trim_matches('"').to_string();
+            if !value.is_empty() {
+                return Some(value);
             }
         }
     }

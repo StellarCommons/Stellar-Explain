@@ -4,12 +4,19 @@ import { Label } from "@/components/Label";
 import { Pill } from "@/components/Pill";
 import { AddressChip } from "@/components/AddressChip";
 import { formatLedgerTime } from "@/lib/utils";
+// import QRShareButton from "@/components/QRShareButton";
+// import { useAppShell } from "@/components/AppShellContext";
 
 interface TransactionResultProps {
   data: TransactionExplanation;
 }
 
 export function TransactionResult({ data }: TransactionResultProps) {
+//   const { personalise } = useAppShell();
+  const shareUrl = typeof window !== "undefined"
+    ? `${window.location.origin}/tx/${data.transaction_hash}`
+    : "";
+
   return (
     <div className="space-y-4 animate-in">
 
@@ -21,7 +28,7 @@ export function TransactionResult({ data }: TransactionResultProps) {
             {data.transaction_hash}
           </p>
         </div>
-        <div className="flex gap-2 flex-wrap shrink-0 mt-4">
+        <div className="flex gap-2 flex-wrap shrink-0 mt-4 items-center">
           <Pill
             label={data.successful ? "Confirmed" : "Failed"}
             variant={data.successful ? "success" : "fail"}
@@ -32,6 +39,10 @@ export function TransactionResult({ data }: TransactionResultProps) {
               variant="warning"
             />
           )}
+          {/* <QRShareButton
+            url={shareUrl}
+            label={`Transaction ${data.transaction_hash.slice(0, 8)}…`}
+          /> */}
         </div>
       </div>
 
@@ -85,15 +96,15 @@ export function TransactionResult({ data }: TransactionResultProps) {
           <Label>Payments ({data.payment_explanations.length})</Label>
           {data.payment_explanations.map((p, i) => (
             <Card key={i} className="space-y-3">
-              <p className="text-sm text-white/80 leading-relaxed break-words">{p.summary}</p>
+              {/* <p className="text-sm text-white/80 leading-relaxed break-words">{personalise(p.summary)}</p> */}
               <div className="flex flex-wrap gap-x-4 gap-y-3 pt-1 border-t border-white/6">
                 <div className="min-w-0">
                   <Label>From</Label>
-                  <AddressChip addr={p.from} />
+                  {/* <AddressChip addr={personalise(p.from)} /> */}
                 </div>
                 <div className="min-w-0">
                   <Label>To</Label>
-                  <AddressChip addr={p.to} />
+                  {/* <AddressChip addr={personalise(p.to)} /> */}
                 </div>
                 <div className="min-w-0 w-full sm:w-auto">
                   <Label>Amount</Label>

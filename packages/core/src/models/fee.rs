@@ -69,11 +69,11 @@ impl FeeStats {
     /// ```
     pub fn default_network_fees() -> Self {
         Self {
-            base_fee: 100,      // Standard base fee
-            min_fee: 100,       // Minimum is typically the base fee
-            max_fee: 100000,    // Reasonable maximum
-            mode_fee: 100,      // Most common is base fee
-            p90_fee: 1000,      // 90th percentile
+            base_fee: 100,   // Standard base fee
+            min_fee: 100,    // Minimum is typically the base fee
+            max_fee: 100000, // Reasonable maximum
+            mode_fee: 100,   // Most common is base fee
+            p90_fee: 1000,   // 90th percentile
         }
     }
 
@@ -175,18 +175,18 @@ mod tests {
     #[test]
     fn test_is_high_fee() {
         let fees = FeeStats::new(100, 100, 5000, 100, 250);
-        
-        assert!(!fees.is_high_fee(100));   // base fee
-        assert!(!fees.is_high_fee(250));   // 2.5x base fee
-        assert!(!fees.is_high_fee(500));   // 5x base fee (threshold)
-        assert!(fees.is_high_fee(600));    // 6x base fee
-        assert!(fees.is_high_fee(1000));   // 10x base fee
+
+        assert!(!fees.is_high_fee(100)); // base fee
+        assert!(!fees.is_high_fee(250)); // 2.5x base fee
+        assert!(!fees.is_high_fee(500)); // 5x base fee (threshold)
+        assert!(fees.is_high_fee(600)); // 6x base fee
+        assert!(fees.is_high_fee(1000)); // 10x base fee
     }
 
     #[test]
     fn test_recommended_fee() {
         let fees = FeeStats::new(100, 100, 5000, 200, 500);
-        
+
         assert_eq!(fees.recommended_fee("low"), 100);
         assert_eq!(fees.recommended_fee("medium"), 200);
         assert_eq!(fees.recommended_fee("high"), 500);

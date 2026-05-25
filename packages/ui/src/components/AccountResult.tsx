@@ -3,12 +3,24 @@ import { Card } from "@/components/Card";
 import { Label } from "@/components/Label";
 import { Pill } from "@/components/Pill";
 import { formatBalance } from "@/lib/utils";
+// import SaveAddressButton from "@/components/addressbook/SaveAddressButton";
+// import QRShareButton from "@/components/QRShareButton";
+// import { useAppShell } from "@/components/AppShellContext";
 
 interface AccountResultProps {
   data: AccountExplanation;
+  isSaved: boolean;
+  savedLabel?: string;
+  onSave: (label: string, address: string) => boolean;
+  onRemoveSaved: () => void;
 }
 
-export function AccountResult({ data }: AccountResultProps) {
+export function AccountResult({ data, isSaved, savedLabel, onSave, onRemoveSaved }: AccountResultProps) {
+//   const { personalise } = useAppShell();
+  const shareUrl = typeof window !== "undefined"
+    ? `${window.location.origin}/account/${data.address}`
+    : "";
+
   return (
     <div className="space-y-4 animate-in">
 
@@ -20,9 +32,22 @@ export function AccountResult({ data }: AccountResultProps) {
             {data.address}
           </p>
         </div>
-        {data.org_name && (
-          <Pill label={data.org_name} variant="default" />
-        )}
+        {/* <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+          {data.org_name && (
+            <Pill label={data.org_name} variant="default" />
+          )}
+          <SaveAddressButton
+            address={data.address}
+            isSaved={isSaved}
+            savedLabel={savedLabel}
+            onSave={onSave}
+            onRemove={onRemoveSaved}
+          />
+          <QRShareButton
+            url={shareUrl}
+            label={`Account ${data.address.slice(0, 8)}…`}
+          />
+        </div> */}
       </div>
 
       {/* summary */}

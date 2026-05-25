@@ -1,4 +1,4 @@
-import { shortAddr } from "@/lib/utils";
+import { shortAddr } from "../lib/utils";
 
 interface AddressChipProps {
   addr: string;

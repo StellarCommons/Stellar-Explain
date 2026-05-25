@@ -1,11 +1,10 @@
-import Link from 'next/link'
-import AnimatedDemo from './AnimatedDemo'
+import Link from 'next/link';
+import AnimatedDemo from './AnimatedDemo';
 
 function HeroSection() {
   return (
     <section className="relative z-10 w-full max-w-6xl mx-auto px-6 sm:px-10 pt-16 pb-24 sm:pt-24 overflow-hidden">
       <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center min-w-0">
-
         {/* left — copy */}
         <div className="space-y-8 min-w-0">
           {/* eyebrow */}
@@ -24,9 +23,8 @@ function HeroSection() {
               <span className="text-sky-400">in plain English.</span>
             </h1>
             <p className="text-base text-white/45 leading-relaxed max-w-md">
-              Paste any transaction hash or account address. Get a clear,
-              human-readable explanation of exactly what happened — no
-              blockchain expertise required.
+              Paste any transaction hash or account address. Get a clear, human-readable explanation
+              of exactly what happened — no blockchain expertise required.
             </p>
           </div>
 
@@ -70,10 +68,9 @@ function HeroSection() {
         <div className="w-full min-w-0 overflow-hidden">
           <AnimatedDemo />
         </div>
-
       </div>
     </section>
-  )
+  );
 }
 
-export default HeroSection
+export default HeroSection;

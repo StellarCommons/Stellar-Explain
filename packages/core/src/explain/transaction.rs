@@ -6,7 +6,7 @@ use crate::explain::memo::explain_memo;
 use crate::models::fee::FeeStats;
 use crate::models::transaction::Transaction;
 
-use super::operation::payment::{explain_payment, explain_payment_with_fee, PaymentExplanation};
+use super::operation::payment::{PaymentExplanation, explain_payment, explain_payment_with_fee};
 
 /// Complete explanation of a transaction.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -96,7 +96,10 @@ pub fn explain_fee(fee_charged: u64, fee_stats: Option<&FeeStats>) -> String {
                     xlm, multiplier
                 )
             } else {
-                format!("A fee of {} XLM was charged. This is a standard network fee.", xlm)
+                format!(
+                    "A fee of {} XLM was charged. This is a standard network fee.",
+                    xlm
+                )
             }
         }
     }
@@ -134,7 +137,8 @@ pub fn explain_transaction_with_ledger(
         })
         .collect::<Vec<_>>();
 
-    let base_summary = build_transaction_summary(transaction.successful, payment_count, skipped_operations);
+    let base_summary =
+        build_transaction_summary(transaction.successful, payment_count, skipped_operations);
 
     // Enrich summary with ledger time if available
     let summary = match (created_at, ledger) {
@@ -147,7 +151,10 @@ pub fn explain_transaction_with_ledger(
         }
         (Some(ts), None) => {
             let formatted_time = format_ledger_time(ts);
-            format!("{} This transaction was confirmed on {}.", base_summary, formatted_time)
+            format!(
+                "{} This transaction was confirmed on {}.",
+                base_summary, formatted_time
+            )
         }
         (None, Some(seq)) => {
             format!("{} Included in ledger #{}.", base_summary, seq)
@@ -175,7 +182,11 @@ fn build_transaction_summary(successful: bool, payment_count: usize, skipped: us
     let status = if successful { "successful" } else { "failed" };
 
     if payment_count == 0 {
-        let op_word = if skipped == 1 { "operation" } else { "operations" };
+        let op_word = if skipped == 1 {
+            "operation"
+        } else {
+            "operations"
+        };
         return format!(
             "This {} transaction contains {} {} that Stellar Explain does not yet support.",
             status, skipped, op_word
@@ -188,7 +199,10 @@ fn build_transaction_summary(successful: bool, payment_count: usize, skipped: us
         format!("{} payments", payment_count)
     };
 
-    let mut parts = vec![format!("This {} transaction contains {}", status, payment_text)];
+    let mut parts = vec![format!(
+        "This {} transaction contains {}",
+        status, payment_text
+    )];
 
     if skipped > 0 {
         let skipped_text = if skipped == 1 {
@@ -312,19 +326,18 @@ mod tests {
 
         assert!(result.summary.contains("2024-01-15 at 14:32 UTC"));
         assert!(result.summary.contains("ledger #49823145"));
-        assert_eq!(result.ledger_closed_at.as_deref(), Some("2024-01-15T14:32:00Z"));
+        assert_eq!(
+            result.ledger_closed_at.as_deref(),
+            Some("2024-01-15T14:32:00Z")
+        );
         assert_eq!(result.ledger, Some(49823145));
     }
 
     #[test]
     fn test_explain_transaction_with_time_only() {
-        let result = explain_transaction_with_ledger(
-            &base_tx(),
-            None,
-            Some("2024-06-20T09:00:00Z"),
-            None,
-        )
-        .unwrap();
+        let result =
+            explain_transaction_with_ledger(&base_tx(), None, Some("2024-06-20T09:00:00Z"), None)
+                .unwrap();
 
         assert!(result.summary.contains("2024-06-20 at 09:00 UTC"));
         assert!(!result.summary.contains("ledger #"));
@@ -333,13 +346,8 @@ mod tests {
 
     #[test]
     fn test_explain_transaction_with_ledger_only() {
-        let result = explain_transaction_with_ledger(
-            &base_tx(),
-            None,
-            None,
-            Some(12345678),
-        )
-        .unwrap();
+        let result =
+            explain_transaction_with_ledger(&base_tx(), None, None, Some(12345678)).unwrap();
 
         assert!(result.summary.contains("ledger #12345678"));
         assert_eq!(result.ledger_closed_at, None);
@@ -378,7 +386,12 @@ mod tests {
         };
         let explanation = explain_transaction(&tx, None).unwrap();
         assert!(explanation.memo_explanation.is_some());
-        assert!(explanation.memo_explanation.unwrap().contains("Invoice #12345"));
+        assert!(
+            explanation
+                .memo_explanation
+                .unwrap()
+                .contains("Invoice #12345")
+        );
     }
 
     #[test]

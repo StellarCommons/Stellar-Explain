@@ -39,7 +39,11 @@ pub fn explain_create_account(op: &CreateAccountOperation) -> CreateAccountExpla
 mod tests {
     use super::*;
 
-    fn make_create_account(funder: &str, new_account: &str, starting_balance: &str) -> CreateAccountOperation {
+    fn make_create_account(
+        funder: &str,
+        new_account: &str,
+        starting_balance: &str,
+    ) -> CreateAccountOperation {
         CreateAccountOperation {
             id: "test_op_id".to_string(),
             funder: funder.to_string(),

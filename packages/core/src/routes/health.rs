@@ -1,10 +1,10 @@
-use axum::{extract::Extension, http::StatusCode, Json};
+use crate::middleware::request_id::RequestId;
+use crate::services::horizon::HorizonClient;
+use axum::{Json, extract::Extension, http::StatusCode};
 use serde::Serialize;
 use std::time::Instant;
 use tracing::{info, info_span, warn};
 use utoipa::ToSchema;
-use crate::middleware::request_id::RequestId;
-use crate::services::horizon::HorizonClient;
 
 #[derive(Serialize, ToSchema)]
 pub struct HealthResponse {
@@ -31,8 +31,8 @@ pub async fn health(
 
     info!(request_id = %request_id, "incoming_request");
 
-    let horizon_url =
-        std::env::var("HORIZON_URL").unwrap_or_else(|_| "https://horizon-testnet.stellar.org".into());
+    let horizon_url = std::env::var("HORIZON_URL")
+        .unwrap_or_else(|_| "https://horizon-testnet.stellar.org".into());
 
     let network = std::env::var("NETWORK").unwrap_or_else(|_| "testnet".into());
 

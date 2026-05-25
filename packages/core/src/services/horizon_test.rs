@@ -8,14 +8,12 @@ mod tests {
         let server = MockServer::start();
 
         server.mock(|when, then| {
-            when.method(GET)
-                .path("/transactions/abc123");
-            then.status(200)
-                .json_body(serde_json::json!({
-                    "hash": "abc123",
-                    "successful": true,
-                    "fee_charged": "100"
-                }));
+            when.method(GET).path("/transactions/abc123");
+            then.status(200).json_body(serde_json::json!({
+                "hash": "abc123",
+                "successful": true,
+                "fee_charged": "100"
+            }));
         });
 
         let client = HorizonClient::new(server.base_url());
@@ -31,8 +29,7 @@ mod tests {
         let server = MockServer::start();
 
         server.mock(|when, then| {
-            when.method(GET)
-                .path("/transactions/missing");
+            when.method(GET).path("/transactions/missing");
             then.status(404);
         });
 
@@ -47,10 +44,8 @@ mod tests {
         let server = MockServer::start();
 
         server.mock(|when, then| {
-            when.method(GET)
-                .path("/transactions/bad");
-            then.status(200)
-                .body("not-json");
+            when.method(GET).path("/transactions/bad");
+            then.status(200).body("not-json");
         });
 
         let client = HorizonClient::new(server.base_url());
@@ -179,8 +174,7 @@ mod tests {
     #[tokio::test]
     async fn fetch_transaction_raw_proxies_horizon_response() {
         let server = MockServer::start();
-        let raw_body =
-            r#"{"hash":"abc123","successful":true,"fee_charged":"100","ledger":12345}"#;
+        let raw_body = r#"{"hash":"abc123","successful":true,"fee_charged":"100","ledger":12345}"#;
 
         server.mock(|when, then| {
             when.method(GET).path("/transactions/abc123");
@@ -231,15 +225,13 @@ mod tests {
         let domain = server.base_url();
 
         let stellar_toml_mock = server.mock(|when, then| {
-            when.method(GET)
-                .path("/.well-known/stellar.toml");
-            then.status(200)
-                .body(
-                    r#"
+            when.method(GET).path("/.well-known/stellar.toml");
+            then.status(200).body(
+                r#"
 ORG_NAME="Anchorage Digital"
 NETWORK_PASSPHRASE="Test SDF Network ; September 2015"
 "#,
-                );
+            );
         });
 
         let client = HorizonClient::new(server.base_url());
