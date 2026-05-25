@@ -12,6 +12,3 @@ export function registerHistory(program: Command): void {
       entries.forEach((e) => console.log(e));
     });
 }
-      entries.forEach((e) => console.log(e));
-    });
-}
