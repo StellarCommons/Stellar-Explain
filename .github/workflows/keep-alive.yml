@@ -1,0 +1,30 @@
+name: Keep Backend Alive
+
+# Pings the Render backend every 5 minutes so the free-tier instance
+# does not spin down due to inactivity (Render sleeps after ~15 min).
+#
+# Setup: add BACKEND_URL as a GitHub Actions variable in the repo:
+#   Settings → Secrets and variables → Actions → Variables → New variable
+#   Name:  BACKEND_URL
+#   Value: https://stellar-explain-core.onrender.com   (your Render URL)
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: # allow manual trigger from Actions tab
+
+jobs:
+  ping:
+    name: Ping /health
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping backend health endpoint
+        run: |
+          echo "Pinging ${{ vars.BACKEND_URL }}/health ..."
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "${{ vars.BACKEND_URL }}/health")
+          echo "Response: $STATUS"
+          if [ "$STATUS" != "200" ]; then
+            echo "Warning: health check returned $STATUS"
+          else
+            echo "Backend is alive ✅"
+          fi
