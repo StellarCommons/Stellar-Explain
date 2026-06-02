@@ -9,9 +9,10 @@ export interface ClientOptions {
   baseUrl: string;
   timeout: number;  // #276
   verbose: boolean; // #277
+  retries: number; // #414
 }
 
-async function request<T>(
+async function requestOnce<T>(
   url: string,
   opts: ClientOptions,
 ): Promise<T> {
@@ -52,6 +53,22 @@ async function request<T>(
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function request<T>(url: string, opts: ClientOptions): Promise<T> {
+  const retries = Number.isFinite(opts.retries) && opts.retries >= 0 ? opts.retries : 0;
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await requestOnce<T>(url, opts);
+    } catch (err) {
+      lastError = err;
+      // Only retry transient network failures.
+      if (!(err instanceof NetworkError) || attempt >= retries) throw err;
+      await new Promise((r) => setTimeout(r, 500));
+    }
+  }
+  throw lastError;
 }
 
 export function createClient(opts: ClientOptions) {

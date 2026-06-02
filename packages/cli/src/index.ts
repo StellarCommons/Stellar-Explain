@@ -28,6 +28,7 @@ program
   .version(version)
   .option("--url <url>", "API base URL")
   .option("--timeout <ms>", "Request timeout in ms", (v) => parseInt(v, 10), 10000)
+  .option("--retries <n>", "Retry attempts for network errors", (v) => parseInt(v, 10), 2)
   .option("--verbose", "Log request details to stderr", false)
   .option("--json", "Output raw JSON", false);
 

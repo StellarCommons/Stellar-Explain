@@ -8,9 +8,9 @@ export function registerTx(program: Command): void {
     .command("tx <hash>")
     .description("Explain a Stellar transaction")
     .action(async (hash: string) => {
-      const opts = program.opts<{ url: string; timeout: number; verbose: boolean; json: boolean }>();
+      const opts = program.opts<{ url: string; timeout: number; retries: number; verbose: boolean; json: boolean }>();
       validateHash(hash);
-      const client = createClient({ baseUrl: opts.url, timeout: opts.timeout, verbose: opts.verbose });
+      const client = createClient({ baseUrl: opts.url, timeout: opts.timeout, retries: opts.retries, verbose: opts.verbose });
       const tx = await client.getTransaction(hash);
       console.log(opts.json ? JSON.stringify(tx, null, 2) : formatTransaction(tx));
     });
