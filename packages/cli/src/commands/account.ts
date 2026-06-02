@@ -9,9 +9,9 @@ export function registerAccount(program: Command): void {
     .command("account <address>")
     .description("Explain a Stellar account")
     .action(async (address: string) => {
-      const opts = program.opts<{ url: string; timeout: number; verbose: boolean; json: boolean }>();
+      const opts = program.opts<{ url: string; timeout: number; retries: number; verbose: boolean; json: boolean }>();
       validateAddress(address);
-      const client = createClient({ baseUrl: opts.url, timeout: opts.timeout, verbose: opts.verbose });
+      const client = createClient({ baseUrl: opts.url, timeout: opts.timeout, retries: opts.retries, verbose: opts.verbose });
       const acc = await client.getAccount(address);
       const useColor = shouldUseColorOutput() && !opts.json;
       console.log(opts.json ? JSON.stringify(acc, null, 2) : formatAccount(acc, useColor));
