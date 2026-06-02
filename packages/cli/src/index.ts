@@ -6,6 +6,7 @@ import { registerTx } from "./commands/tx.js";
 import { registerAccount } from "./commands/account.js";
 import { registerHealth } from "./commands/health.js";
 import { registerBatch } from "./commands/batch.js";
+import { registerWatch } from "./commands/watch.js";
 import { InvalidInputError } from "./lib/errors.js";
 
 // #99 — Node version check
@@ -22,7 +23,6 @@ const { version } = require("../package.json") as { version: string };
 runUpdateCheck(version);
 
 const program = new Command();
-
 program
   .name("stellar-explain")
   .version(version)
@@ -40,6 +40,7 @@ registerTx(program);
 registerAccount(program);
 registerHealth(program);
 registerBatch(program);
+registerWatch(program);
 
 program.parseAsync(process.argv).catch((err: unknown) => {
   const msg = err instanceof Error ? err.message : String(err);
