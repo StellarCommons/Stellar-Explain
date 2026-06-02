@@ -1,4 +1,7 @@
+import { readConfigFile } from "./configFile";
+
 const DEFAULT_URL = "http://localhost:8080";
+const DEFAULT_TIMEOUT = 5000;
 
 function isLocalhost(url: string): boolean {
   try {
@@ -19,9 +22,15 @@ export function warnIfInsecure(url: string): void {
 }
 
 export function resolveBaseUrl(flagUrl?: string): string {
-  const url = flagUrl ?? process.env["STELLAR_EXPLAIN_URL"] ?? DEFAULT_URL;
+  const fileConfig = readConfigFile();
+  const url = flagUrl ?? process.env["STELLAR_EXPLAIN_URL"] ?? fileConfig.url ?? DEFAULT_URL;
   warnIfInsecure(url);
   return url;
+}
+
+export function resolveTimeout(flagTimeout?: number): number {
+  const fileConfig = readConfigFile();
+  return flagTimeout ?? fileConfig.timeout ?? DEFAULT_TIMEOUT;
 }
 
 export function validateUrl(url: string): string {
@@ -33,8 +42,11 @@ export function validateUrl(url: string): string {
   return url;
 }
 
-export function loadConfig(url?: string): { baseUrl: string } {
-  return { baseUrl: resolveBaseUrl(url) };
+export function loadConfig(url?: string): { baseUrl: string; timeout: number } {
+  return {
+    baseUrl: resolveBaseUrl(url),
+    timeout: resolveTimeout(),
+  };
 }
 
 export function buildUrl(base: string, path: string): string {
