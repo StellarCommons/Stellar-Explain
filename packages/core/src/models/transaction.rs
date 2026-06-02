@@ -74,6 +74,7 @@ impl Transaction {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::operation::OtherOperation;
 
     fn create_payment(amount: &str) -> Operation {
         Operation::Payment(PaymentOperation {

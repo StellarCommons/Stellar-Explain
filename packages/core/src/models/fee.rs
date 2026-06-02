@@ -141,7 +141,7 @@ impl FeeStats {
     /// ```
     pub fn stroops_to_xlm(stroops: u64) -> String {
         let xlm = stroops as f64 / 10_000_000.0;
-        format!("{:.7}", xlm)
+        format!("{xlm:.7}")
     }
 }
 

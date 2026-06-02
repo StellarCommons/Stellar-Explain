@@ -2,6 +2,8 @@
 //!
 //! This file defines the top-level module structure.
 
+#![allow(dead_code)]
+
 pub mod errors;
 pub mod explain;
 pub mod middleware;

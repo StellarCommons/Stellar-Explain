@@ -80,26 +80,22 @@ pub fn format_ledger_time(iso_string: &str) -> String {
     // Take only HH:MM (drop seconds)
     let hhmm = if time.len() >= 5 { &time[..5] } else { time };
 
-    format!("{} at {} UTC", date, hhmm)
+    format!("{date} at {hhmm} UTC")
 }
 
 /// Produce a plain-English fee explanation.
 pub fn explain_fee(fee_charged: u64, fee_stats: Option<&FeeStats>) -> String {
     let xlm = FeeStats::stroops_to_xlm(fee_charged);
     match fee_stats {
-        None => format!("A fee of {} XLM was charged.", xlm),
+        None => format!("A fee of {xlm} XLM was charged."),
         Some(stats) => {
             if stats.is_high_fee(fee_charged) {
                 let multiplier = fee_charged / stats.base_fee.max(1);
                 format!(
-                    "A fee of {} XLM was charged. This is above average — {}x the base fee.",
-                    xlm, multiplier
+                    "A fee of {xlm} XLM was charged. This is above average — {multiplier}x the base fee."
                 )
             } else {
-                format!(
-                    "A fee of {} XLM was charged. This is a standard network fee.",
-                    xlm
-                )
+                format!("A fee of {xlm} XLM was charged. This is a standard network fee.")
             }
         }
     }
@@ -145,19 +141,15 @@ pub fn explain_transaction_with_ledger(
         (Some(ts), Some(seq)) => {
             let formatted_time = format_ledger_time(ts);
             format!(
-                "{} This transaction was confirmed on {} (ledger #{}).",
-                base_summary, formatted_time, seq
+                "{base_summary} This transaction was confirmed on {formatted_time} (ledger #{seq})."
             )
         }
         (Some(ts), None) => {
             let formatted_time = format_ledger_time(ts);
-            format!(
-                "{} This transaction was confirmed on {}.",
-                base_summary, formatted_time
-            )
+            format!("{base_summary} This transaction was confirmed on {formatted_time}.")
         }
         (None, Some(seq)) => {
-            format!("{} Included in ledger #{}.", base_summary, seq)
+            format!("{base_summary} Included in ledger #{seq}.")
         }
         (None, None) => base_summary,
     };
@@ -188,15 +180,14 @@ fn build_transaction_summary(successful: bool, payment_count: usize, skipped: us
             "operations"
         };
         return format!(
-            "This {} transaction contains {} {} that Stellar Explain does not yet support.",
-            status, skipped, op_word
+            "This {status} transaction contains {skipped} {op_word} that Stellar Explain does not yet support."
         );
     }
 
     let payment_text = if payment_count == 1 {
         "1 payment".to_string()
     } else {
-        format!("{} payments", payment_count)
+        format!("{payment_count} payments")
     };
 
     let mut parts = vec![format!(
@@ -208,7 +199,7 @@ fn build_transaction_summary(successful: bool, payment_count: usize, skipped: us
         let skipped_text = if skipped == 1 {
             "1 other operation was skipped".to_string()
         } else {
-            format!("{} other operations were skipped", skipped)
+            format!("{skipped} other operations were skipped")
         };
         parts.push(skipped_text);
     }

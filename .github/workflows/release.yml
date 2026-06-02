@@ -11,12 +11,8 @@ concurrency:
 
 jobs:
   release:
-    name: Release SDK
+    name: Release CLI
     runs-on: ubuntu-latest
-    # Only run when there is at least one .changeset/*.md file to process.
-    # The changesets/action below will either open a "Version Packages" PR
-    # (if unreleased changesets exist) or publish to npm (if the version PR
-    # was just merged and there are no pending changesets).
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -24,25 +20,43 @@ jobs:
           # Full history is required so changesets can diff tags correctly.
           fetch-depth: 0
 
+      # Gate all subsequent steps on packages/cli existing.
+      # This prevents the job
+      # from crashing with "No such file or directory" on every push to main.
+      # Once packages/cli/package.json is present, all steps below will run.
+      - name: Check if CLI package exists
+        id: cli-check
+        run: |
+          if [ -f packages/cli/package.json ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "packages/cli not found — skipping CLI release"
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Setup Node
+        if: steps.cli-check.outputs.exists == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 20
           registry-url: "https://registry.npmjs.org"
 
-      - name: Install SDK dependencies
+      - name: Install CLI dependencies
+        if: steps.cli-check.outputs.exists == 'true'
         run: npm ci
-        working-directory: packages/sdk
+        working-directory: packages/cli
 
-      - name: Build SDK
+      - name: Build CLI
+        if: steps.cli-check.outputs.exists == 'true'
         run: npm run build
-        working-directory: packages/sdk
+        working-directory: packages/cli
 
       - name: Create Release PR or Publish to npm
+        if: steps.cli-check.outputs.exists == 'true'
         uses: changesets/action@v1
         with:
           # Command that changesets/action calls when it decides to publish.
-          publish: npm run changeset:publish --prefix packages/sdk
+          publish: npm run changeset:publish --prefix packages/cli
           # Optional: customise the version-bump PR title / commit message.
           title: "chore: version packages"
           commit: "chore: version packages"

@@ -1,5 +1,5 @@
 # ── Build Stage ──────────────────────────────────────────────────────────────
-FROM rust:1.85-alpine AS builder
+FROM rust:1.88-alpine AS builder
 
 RUN apk add --no-cache \
     pkgconfig make musl-dev openssl-dev openssl-libs-static

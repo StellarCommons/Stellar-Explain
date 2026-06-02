@@ -44,7 +44,7 @@ pub fn explain_path_payment(op: &PathPaymentOperation) -> PathPaymentExplanation
     };
 
     let summary = match &path_description {
-        Some(via) => format!("{} {}", conversion, via),
+        Some(via) => format!("{conversion} {via}"),
         None => conversion,
     };
 

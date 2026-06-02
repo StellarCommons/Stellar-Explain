@@ -1,7 +1,6 @@
+[![CI](https://github.com/StellarCommons/Stellar-Explain/actions/workflows/ci.yml/badge.svg)](https://github.com/StellarCommons/Stellar-Explain/actions/workflows/ci.yml)
+[![Backend](https://img.shields.io/badge/backend-live%20on%20Render-brightgreen)](https://stellar-explain-core.onrender.com/health)
 
-[![CI](https://github.com/drip22/Stellar-Explain/actions/workflows/ci.yml/badge.svg)](https://github.com/drip22/Stellar-Explain/actions/workflows/ci.yml)
-
-```md
 # 🌌 Stellar Explain
 
 **Stellar Explain** is an explainability-first backend for the Stellar blockchain.
@@ -15,10 +14,10 @@ This project is designed to grow incrementally, with a strong focus on **clarity
 ## ✨ Why Stellar Explain?
 
 Most blockchain explorers answer:
-> “What happened?”
+> "What happened?"
 
 Stellar Explain answers:
-> **“What does this mean?”**
+> **"What does this mean?"**
 
 It focuses on:
 - Plain-English explanations
@@ -27,75 +26,79 @@ It focuses on:
 
 ---
 
-## 🧭 Project Status
+## 🚀 Live Backend
 
-🚧 **Active Development**
+The Rust backend is deployed and publicly accessible — no local setup required to start contributing to the frontend or CLI:
 
-- Backend v1 is in progress
-- Scope is intentionally narrow and incremental
-- Contributions are welcome
+| Endpoint | URL |
+|----------|-----|
+| Health check | `GET https://stellar-explain-core.onrender.com/health` |
+| Explain transaction | `GET https://stellar-explain-core.onrender.com/tx/:hash` |
+| Explain account | `GET https://stellar-explain-core.onrender.com/account/:address` |
 
+**Quick test:**
+```bash
+curl https://stellar-explain-core.onrender.com/health
+# → {"status":"ok","horizon_reachable":true,"version":"..."}
+
+curl https://stellar-explain-core.onrender.com/tx/b9d0b2292c4e09e8eb22d036171491e87b8d2086bf8b265874c8d182cb9c9020
 ```
-## 🏗️ Architecture Overview
 
-Stellar Explain is a **monorepo** with two main packages:
-```
+> The backend runs on Render's free tier and is kept alive with a GitHub Actions keep-alive cron (every 5 min).
+
 ---
 
+## 🏗️ Architecture Overview
 
-packages/
-├── core/     # Rust backend (source of truth)
-└── ui/       # Next.js frontend (consumer of the API)
+Stellar Explain is a **monorepo** with three packages:
 
 ```
+packages/
+├── core/     # Rust/Axum backend — the source of truth
+├── ui/       # Next.js 15 frontend — proxies all API calls server-side
+└── cli/      # Node.js CLI — query the backend from your terminal
+```
+
+| Layer | Tech | Role |
+|-------|------|------|
+| Backend | Rust + Axum | Fetches from Stellar Horizon, produces human-readable JSON |
+| Frontend | Next.js 15 | Proxy routes keep the backend URL server-side only |
+| CLI | Node.js | `stellar-explain tx <hash>` from your terminal |
 
 ### Key principles
 - Backend is the primary product
-- Frontend consumes the backend API
+- Frontend consumes the backend API via server-side proxy routes
 - Business logic lives outside HTTP handlers
 - Explanation logic is deterministic and testable
 
 ---
 
-## 🧱 Feature Roadmap (High Level)
+## 🧱 Feature Roadmap
 
-### Phase 1 — Payment Explainability (v1)
-- Explain Stellar **payment transactions only**
-- Plain-English summaries
-- Structured JSON output
-- `GET /tx/:hash` API endpoint
-
-### Phase 2
-- Multi-operation transactions
-- Improved error explanations
-- Caching and performance improvements
-
-### Phase 3
-- Support for more operation types:
-  - Trustlines
-  - Account creation
-  - Account merge
-  - Offers / liquidity pools
-
-### Phase 4
-- Rich frontend experience
-- Educational UI and contextual explanations
-- Ecosystem integrations
+| Phase | Feature | Status |
+|-------|---------|--------|
+| 1 | Payment transaction explainability (`GET /tx/:hash`) | ✅ Done |
+| 1 | Account explainability (`GET /account/:address`) | ✅ Done |
+| 2 | Multi-operation transactions | 🚧 Planned |
+| 2 | Improved error explanations | 🚧 Planned |
+| 3 | Trustlines, account creation, account merge, offers | 🔲 Future |
+| 4 | Rich frontend experience & educational UI | 🔲 Future |
 
 ---
 
 ## 🤝 Contributing
 
 We welcome contributions of all kinds:
-- Backend features
-- Frontend UI
-- Tests
-- Documentation
+- Backend features (Rust)
+- Frontend UI (Next.js)
+- CLI improvements
+- Tests and documentation
 
-Before contributing:
-- Please read `CONTRIBUTING.md`
+**Before contributing:**
+- Read [`DEVELOPMENT.md`](./DEVELOPMENT.md) — setup guide, both quick (Render) and local (Rust)
+- Read `CONTRIBUTING.md` for workflow guidelines
 - Check existing issues and milestones
-- Work on issues in order when dependencies exist
+- Work on issues in dependency order when specified
 
 > All backend issues include tests and clear acceptance criteria.
 
@@ -108,7 +111,7 @@ Join the Telegram group to ask questions or coordinate with maintainers:
 ## 📄 License
 
 MIT License.  
-You’re free to use, modify, and redistribute this project.
+You're free to use, modify, and redistribute this project.
 
 ---
 

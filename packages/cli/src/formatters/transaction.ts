@@ -1,16 +1,17 @@
 import type { TransactionExplanation } from "../types/index.js";
+import { colorize } from "../lib/config.js";
 
-export function formatTransaction(tx: TransactionExplanation): string {
+export function formatTransaction(tx: TransactionExplanation, useColor = false): string {
   const lines: string[] = [
-    `Transaction: ${tx.hash}`,
-    `Status:      ${tx.status}`,
-    `Summary:     ${tx.summary}`,
-    `Ledger:      ${tx.ledger}`,
-    `Closed at:   ${tx.created_at}`,
-    `Fee:         ${tx.fee_charged} stroops`,
+    `${colorize("Transaction:", 1, useColor)} ${tx.hash}`,
+    `${colorize("Status:", 1, useColor)}      ${colorize(tx.status, tx.status === "success" ? 32 : 31, useColor)}`,
+    `${colorize("Summary:", 1, useColor)}     ${tx.summary}`,
+    `${colorize("Ledger:", 1, useColor)}      ${tx.ledger}`,
+    `${colorize("Closed at:", 1, useColor)}   ${tx.created_at}`,
+    `${colorize("Fee:", 1, useColor)}         ${tx.fee_charged} stroops`,
   ];
 
-  if (tx.memo) lines.push(`Memo:        ${tx.memo}`);
+  if (tx.memo) lines.push(`${colorize("Memo:", 1, useColor)}        ${tx.memo}`);
 
   if (tx.payments.length > 0) {
     lines.push("", "Payments:");
@@ -18,14 +19,12 @@ export function formatTransaction(tx: TransactionExplanation): string {
     const toW   = Math.max(...tx.payments.map((p) => p.to.length));
     const amtW  = Math.max(...tx.payments.map((p) => p.amount.length));
     for (const p of tx.payments) {
-      lines.push(
-        `  ${p.from.padEnd(fromW)}  →  ${p.to.padEnd(toW)}  ${p.amount.padStart(amtW)}  ${p.asset}`,
-      );
+      lines.push(`  ${p.from} → ${p.to}  ${colorize(p.amount, 32, useColor)} ${p.asset}`);
     }
   }
 
   if (tx.skipped_operations > 0)
-    lines.push(``, `Skipped ops: ${tx.skipped_operations}`);
+    lines.push(``, `${colorize("Skipped ops:", 1, useColor)} ${tx.skipped_operations}`);
 
   return lines.join("\n");
 }
