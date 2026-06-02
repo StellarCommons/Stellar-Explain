@@ -2,6 +2,7 @@ import type { Command } from "commander";
 import { createClient } from "../lib/client.js";
 import { validateHash } from "../lib/validate.js";
 import { formatTransaction } from "../formatters/transaction.js";
+import { shouldUseColorOutput } from "../lib/config.js";
 
 export function registerTx(program: Command): void {
   program
@@ -12,6 +13,7 @@ export function registerTx(program: Command): void {
       validateHash(hash);
       const client = createClient({ baseUrl: opts.url, timeout: opts.timeout, verbose: opts.verbose });
       const tx = await client.getTransaction(hash);
-      console.log(opts.json ? JSON.stringify(tx, null, 2) : formatTransaction(tx));
+      const useColor = shouldUseColorOutput() && !opts.json;
+      console.log(opts.json ? JSON.stringify(tx, null, 2) : formatTransaction(tx, useColor));
     });
 }

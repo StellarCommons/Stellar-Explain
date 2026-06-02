@@ -1,17 +1,16 @@
-import chalk from "chalk";
 import type { HealthResponse } from "../types/index.js";
+import { colorize } from "../lib/config.js";
 
-const STATUS_COLOR: Record<HealthResponse["status"], chalk.Chalk> = {
-  ok: chalk.green,
-  degraded: chalk.yellow,
-  down: chalk.red,
+const STATUS_COLOR: Record<HealthResponse["status"], number> = {
+  ok: 32,
+  degraded: 33,
+  down: 31,
 };
 
-export function formatHealth(h: HealthResponse): string {
-  const color = STATUS_COLOR[h.status];
+export function formatHealth(h: HealthResponse, useColor = false): string {
   return [
-    `${chalk.bold("Status:")} ${color(h.status)}`,
-    `${chalk.bold("Horizon:")} ${h.horizon_reachable ? chalk.green("reachable") : chalk.red("unreachable")}`,
-    `${chalk.bold("Version:")} ${h.version}`,
+    `Status:   ${colorize(h.status, STATUS_COLOR[h.status], useColor)}`,
+    `Horizon:  ${colorize(h.horizon_reachable ? "reachable" : "unreachable", h.horizon_reachable ? 32 : 31, useColor)}`,
+    `Version:  ${h.version}`,
   ].join("\n");
 }
