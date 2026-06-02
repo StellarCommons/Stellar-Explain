@@ -55,9 +55,12 @@ export function registerWatch(program: Command): void {
 
             // Normalise: the status field may sit at the top level or inside
             // a nested `result` object depending on the API version.
+            // Cast through unknown so TypeScript allows the index access on a
+            // typed struct without requiring an index signature on the type.
+            const txRecord = tx as unknown as Record<string, unknown>;
             const status: string | undefined =
-              (tx as Record<string, unknown>)["status"] as string | undefined ??
-              ((tx as Record<string, unknown>)["result"] as Record<string, unknown> | undefined)?.[
+              txRecord["status"] as string | undefined ??
+              (txRecord["result"] as Record<string, unknown> | undefined)?.[
                 "status"
               ] as string | undefined;
 

@@ -7,11 +7,12 @@ import { createClient } from "../lib/client.js";
 import { validateHash } from "../lib/validate.js";
 import { formatTransaction } from "../formatters/transaction.js";
 import { InvalidInputError } from "../lib/errors.js";
+import type { TransactionExplanation } from "../types/index.js";
 
 interface BatchResult {
   hash: string;
   status: "ok" | "error";
-  data?: unknown;
+  data?: TransactionExplanation;
   error?: string;
 }
 
@@ -125,7 +126,7 @@ export function registerBatch(program: Command): void {
         process.stdout.write(`\n— ${result.hash}\n`);
         if (result.status === "error") {
           process.stderr.write(`  Error: ${result.error}\n`);
-        } else {
+        } else if (result.data !== undefined) {
           console.log(formatTransaction(result.data));
         }
       }
