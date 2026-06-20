@@ -2,6 +2,7 @@
 //!
 //! Each operation type gets its own submodule.
 
+pub mod account_merge;
 pub mod change_trust;
 pub mod clawback;
 pub mod create_account;

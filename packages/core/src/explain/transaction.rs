@@ -1,12 +1,32 @@
-//! Transaction explanation orchestration.
-
 use serde::{Deserialize, Serialize};
 
 use crate::explain::memo::explain_memo;
 use crate::models::fee::FeeStats;
+use crate::models::operation::{Operation, OfferType, PathPaymentType};
 use crate::models::transaction::Transaction;
 
+use super::operation::account_merge::explain_account_merge;
+use super::operation::change_trust::explain_change_trust;
+use super::operation::clawback::{explain_clawback, explain_clawback_claimable_balance};
+use super::operation::create_account::explain_create_account;
+use super::operation::manage_offer::explain_manage_offer;
+use super::operation::path_payment::explain_path_payment;
 use super::operation::payment::{PaymentExplanation, explain_payment, explain_payment_with_fee};
+use super::operation::set_options::explain_set_options;
+
+/// A single explained operation within a transaction, in original order.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct OperationExplanation {
+    /// Position of this operation within the transaction (0-based).
+    pub index: usize,
+    /// The Stellar operation type, e.g. "payment", "create_account".
+    #[serde(rename = "type")]
+    pub operation_type: String,
+    /// Plain-English summary of what this operation did.
+    pub summary: String,
+    /// Structured, type-specific details for this operation.
+    pub details: serde_json::Value,
+}
 
 /// Complete explanation of a transaction.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -14,7 +34,12 @@ pub struct TransactionExplanation {
     pub transaction_hash: String,
     pub successful: bool,
     pub summary: String,
+    /// One explanation per operation, in the original order of the transaction.
+    pub operations: Vec<OperationExplanation>,
+    /// Deprecated: kept for backward compatibility with existing consumers.
+    /// Use `operations` instead.
     pub payment_explanations: Vec<PaymentExplanation>,
+    /// Count of operations whose type is genuinely unsupported (i.e. mapped to "Other").
     pub skipped_operations: usize,
     /// Human-readable explanation of the transaction memo.
     pub memo_explanation: Option<String>,
@@ -122,7 +147,6 @@ pub fn explain_transaction_with_ledger(
     }
 
     let payment_count = transaction.payment_count();
-    let skipped_operations = total_operations - payment_count;
 
     let payment_explanations = transaction
         .payment_operations()
@@ -132,6 +156,18 @@ pub fn explain_transaction_with_ledger(
             None => explain_payment(payment),
         })
         .collect::<Vec<_>>();
+
+    let operations: Vec<OperationExplanation> = transaction
+        .operations
+        .iter()
+        .enumerate()
+        .map(|(index, op)| explain_operation(index, op, transaction.fee_charged, fee_stats))
+        .collect();
+
+    let skipped_operations = operations
+        .iter()
+        .filter(|op| is_unsupported_type(&op.operation_type))
+        .count();
 
     let base_summary =
         build_transaction_summary(transaction.successful, payment_count, skipped_operations);
@@ -161,6 +197,7 @@ pub fn explain_transaction_with_ledger(
         transaction_hash: transaction.hash.clone(),
         successful: transaction.successful,
         summary,
+        operations,
         payment_explanations,
         skipped_operations,
         memo_explanation,
@@ -168,6 +205,184 @@ pub fn explain_transaction_with_ledger(
         ledger_closed_at: created_at.map(|s| s.to_string()),
         ledger,
     })
+}
+
+/// True for operation type strings that have no dedicated explainer and
+/// fall back to the generic "coming soon" message.
+fn is_unsupported_type(operation_type: &str) -> bool {
+    !matches!(
+        operation_type,
+        "payment"
+            | "create_account"
+            | "change_trust"
+            | "set_options"
+            | "account_merge"
+            | "manage_sell_offer"
+            | "manage_buy_offer"
+            | "path_payment_strict_send"
+            | "path_payment_strict_receive"
+            | "clawback"
+            | "clawback_claimable_balance"
+    )
+}
+
+/// Build the structured explanation for a single operation, preserving its
+/// position within the transaction.
+fn explain_operation(
+    index: usize,
+    op: &Operation,
+    fee_charged: u64,
+    fee_stats: Option<&FeeStats>,
+) -> OperationExplanation {
+    match op {
+        Operation::Payment(payment) => {
+            let explanation = match fee_stats {
+                Some(stats) => explain_payment_with_fee(payment, fee_charged, stats),
+                None => explain_payment(payment),
+            };
+            OperationExplanation {
+                index,
+                operation_type: "payment".to_string(),
+                summary: explanation.summary.clone(),
+                details: serde_json::json!({
+                    "from": explanation.from,
+                    "to": explanation.to,
+                    "amount": explanation.amount,
+                    "asset": explanation.asset,
+                }),
+            }
+        }
+        Operation::CreateAccount(create_account) => {
+            let explanation = explain_create_account(create_account);
+            OperationExplanation {
+                index,
+                operation_type: "create_account".to_string(),
+                summary: explanation.summary.clone(),
+                details: serde_json::json!({
+                    "funder": explanation.funder,
+                    "account": explanation.new_account,
+                    "starting_balance": explanation.starting_balance,
+                }),
+            }
+        }
+        Operation::ChangeTrust(change_trust) => {
+            let explanation = explain_change_trust(change_trust);
+            OperationExplanation {
+                index,
+                operation_type: "change_trust".to_string(),
+                summary: explanation.summary.clone(),
+                details: serde_json::json!({
+                    "account": explanation.trustor,
+                    "asset": explanation.asset_code,
+                    "issuer": explanation.asset_issuer,
+                    "limit": explanation.limit,
+                    "is_removal": explanation.is_removal,
+                }),
+            }
+        }
+        Operation::SetOptions(set_options) => {
+            let explanation = explain_set_options(set_options);
+            OperationExplanation {
+                index,
+                operation_type: "set_options".to_string(),
+                summary: explanation.summary.clone(),
+                details: serde_json::json!({
+                    "account": explanation.account,
+                    "changes": explanation.changes,
+                }),
+            }
+        }
+        Operation::AccountMerge(account_merge) => {
+            let explanation = explain_account_merge(account_merge);
+            OperationExplanation {
+                index,
+                operation_type: "account_merge".to_string(),
+                summary: explanation.summary.clone(),
+                details: serde_json::json!({
+                    "source": explanation.source,
+                    "destination": explanation.destination,
+                }),
+            }
+        }
+        Operation::ManageOffer(manage_offer) => {
+            let explanation = explain_manage_offer(manage_offer);
+            let operation_type = match manage_offer.offer_type {
+                OfferType::Sell => "manage_sell_offer",
+                OfferType::Buy => "manage_buy_offer",
+            };
+            OperationExplanation {
+                index,
+                operation_type: operation_type.to_string(),
+                summary: explanation.summary.clone(),
+                details: serde_json::json!({
+                    "account": explanation.seller,
+                    "selling_asset": explanation.selling_asset,
+                    "buying_asset": explanation.buying_asset,
+                    "amount": explanation.amount,
+                    "price": explanation.price,
+                    "offer_id": explanation.offer_id,
+                    "action": explanation.action,
+                }),
+            }
+        }
+        Operation::PathPayment(path_payment) => {
+            let explanation = explain_path_payment(path_payment);
+            let operation_type = match path_payment.payment_type {
+                PathPaymentType::StrictSend => "path_payment_strict_send",
+                PathPaymentType::StrictReceive => "path_payment_strict_receive",
+            };
+            OperationExplanation {
+                index,
+                operation_type: operation_type.to_string(),
+                summary: explanation.summary.clone(),
+                details: serde_json::json!({
+                    "from": explanation.sender,
+                    "to": explanation.destination,
+                    "send_asset": explanation.send_asset,
+                    "send_amount": explanation.send_amount,
+                    "dest_asset": explanation.dest_asset,
+                    "dest_amount": explanation.dest_amount,
+                    "path_description": explanation.path_description,
+                }),
+            }
+        }
+        Operation::Clawback(clawback) => {
+            let explanation = explain_clawback(clawback);
+            OperationExplanation {
+                index,
+                operation_type: "clawback".to_string(),
+                summary: explanation.summary.clone(),
+                details: serde_json::json!({
+                    "issuer": explanation.issuer,
+                    "from": explanation.from,
+                    "asset": explanation.asset_code,
+                    "asset_issuer": explanation.asset_issuer,
+                    "amount": explanation.amount,
+                }),
+            }
+        }
+        Operation::ClawbackClaimableBalance(clawback_balance) => {
+            let explanation = explain_clawback_claimable_balance(clawback_balance);
+            OperationExplanation {
+                index,
+                operation_type: "clawback_claimable_balance".to_string(),
+                summary: explanation.summary.clone(),
+                details: serde_json::json!({
+                    "issuer": explanation.issuer,
+                    "balance_id": explanation.balance_id,
+                }),
+            }
+        }
+        Operation::Other(other) => OperationExplanation {
+            index,
+            operation_type: other.operation_type.clone(),
+            summary: format!(
+                "{} operation — full support coming soon",
+                other.operation_type
+            ),
+            details: serde_json::json!({}),
+        },
+    }
 }
 
 fn build_transaction_summary(successful: bool, payment_count: usize, skipped: usize) -> String {
@@ -409,5 +624,150 @@ mod tests {
     fn test_build_transaction_summary_failed() {
         let summary = build_transaction_summary(false, 1, 0);
         assert_eq!(summary, "This failed transaction contains 1 payment.");
+    }
+
+    // ── operations[] array ─────────────────────────────────────────────────
+
+    fn create_account_op(id: &str) -> Operation {
+        Operation::CreateAccount(crate::models::operation::CreateAccountOperation {
+            id: id.to_string(),
+            funder: "GFUNDER".to_string(),
+            new_account: "GNEWACCT".to_string(),
+            starting_balance: "1.5".to_string(),
+        })
+    }
+
+    fn change_trust_op(id: &str) -> Operation {
+        Operation::ChangeTrust(crate::models::operation::ChangeTrustOperation {
+            id: id.to_string(),
+            trustor: "GTRUSTOR".to_string(),
+            asset_code: "USDC".to_string(),
+            asset_issuer: "GISSUER".to_string(),
+            limit: "10000".to_string(),
+        })
+    }
+
+    fn truly_unsupported_op(id: &str) -> Operation {
+        Operation::Other(OtherOperation {
+            id: id.to_string(),
+            operation_type: "bump_sequence".to_string(),
+        })
+    }
+
+    #[test]
+    fn test_operations_array_present_with_correct_index_and_type() {
+        let tx = Transaction {
+            operations: vec![
+                create_account_op("1"),
+                create_payment_operation("2", "100"),
+                change_trust_op("3"),
+            ],
+            ..base_tx()
+        };
+        let result = explain_transaction(&tx, None).unwrap();
+
+        assert_eq!(result.operations.len(), 3);
+        assert_eq!(result.operations[0].index, 0);
+        assert_eq!(result.operations[0].operation_type, "create_account");
+        assert_eq!(result.operations[1].index, 1);
+        assert_eq!(result.operations[1].operation_type, "payment");
+        assert_eq!(result.operations[2].index, 2);
+        assert_eq!(result.operations[2].operation_type, "change_trust");
+    }
+
+    #[test]
+    fn test_operations_preserve_original_order() {
+        let tx = Transaction {
+            operations: vec![
+                change_trust_op("1"),
+                create_account_op("2"),
+                create_payment_operation("3", "50"),
+            ],
+            ..base_tx()
+        };
+        let result = explain_transaction(&tx, None).unwrap();
+
+        let types: Vec<&str> = result
+            .operations
+            .iter()
+            .map(|op| op.operation_type.as_str())
+            .collect();
+        assert_eq!(types, vec!["change_trust", "create_account", "payment"]);
+    }
+
+    #[test]
+    fn test_fully_supported_transaction_has_zero_skipped() {
+        let tx = Transaction {
+            operations: vec![
+                create_account_op("1"),
+                create_payment_operation("2", "100"),
+                change_trust_op("3"),
+            ],
+            ..base_tx()
+        };
+        let result = explain_transaction(&tx, None).unwrap();
+        assert_eq!(result.skipped_operations, 0);
+    }
+
+    #[test]
+    fn test_unknown_operation_type_graceful_fallback() {
+        let tx = Transaction {
+            operations: vec![truly_unsupported_op("1")],
+            ..base_tx()
+        };
+        let result = explain_transaction(&tx, None).unwrap();
+
+        assert_eq!(result.operations.len(), 1);
+        assert_eq!(result.operations[0].operation_type, "bump_sequence");
+        assert_eq!(
+            result.operations[0].summary,
+            "bump_sequence operation — full support coming soon"
+        );
+        assert_ne!(result.operations[0].summary, "");
+        assert_eq!(result.skipped_operations, 1);
+    }
+
+    #[test]
+    fn test_payment_explanations_still_populated_for_backward_compat() {
+        let tx = Transaction {
+            operations: vec![
+                create_account_op("1"),
+                create_payment_operation("2", "100"),
+            ],
+            ..base_tx()
+        };
+        let result = explain_transaction(&tx, None).unwrap();
+
+        assert_eq!(result.payment_explanations.len(), 1);
+        assert_eq!(result.payment_explanations[0].amount, "100");
+    }
+
+    #[test]
+    fn test_operation_details_present_for_create_account() {
+        let tx = Transaction {
+            operations: vec![create_account_op("1")],
+            ..base_tx()
+        };
+        let result = explain_transaction(&tx, None).unwrap();
+        let details = &result.operations[0].details;
+
+        assert_eq!(details["funder"], "GFUNDER");
+        assert_eq!(details["account"], "GNEWACCT");
+        assert_eq!(details["starting_balance"], "1.5");
+    }
+
+    #[test]
+    fn test_mixed_transaction_with_unsupported_type_counts_only_that_one() {
+        let tx = Transaction {
+            operations: vec![
+                create_payment_operation("1", "10"),
+                truly_unsupported_op("2"),
+                create_account_op("3"),
+            ],
+            ..base_tx()
+        };
+        let result = explain_transaction(&tx, None).unwrap();
+        assert_eq!(result.operations.len(), 3);
+        assert_eq!(result.skipped_operations, 1);
     }
 }
