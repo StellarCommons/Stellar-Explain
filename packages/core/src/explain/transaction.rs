@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::explain::memo::explain_memo;
 use crate::models::fee::FeeStats;
-use crate::models::operation::{Operation, OfferType, PathPaymentType};
+use crate::models::operation::{OfferType, Operation, PathPaymentType};
 use crate::models::transaction::Transaction;
 
 use super::operation::account_merge::explain_account_merge;
@@ -730,10 +730,7 @@ mod tests {
     #[test]
     fn test_payment_explanations_still_populated_for_backward_compat() {
         let tx = Transaction {
-            operations: vec![
-                create_account_op("1"),
-                create_payment_operation("2", "100"),
-            ],
+            operations: vec![create_account_op("1"), create_payment_operation("2", "100")],
             ..base_tx()
         };
         let result = explain_transaction(&tx, None).unwrap();

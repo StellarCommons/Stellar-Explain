@@ -73,7 +73,11 @@ mod tests {
     fn test_explain_account_merge_mentions_transfer() {
         let op = make_account_merge("GAAAA", "GBBBB");
         let explanation = explain_account_merge(&op);
-        assert!(explanation.summary.contains("transferring all remaining XLM"));
+        assert!(
+            explanation
+                .summary
+                .contains("transferring all remaining XLM")
+        );
     }
 
     #[test]
