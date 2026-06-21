@@ -8,6 +8,7 @@
 import type {
   TransactionExplanation,
   AccountExplanation,
+  AccountHistoryResponse,
   HealthResponse,
   ApiError,
 } from "@/types";
@@ -15,6 +16,8 @@ import type {
 export type {
   TransactionExplanation,
   AccountExplanation,
+  AccountHistoryResponse,
+  AccountHistoryTransaction,
   HealthResponse,
   ApiError,
   PaymentExplanation,
@@ -68,4 +71,17 @@ export async function fetchHealth(): Promise<HealthResponse> {
     headers: { Accept: "application/json" },
   });
   return handleResponse<HealthResponse>(res);
+}
+
+export async function fetchAccountHistory(
+  address: string,
+  limit = 10,
+  cursor?: string
+): Promise<AccountHistoryResponse> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (cursor) params.set("cursor", cursor);
+  const res = await fetch(`/api/account/${address}/history?${params}`, {
+    headers: { Accept: "application/json" },
+  });
+  return handleResponse<AccountHistoryResponse>(res);
 }

@@ -48,6 +48,7 @@ export function registerBatch(program: Command): void {
         url: string;
         timeout: number;
         verbose: boolean;
+        retries: number;
         json: boolean;
         retries: number;
       }>();
