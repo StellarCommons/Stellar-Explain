@@ -89,7 +89,7 @@ export default function UseCasesSection() {
   useEffect(() => {
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting && !started) {
+        if (entry?.isIntersecting && !started) {
           setVisible(true);
           setStarted(true);
         }
@@ -110,6 +110,7 @@ export default function UseCasesSection() {
 
     NODES.forEach((node) => {
       const d = SEQUENCE_DELAYS[node.id];
+      if (!d) return;
       lineTimers.push(
         setTimeout(() => {
           setLinesVisible((prev) => ({ ...prev, [node.id]: true }));

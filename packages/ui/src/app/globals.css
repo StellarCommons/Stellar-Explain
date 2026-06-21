@@ -1,20 +1,73 @@
 @import "tailwindcss";
 
+/* ── Dark theme (default) ── */
 :root {
-  --background: #080c12;
-  --foreground: #e8eaf0;
+  --bg-base: #080c12;
+  --bg-card: rgba(255,255,255,0.04);
+  --bg-card-hover: rgba(255,255,255,0.06);
+  --border-subtle: rgba(255,255,255,0.08);
+  --border-accent: rgba(56,189,248,0.3);
+  --text-primary: rgba(255,255,255,0.90);
+  --text-secondary: rgba(255,255,255,0.50);
+  --text-muted: rgba(255,255,255,0.25);
+  --text-mono: rgba(255,255,255,0.40);
+  --accent-sky: #38bdf8;
+  --accent-sky-dim: rgba(56,189,248,0.1);
+  --accent-purple: #a78bfa;
+  --accent-purple-dim: rgba(167,139,250,0.1);
+  --pill-success-bg: rgba(34,197,94,0.12);
+  --pill-success-text: #86efac;
+  --pill-fail-bg: rgba(239,68,68,0.12);
+  --pill-fail-text: #fca5a5;
+  --pill-warning-bg: rgba(245,158,11,0.12);
+  --pill-warning-text: #fcd34d;
+  --pill-default-bg: rgba(56,189,248,0.12);
+  --pill-default-text: #7dd3fc;
+  --grid-line: rgba(255,255,255,0.025);
+  --glow-sky: rgba(56,189,248,0.06);
+}
+
+/* ── Light theme ── */
+[data-theme="light"] {
+  --bg-base: #f0f4f8;
+  --bg-card: rgba(0,0,0,0.03);
+  --bg-card-hover: rgba(0,0,0,0.05);
+  --border-subtle: rgba(0,0,0,0.08);
+  --border-accent: rgba(2,132,199,0.3);
+  --text-primary: rgba(0,0,0,0.90);
+  --text-secondary: rgba(0,0,0,0.55);
+  --text-muted: rgba(0,0,0,0.30);
+  --text-mono: rgba(0,0,0,0.45);
+  --accent-sky: #0284c7;
+  --accent-sky-dim: rgba(2,132,199,0.08);
+  --accent-purple: #7c3aed;
+  --accent-purple-dim: rgba(124,58,237,0.08);
+  --pill-success-bg: rgba(22,163,74,0.10);
+  --pill-success-text: #15803d;
+  --pill-fail-bg: rgba(220,38,38,0.10);
+  --pill-fail-text: #b91c1c;
+  --pill-warning-bg: rgba(180,83,9,0.10);
+  --pill-warning-text: #92400e;
+  --pill-default-bg: rgba(2,132,199,0.10);
+  --pill-default-text: #0369a1;
+  --grid-line: rgba(0,0,0,0.04);
+  --glow-sky: rgba(2,132,199,0.04);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-background: var(--bg-base);
+  --color-foreground: var(--text-primary);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
 }
 
+html {
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--bg-base);
+  color: var(--text-primary);
 }
 
 @keyframes animate-in {
@@ -25,10 +78,12 @@ body {
 .animate-in {
   animation: animate-in 0.25s ease-out forwards;
 }
+
 @keyframes fadeSlideUp {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+
 .animate-fadeSlideUp {
   animation: fadeSlideUp 0.35s ease forwards;
 }

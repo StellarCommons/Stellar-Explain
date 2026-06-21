@@ -3,9 +3,6 @@ import { Card } from "@/components/Card";
 import { Label } from "@/components/Label";
 import { Pill } from "@/components/Pill";
 import { formatBalance } from "@/lib/utils";
-// import SaveAddressButton from "@/components/addressbook/SaveAddressButton";
-// import QRShareButton from "@/components/QRShareButton";
-// import { useAppShell } from "@/components/AppShellContext";
 
 interface AccountResultProps {
   data: AccountExplanation;
@@ -15,12 +12,7 @@ interface AccountResultProps {
   onRemoveSaved: () => void;
 }
 
-export function AccountResult({ data, isSaved, savedLabel, onSave, onRemoveSaved }: AccountResultProps) {
-//   const { personalise } = useAppShell();
-  const shareUrl = typeof window !== "undefined"
-    ? `${window.location.origin}/account/${data.address}`
-    : "";
-
+export function AccountResult({ data }: AccountResultProps) {
   return (
     <div className="space-y-4 animate-in">
 
@@ -28,52 +20,45 @@ export function AccountResult({ data, isSaved, savedLabel, onSave, onRemoveSaved
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="min-w-0">
           <Label>Account</Label>
-          <p className="font-mono text-xs text-white/40 break-all">
+          <p
+            className="font-mono text-xs break-all"
+            style={{ color: "var(--text-mono)" }}
+          >
             {data.address}
           </p>
         </div>
-        {/* <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-          {data.org_name && (
-            <Pill label={data.org_name} variant="default" />
-          )}
-          <SaveAddressButton
-            address={data.address}
-            isSaved={isSaved}
-            savedLabel={savedLabel}
-            onSave={onSave}
-            onRemove={onRemoveSaved}
-          />
-          <QRShareButton
-            url={shareUrl}
-            label={`Account ${data.address.slice(0, 8)}…`}
-          />
-        </div> */}
       </div>
 
       {/* summary */}
       <Card>
         <Label>Summary</Label>
-        <p className="text-sm text-white/80 leading-relaxed">{data.summary}</p>
+        <p className="text-sm leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+          {data.summary}
+        </p>
       </Card>
 
       {/* stats grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <Card>
           <Label>XLM Balance</Label>
-          <p className="text-lg font-mono text-white/90">
+          <p className="text-lg font-mono" style={{ color: "var(--text-primary)" }}>
             {formatBalance(data.xlm_balance)}
           </p>
-          <p className="text-[10px] text-white/30 font-mono mt-0.5">XLM</p>
+          <p className="text-[10px] font-mono mt-0.5" style={{ color: "var(--text-muted)" }}>XLM</p>
         </Card>
         <Card>
           <Label>Other Assets</Label>
-          <p className="text-lg font-mono text-white/90">{data.asset_count}</p>
-          <p className="text-[10px] text-white/30 font-mono mt-0.5">trust lines</p>
+          <p className="text-lg font-mono" style={{ color: "var(--text-primary)" }}>
+            {data.asset_count}
+          </p>
+          <p className="text-[10px] font-mono mt-0.5" style={{ color: "var(--text-muted)" }}>trust lines</p>
         </Card>
         <Card>
           <Label>Signers</Label>
-          <p className="text-lg font-mono text-white/90">{data.signer_count}</p>
-          <p className="text-[10px] text-white/30 font-mono mt-0.5">keys</p>
+          <p className="text-lg font-mono" style={{ color: "var(--text-primary)" }}>
+            {data.signer_count}
+          </p>
+          <p className="text-[10px] font-mono mt-0.5" style={{ color: "var(--text-muted)" }}>keys</p>
         </Card>
       </div>
 
@@ -81,7 +66,9 @@ export function AccountResult({ data, isSaved, savedLabel, onSave, onRemoveSaved
       {data.home_domain && (
         <Card>
           <Label>Home Domain</Label>
-          <p className="text-sm font-mono text-white/70">{data.home_domain}</p>
+          <p className="text-sm font-mono" style={{ color: "var(--text-secondary)" }}>
+            {data.home_domain}
+          </p>
         </Card>
       )}
 
