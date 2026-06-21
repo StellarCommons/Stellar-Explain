@@ -2,21 +2,13 @@ import type { TransactionExplanation } from "@/types";
 import { Card } from "@/components/Card";
 import { Label } from "@/components/Label";
 import { Pill } from "@/components/Pill";
-import { AddressChip } from "@/components/AddressChip";
 import { formatLedgerTime } from "@/lib/utils";
-// import QRShareButton from "@/components/QRShareButton";
-// import { useAppShell } from "@/components/AppShellContext";
 
 interface TransactionResultProps {
   data: TransactionExplanation;
 }
 
 export function TransactionResult({ data }: TransactionResultProps) {
-//   const { personalise } = useAppShell();
-  const shareUrl = typeof window !== "undefined"
-    ? `${window.location.origin}/tx/${data.transaction_hash}`
-    : "";
-
   return (
     <div className="space-y-4 animate-in">
 
@@ -24,7 +16,10 @@ export function TransactionResult({ data }: TransactionResultProps) {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="min-w-0">
           <Label>Transaction</Label>
-          <p className="font-mono text-xs text-white/40 break-all leading-relaxed">
+          <p
+            className="font-mono text-xs break-all leading-relaxed"
+            style={{ color: "var(--text-mono)" }}
+          >
             {data.transaction_hash}
           </p>
         </div>
@@ -34,22 +29,17 @@ export function TransactionResult({ data }: TransactionResultProps) {
             variant={data.successful ? "success" : "fail"}
           />
           {data.skipped_operations > 0 && (
-            <Pill
-              label={`${data.skipped_operations} skipped`}
-              variant="warning"
-            />
+            <Pill label={`${data.skipped_operations} skipped`} variant="warning" />
           )}
-          {/* <QRShareButton
-            url={shareUrl}
-            label={`Transaction ${data.transaction_hash.slice(0, 8)}…`}
-          /> */}
         </div>
       </div>
 
       {/* summary */}
       <Card>
         <Label>Summary</Label>
-        <p className="text-sm text-white/80 leading-relaxed">{data.summary}</p>
+        <p className="text-sm leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+          {data.summary}
+        </p>
       </Card>
 
       {/* timeline */}
@@ -58,7 +48,7 @@ export function TransactionResult({ data }: TransactionResultProps) {
           {data.ledger_closed_at && (
             <div>
               <Label>Confirmed at</Label>
-              <p className="text-sm font-mono text-white/70">
+              <p className="text-sm font-mono" style={{ color: "var(--text-secondary)" }}>
                 {formatLedgerTime(data.ledger_closed_at)}
               </p>
             </div>
@@ -66,7 +56,7 @@ export function TransactionResult({ data }: TransactionResultProps) {
           {data.ledger && (
             <div>
               <Label>Ledger</Label>
-              <p className="text-sm font-mono text-white/70">
+              <p className="text-sm font-mono" style={{ color: "var(--text-secondary)" }}>
                 #{data.ledger.toLocaleString()}
               </p>
             </div>
@@ -78,7 +68,9 @@ export function TransactionResult({ data }: TransactionResultProps) {
       {data.memo_explanation && (
         <Card>
           <Label>Memo</Label>
-          <p className="text-sm text-white/70">{data.memo_explanation}</p>
+          <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+            {data.memo_explanation}
+          </p>
         </Card>
       )}
 
@@ -86,7 +78,9 @@ export function TransactionResult({ data }: TransactionResultProps) {
       {data.fee_explanation && (
         <Card>
           <Label>Fee</Label>
-          <p className="text-sm text-white/70">{data.fee_explanation}</p>
+          <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+            {data.fee_explanation}
+          </p>
         </Card>
       )}
 
@@ -96,21 +90,21 @@ export function TransactionResult({ data }: TransactionResultProps) {
           <Label>Payments ({data.payment_explanations.length})</Label>
           {data.payment_explanations.map((p, i) => (
             <Card key={i} className="space-y-3">
-              {/* <p className="text-sm text-white/80 leading-relaxed break-words">{personalise(p.summary)}</p> */}
-              <div className="flex flex-wrap gap-x-4 gap-y-3 pt-1 border-t border-white/6">
+              <div
+                className="flex flex-wrap gap-x-4 gap-y-3 pt-1 border-t"
+                style={{ borderColor: "var(--border-subtle)" }}
+              >
                 <div className="min-w-0">
                   <Label>From</Label>
-                  {/* <AddressChip addr={personalise(p.from)} /> */}
                 </div>
                 <div className="min-w-0">
                   <Label>To</Label>
-                  {/* <AddressChip addr={personalise(p.to)} /> */}
                 </div>
                 <div className="min-w-0 w-full sm:w-auto">
                   <Label>Amount</Label>
-                  <span className="font-mono text-xs text-white/60 break-all">
+                  <span className="font-mono text-xs break-all" style={{ color: "var(--text-mono)" }}>
                     {p.amount}{" "}
-                    <span className="text-white/40">{p.asset}</span>
+                    <span style={{ color: "var(--text-muted)" }}>{p.asset}</span>
                   </span>
                 </div>
               </div>

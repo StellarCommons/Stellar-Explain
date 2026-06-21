@@ -5,17 +5,34 @@ interface PillProps {
   variant?: PillVariant;
 }
 
-const variantClasses: Record<PillVariant, string> = {
-  success: "bg-emerald-900/40 text-emerald-300 border-emerald-700/50",
-  fail:    "bg-red-900/40 text-red-300 border-red-700/50",
-  warning: "bg-amber-900/40 text-amber-300 border-amber-700/50",
-  default: "bg-sky-900/40 text-sky-300 border-sky-700/50",
+const variantStyles: Record<PillVariant, React.CSSProperties> = {
+  success: {
+    background: "var(--pill-success-bg)",
+    color: "var(--pill-success-text)",
+    borderColor: "var(--pill-success-bg)",
+  },
+  fail: {
+    background: "var(--pill-fail-bg)",
+    color: "var(--pill-fail-text)",
+    borderColor: "var(--pill-fail-bg)",
+  },
+  warning: {
+    background: "var(--pill-warning-bg)",
+    color: "var(--pill-warning-text)",
+    borderColor: "var(--pill-warning-bg)",
+  },
+  default: {
+    background: "var(--pill-default-bg)",
+    color: "var(--pill-default-text)",
+    borderColor: "var(--pill-default-bg)",
+  },
 };
 
 export function Pill({ label, variant = "default" }: PillProps) {
   return (
     <span
-      className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-mono border ${variantClasses[variant]}`}
+      className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono border"
+      style={variantStyles[variant]}
     >
       {label}
     </span>

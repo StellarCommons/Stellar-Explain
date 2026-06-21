@@ -12,16 +12,30 @@ const TABS: { id: Tab; label: string }[] = [
 
 export function TabSwitcher({ active, onChange }: TabSwitcherProps) {
   return (
-    <div className="flex gap-1 mb-5 p-1 rounded-lg bg-white/4 border border-white/8 w-fit">
+    <div
+      className="flex gap-1 mb-5 p-1 rounded-lg w-fit"
+      style={{
+        background: "var(--bg-card)",
+        border: "1px solid var(--border-subtle)",
+      }}
+    >
       {TABS.map((t) => (
         <button
           key={t.id}
           onClick={() => onChange(t.id)}
-          className={`px-4 py-1.5 rounded-md text-xs font-mono transition-all duration-150 ${
+          className="px-4 py-1.5 rounded-md text-xs font-mono transition-all duration-150"
+          style={
             active === t.id
-              ? "bg-sky-500/20 text-sky-300 border border-sky-500/30"
-              : "text-white/35 hover:text-white/60"
-          }`}
+              ? {
+                  background: "var(--accent-sky-dim)",
+                  color: "var(--accent-sky)",
+                  border: "1px solid var(--border-accent)",
+                }
+              : {
+                  color: "var(--text-muted)",
+                  border: "1px solid transparent",
+                }
+          }
         >
           {t.label}
         </button>
