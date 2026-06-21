@@ -48,6 +48,7 @@ export function registerBatch(program: Command): void {
         url: string;
         timeout: number;
         verbose: boolean;
+        retries: number;
         json: boolean;
       }>();
 
@@ -56,6 +57,7 @@ export function registerBatch(program: Command): void {
         baseUrl: opts.url,
         timeout: opts.timeout,
         verbose: opts.verbose,
+        retries: opts.retries,
       });
 
       // Validate all hashes upfront so the user gets a clear error before any
