@@ -30,7 +30,9 @@ function isNewer(latest: string, current: string): boolean {
   return lPat > cPat;
 }
 
-export function runUpdateCheck(currentVersion: string): void {
+export function runUpdateCheck(currentVersion: string, enabled = true): void {
+  if (!enabled) return;
+
   fetchLatestVersion()
     .then((latest) => {
       if (isNewer(latest, currentVersion)) {
@@ -40,5 +42,5 @@ export function runUpdateCheck(currentVersion: string): void {
         );
       }
     })
-    .catch(() => { /* silently ignore — must not block or crash */ });
+    .catch(() => { /* silently ignore - must not block or crash */ });
 }
