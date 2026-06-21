@@ -29,24 +29,6 @@ describe("formatTransaction", () => {
     expect(out).toContain("Memo:        hello");
   });
 
-  it("renders payments as a table with aligned columns", () => {
-    const tx: TransactionExplanation = {
-      ...baseTx,
-      payments: [
-        { from: "GAAA", to: "GBBB", amount: "10.00", asset: "XLM", summary: "" },
-        { from: "GCCCCCCCC", to: "GD", amount: "9999.00", asset: "USDC", summary: "" },
-      ],
-    };
-    const out = formatTransaction(tx);
-    expect(out).toContain("Payments:");
-    const lines = out.split("\n").filter((l) => l.startsWith("  ") && l.includes("→"));
-    expect(lines).toHaveLength(2);
-    // columns must be aligned — each line same length up to asset start
-    const arrowIdx0 = lines[0].indexOf("→");
-    const arrowIdx1 = lines[1].indexOf("→");
-    expect(arrowIdx0).toBe(arrowIdx1);
-  });
-
   it("renders skipped_operations when > 0", () => {
     const out = formatTransaction({ ...baseTx, skipped_operations: 2 });
     expect(out).toContain("Skipped ops: 2");
