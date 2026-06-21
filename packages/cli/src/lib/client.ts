@@ -1,4 +1,4 @@
-import { NetworkError, NotFoundError } from "./errors.js";
+import { NetworkError, NotFoundError, NonJsonResponseError } from "./errors.js";
 import type {
   TransactionExplanation,
   AccountExplanation,
@@ -33,7 +33,7 @@ async function requestOnce<T>(
       const contentType = res.headers.get("content-type") ?? "";
       if (!contentType.includes("application/json")) {
         const text = await res.text();
-        throw new NetworkError(`HTTP ${res.status}: non-JSON response — ${text.slice(0, 120)}`);
+        throw new NonJsonResponseError(res.status, text.slice(0, 120));
       }
       throw new NetworkError(`HTTP ${res.status}: ${url}`);
     }
@@ -41,12 +41,12 @@ async function requestOnce<T>(
     const contentType = res.headers.get("content-type") ?? "";
     if (!contentType.includes("application/json")) {
       const text = await res.text();
-      throw new NetworkError(`Expected JSON but got: ${text.slice(0, 120)}`);
+      throw new NonJsonResponseError(res.status, text.slice(0, 120));
     }
 
     return res.json() as Promise<T>;
   } catch (err) {
-    if (err instanceof NotFoundError || err instanceof NetworkError) throw err;
+    if (err instanceof NotFoundError || err instanceof NetworkError || err instanceof NonJsonResponseError) throw err;
     if ((err as Error).name === "AbortError")
       throw new NetworkError(`Request timed out after ${opts.timeout}ms`);
     throw new NetworkError(`Request failed: ${(err as Error).message}`);

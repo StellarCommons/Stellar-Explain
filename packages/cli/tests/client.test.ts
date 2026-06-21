@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createClient } from "../src/lib/client.js";
-import { NetworkError, NotFoundError } from "../src/lib/errors.js";
+import { NetworkError, NotFoundError, NonJsonResponseError } from "../src/lib/errors.js";
 
 const defaultOpts = {
   baseUrl: "http://localhost:4000",
@@ -184,6 +184,53 @@ describe("createClient", () => {
       expect(writeSpy).not.toHaveBeenCalled();
 
       writeSpy.mockRestore();
+    });
+  });
+
+  // ── Non-JSON responses ─────────────────────────────────────────
+
+  describe("non-JSON response", () => {
+    function mockNonJsonResponse(status: number, body: string, ok = false) {
+      return vi.fn(() =>
+        Promise.resolve({
+          status,
+          ok,
+          headers: { get: (_name: string) => "text/html" },
+          json: () => Promise.reject(new SyntaxError("Unexpected token")),
+          text: () => Promise.resolve(body),
+        }),
+      );
+    }
+
+    it("throws NonJsonResponseError when a 200 response has non-JSON content-type", async () => {
+      vi.stubGlobal("fetch", mockNonJsonResponse(200, "<html>Not found</html>", true));
+
+      const client = createClient(defaultOpts);
+
+      await expect(client.getTransaction("abc")).rejects.toThrow(NonJsonResponseError);
+      await expect(client.getTransaction("abc")).rejects.toThrow(
+        "HTTP 200: non-JSON response",
+      );
+    });
+
+    it("throws NonJsonResponseError when an error response has non-JSON content-type", async () => {
+      vi.stubGlobal("fetch", mockNonJsonResponse(503, "Service Unavailable", false));
+
+      const client = createClient(defaultOpts);
+
+      await expect(client.getHealth()).rejects.toThrow(NonJsonResponseError);
+      await expect(client.getHealth()).rejects.toThrow(
+        "HTTP 503: non-JSON response",
+      );
+    });
+
+    it("includes a preview of the response body in the error message", async () => {
+      const body = "Bad Gateway";
+      vi.stubGlobal("fetch", mockNonJsonResponse(502, body, false));
+
+      const client = createClient(defaultOpts);
+
+      await expect(client.getHealth()).rejects.toThrow(body);
     });
   });
 });
