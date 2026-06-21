@@ -29,16 +29,18 @@ export function registerWatch(program: Command): void {
           timeout: number;
           retries: number;
           verbose: boolean;
+          retries: number;
           json: boolean;
+          retries: number;
         }>();
 
         validateHash(hash);
 
         const client = createClient({
-          baseUrl: opts.url,
-          timeout: opts.timeout,
-          retries: opts.retries,
-          verbose: opts.verbose,
+          baseUrl:  opts.url,
+          timeout:  opts.timeout,
+          verbose:  opts.verbose,
+          retries:  opts.retries ?? 0,
         });
 
         const intervalMs     = Math.max(500, cmdOpts.interval);
