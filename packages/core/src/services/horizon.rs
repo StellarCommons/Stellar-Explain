@@ -10,6 +10,21 @@ use crate::models::fee::FeeStats;
 
 // ── Horizon response structs ───────────────────────────────────────────────
 
+/// Result codes returned by Horizon for a failed transaction.
+/// Present either directly on the transaction or under `extras`.
+#[derive(Debug, Deserialize, Clone)]
+pub struct HorizonResultCodes {
+    pub transaction: Option<String>,
+    #[serde(default)]
+    pub operations: Vec<String>,
+}
+
+/// The `extras` envelope that Horizon includes in error responses.
+#[derive(Debug, Deserialize, Clone)]
+pub struct HorizonExtras {
+    pub result_codes: Option<HorizonResultCodes>,
+}
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct HorizonTransaction {
     pub hash: String,
@@ -21,6 +36,10 @@ pub struct HorizonTransaction {
     pub created_at: Option<String>,
     /// Ledger sequence number in which this transaction was included.
     pub ledger: Option<u64>,
+    /// Result codes present on fetched failed transactions.
+    pub result_codes: Option<HorizonResultCodes>,
+    /// Result codes nested under `extras` in Horizon submission error responses.
+    pub extras: Option<HorizonExtras>,
 }
 
 #[derive(Debug, Deserialize, Clone)]

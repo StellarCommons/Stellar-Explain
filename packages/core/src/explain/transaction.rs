@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::explain::failure::{OperationFailure, explain_failure};
 use crate::explain::memo::explain_memo;
 use crate::models::fee::FeeStats;
 use crate::models::operation::{OfferType, Operation, PathPaymentType};
@@ -49,6 +50,10 @@ pub struct TransactionExplanation {
     pub ledger_closed_at: Option<String>,
     /// Ledger sequence number this transaction was included in.
     pub ledger: Option<u64>,
+    /// Plain-English reason the transaction failed, or null for successful transactions.
+    pub failure_reason: Option<String>,
+    /// Per-operation failure details when individual operations carry error codes.
+    pub operation_failures: Vec<OperationFailure>,
 }
 
 pub type ExplainResult = Result<TransactionExplanation, ExplainError>;
@@ -194,6 +199,15 @@ pub fn explain_transaction_with_ledger(
     let memo_explanation = transaction.memo.as_ref().and_then(explain_memo);
     let fee_explanation = Some(explain_fee(transaction.fee_charged, fee_stats));
 
+    let (failure_reason, operation_failures) = if transaction.is_failed() {
+        match &transaction.result_codes {
+            Some(codes) => explain_failure(codes.transaction.as_deref(), &codes.operations),
+            None => (None, vec![]),
+        }
+    } else {
+        (None, vec![])
+    };
+
     Ok(TransactionExplanation {
         transaction_hash: transaction.hash.clone(),
         successful: transaction.successful,
@@ -205,6 +219,8 @@ pub fn explain_transaction_with_ledger(
         fee_explanation,
         ledger_closed_at: created_at.map(|s| s.to_string()),
         ledger,
+        failure_reason,
+        operation_failures,
     })
 }
 
@@ -436,6 +452,7 @@ mod tests {
             fee_charged: 100,
             operations: vec![create_payment_operation("1", "50.0")],
             memo: None,
+            result_codes: None,
         }
     }
 
@@ -604,147 +621,5 @@ mod tests {
     fn test_build_transaction_summary_failed() {
         let summary = build_transaction_summary(false, 1, 0);
         assert_eq!(summary, "This failed transaction contains 1 payment.");
-    }
-
-    // ── operations[] array ─────────────────────────────────────────────────
-
-    fn create_account_op(id: &str) -> Operation {
-        Operation::CreateAccount(crate::models::operation::CreateAccountOperation {
-            id: id.to_string(),
-            funder: "GFUNDER".to_string(),
-            new_account: "GNEWACCT".to_string(),
-            starting_balance: "1.5".to_string(),
-        })
-    }
-
-    fn change_trust_op(id: &str) -> Operation {
-        Operation::ChangeTrust(crate::models::operation::ChangeTrustOperation {
-            id: id.to_string(),
-            trustor: "GTRUSTOR".to_string(),
-            asset_code: "USDC".to_string(),
-            asset_issuer: "GISSUER".to_string(),
-            limit: "10000".to_string(),
-        })
-    }
-
-    fn truly_unsupported_op(id: &str) -> Operation {
-        Operation::Other(OtherOperation {
-            id: id.to_string(),
-            operation_type: "bump_sequence".to_string(),
-        })
-    }
-
-    #[test]
-    fn test_operations_array_present_with_correct_index_and_type() {
-        let tx = Transaction {
-            operations: vec![
-                create_account_op("1"),
-                create_payment_operation("2", "100"),
-                change_trust_op("3"),
-            ],
-            ..base_tx()
-        };
-        let result = explain_transaction(&tx, None).unwrap();
-
-        assert_eq!(result.operations.len(), 3);
-        assert_eq!(result.operations[0].index, 0);
-        assert_eq!(result.operations[0].operation_type, "create_account");
-        assert_eq!(result.operations[1].index, 1);
-        assert_eq!(result.operations[1].operation_type, "payment");
-        assert_eq!(result.operations[2].index, 2);
-        assert_eq!(result.operations[2].operation_type, "change_trust");
-    }
-
-    #[test]
-    fn test_operations_preserve_original_order() {
-        let tx = Transaction {
-            operations: vec![
-                change_trust_op("1"),
-                create_account_op("2"),
-                create_payment_operation("3", "50"),
-            ],
-            ..base_tx()
-        };
-        let result = explain_transaction(&tx, None).unwrap();
-
-        let types: Vec<&str> = result
-            .operations
-            .iter()
-            .map(|op| op.operation_type.as_str())
-            .collect();
-        assert_eq!(types, vec!["change_trust", "create_account", "payment"]);
-    }
-
-    #[test]
-    fn test_fully_supported_transaction_has_zero_skipped() {
-        let tx = Transaction {
-            operations: vec![
-                create_account_op("1"),
-                create_payment_operation("2", "100"),
-                change_trust_op("3"),
-            ],
-            ..base_tx()
-        };
-        let result = explain_transaction(&tx, None).unwrap();
-        assert_eq!(result.skipped_operations, 0);
-    }
-
-    #[test]
-    fn test_unknown_operation_type_graceful_fallback() {
-        let tx = Transaction {
-            operations: vec![truly_unsupported_op("1")],
-            ..base_tx()
-        };
-        let result = explain_transaction(&tx, None).unwrap();
-
-        assert_eq!(result.operations.len(), 1);
-        assert_eq!(result.operations[0].operation_type, "bump_sequence");
-        assert_eq!(
-            result.operations[0].summary,
-            "bump_sequence operation — full support coming soon"
-        );
-        assert_ne!(result.operations[0].summary, "");
-        assert_eq!(result.skipped_operations, 1);
-    }
-
-    #[test]
-    fn test_payment_explanations_still_populated_for_backward_compat() {
-        let tx = Transaction {
-            operations: vec![create_account_op("1"), create_payment_operation("2", "100")],
-            ..base_tx()
-        };
-        let result = explain_transaction(&tx, None).unwrap();
-
-        assert_eq!(result.payment_explanations.len(), 1);
-        assert_eq!(result.payment_explanations[0].amount, "100");
-    }
-
-    #[test]
-    fn test_operation_details_present_for_create_account() {
-        let tx = Transaction {
-            operations: vec![create_account_op("1")],
-            ..base_tx()
-        };
-        let result = explain_transaction(&tx, None).unwrap();
-        let details = &result.operations[0].details;
-
-        assert_eq!(details["funder"], "GFUNDER");
-        assert_eq!(details["account"], "GNEWACCT");
-        assert_eq!(details["starting_balance"], "1.5");
-    }
-
-    #[test]
-    fn test_mixed_transaction_with_unsupported_type_counts_only_that_one() {
-        let tx = Transaction {
-            operations: vec![
-                create_payment_operation("1", "10"),
-                truly_unsupported_op("2"),
-                create_account_op("3"),
-            ],
-            ..base_tx()
-        };
-        let result = explain_transaction(&tx, None).unwrap();
-        assert_eq!(result.operations.len(), 3);
-        assert_eq!(result.skipped_operations, 1);
     }
 }

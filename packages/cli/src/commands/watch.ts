@@ -27,6 +27,7 @@ export function registerWatch(program: Command): void {
         const opts = program.opts<{
           url: string;
           timeout: number;
+          retries: number;
           verbose: boolean;
           json: boolean;
         }>();
@@ -37,6 +38,7 @@ export function registerWatch(program: Command): void {
           baseUrl:  opts.url,
           timeout:  opts.timeout,
           verbose:  opts.verbose,
+          retries:  opts.retries ?? 0,
         });
 
         const intervalMs     = Math.max(500, cmdOpts.interval);

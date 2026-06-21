@@ -7,7 +7,12 @@ interface AddressChipProps {
 export function AddressChip({ addr }: AddressChipProps) {
   return (
     <span
-      className="font-mono text-xs bg-white/5 border border-white/10 rounded px-2 py-0.5 text-white/60"
+      className="font-mono text-xs rounded px-2 py-0.5"
+      style={{
+        background: "var(--bg-card-hover)",
+        border: "1px solid var(--border-subtle)",
+        color: "var(--text-mono)",
+      }}
       title={addr}
     >
       {shortAddr(addr)}

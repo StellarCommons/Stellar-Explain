@@ -43,6 +43,23 @@ export interface ApiError {
   };
 }
 
+export interface AccountHistoryTransaction {
+  transaction_hash: string;
+  successful: boolean;
+  summary: string;
+  ledger_closed_at: string | null;
+  ledger: number | null;
+  operation_count: number;
+  fee_explanation: string | null;
+}
+
+export interface AccountHistoryResponse {
+  address: string;
+  transactions: AccountHistoryTransaction[];
+  next_cursor: string | null;
+  has_more: boolean;
+}
+
 export type Tab = "tx" | "account";
 
 export type PillVariant = "success" | "fail" | "default" | "warning";

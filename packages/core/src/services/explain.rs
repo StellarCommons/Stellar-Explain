@@ -1,7 +1,7 @@
 use crate::models::memo::Memo;
 use crate::models::operation::Operation;
-use crate::models::transaction::Transaction;
-use crate::services::horizon::{HorizonOperation, HorizonTransaction};
+use crate::models::transaction::{ResultCodes, Transaction};
+use crate::services::horizon::{HorizonOperation, HorizonResultCodes, HorizonTransaction};
 
 pub fn map_transaction_to_domain(
     tx: HorizonTransaction,
@@ -14,12 +14,26 @@ pub fn map_transaction_to_domain(
     // The memo value itself is only present for non-none memo types.
     let memo = map_memo(tx.memo_type.as_deref(), tx.memo.as_deref());
 
+    // Prefer result codes from `extras` (submission error shape), fall back to
+    // top-level `result_codes` (fetch-by-hash shape for failed transactions).
+    let raw_codes: Option<&HorizonResultCodes> = tx
+        .extras
+        .as_ref()
+        .and_then(|e| e.result_codes.as_ref())
+        .or(tx.result_codes.as_ref());
+
+    let result_codes = raw_codes.map(|rc| ResultCodes {
+        transaction: rc.transaction.clone(),
+        operations: rc.operations.clone(),
+    });
+
     Transaction::new(
         tx.hash,
         tx.successful,
         tx.fee_charged.parse().unwrap_or(0),
         ops,
         memo,
+        result_codes,
     )
 }
 
