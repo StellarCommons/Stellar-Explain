@@ -30,6 +30,7 @@ export function registerWatch(program: Command): void {
           verbose: boolean;
           retries: number;
           json: boolean;
+          retries: number;
         }>();
 
         validateHash(hash);
@@ -38,7 +39,7 @@ export function registerWatch(program: Command): void {
           baseUrl:  opts.url,
           timeout:  opts.timeout,
           verbose:  opts.verbose,
-          retries:  opts.retries,
+          retries:  opts.retries ?? 0,
         });
 
         const intervalMs     = Math.max(500, cmdOpts.interval);

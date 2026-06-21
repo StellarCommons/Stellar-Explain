@@ -50,6 +50,7 @@ export function registerBatch(program: Command): void {
         verbose: boolean;
         retries: number;
         json: boolean;
+        retries: number;
       }>();
 
       const hashes = await readHashes(file);
@@ -57,7 +58,7 @@ export function registerBatch(program: Command): void {
         baseUrl: opts.url,
         timeout: opts.timeout,
         verbose: opts.verbose,
-        retries: opts.retries,
+        retries: opts.retries ?? 0,
       });
 
       // Validate all hashes upfront so the user gets a clear error before any

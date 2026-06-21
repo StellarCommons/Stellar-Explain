@@ -16,13 +16,8 @@ export function formatTransaction(tx: TransactionExplanation, useColor = false):
   if (tx.payments.length > 0) {
     lines.push("", "Payments:");
     const fromW = Math.max(...tx.payments.map((p) => p.from.length));
-    const toW   = Math.max(...tx.payments.map((p) => p.to.length));
-    const amtW  = Math.max(...tx.payments.map((p) => p.amount.length));
     for (const p of tx.payments) {
-      const from = p.from.padEnd(fromW);
-      const to   = p.to.padEnd(toW);
-      const amt  = p.amount.padStart(amtW);
-      lines.push(`  ${from} → ${to}  ${colorize(amt, 32, useColor)} ${p.asset}`);
+      lines.push(`  ${p.from.padEnd(fromW)} → ${p.to}  ${colorize(p.amount, 32, useColor)} ${p.asset}`);
     }
   }
 
