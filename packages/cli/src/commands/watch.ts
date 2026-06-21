@@ -29,9 +29,7 @@ export function registerWatch(program: Command): void {
           timeout: number;
           retries: number;
           verbose: boolean;
-          retries: number;
           json: boolean;
-          retries: number;
         }>();
 
         validateHash(hash);

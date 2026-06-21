@@ -49,18 +49,15 @@ export function registerBatch(program: Command): void {
         timeout: number;
         retries: number;
         verbose: boolean;
-        retries: number;
         json: boolean;
-        retries: number;
       }>();
 
       const hashes = await readHashes(file);
       const client = createClient({
         baseUrl: opts.url,
         timeout: opts.timeout,
-        retries: opts.retries,
-        verbose: opts.verbose,
         retries: opts.retries ?? 0,
+        verbose: opts.verbose,
       });
 
       // Validate all hashes upfront so the user gets a clear error before any
