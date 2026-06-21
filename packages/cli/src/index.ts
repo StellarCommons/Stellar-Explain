@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import { resolveBaseUrl } from "./lib/config.js";
+import { readConfigFile } from "./lib/configFile.js";
 import { runUpdateCheck } from "./lib/updateCheck.js";
 import { registerTx } from "./commands/tx.js";
 import { registerAccount } from "./commands/account.js";
@@ -13,7 +14,7 @@ import { EXIT_CODE } from "./lib/exitCodes.js";
 import { parseMs } from "./lib/parseMs.js";
 import { getCliVersion } from "./lib/pkgVersion.js";
 
-// #99 — Node version check
+// #99 - Node version check
 const [major = 0] = process.version.replace("v", "").split(".").map(Number);
 if (major < 18) {
   process.stderr.write(`Error: Node.js 18 or higher is required (found ${process.version}).\n`);
@@ -21,9 +22,12 @@ if (major < 18) {
 }
 
 const version = getCliVersion();
+const configFile = readConfigFile();
+const updateCheckEnabled =
+  configFile.updateCheck !== false && !process.argv.slice(2).includes("--no-update-check");
 
-// #100 — Non-blocking update check
-runUpdateCheck(version);
+// #100 - Non-blocking update check
+runUpdateCheck(version, updateCheckEnabled);
 
 const program = new Command();
 program
@@ -33,6 +37,7 @@ program
   .option("--timeout <ms>", "Request timeout in ms", (v) => parseInt(v, 10), 10000)
   .option("--retries <n>", "Retry attempts for network errors", (v) => parseInt(v, 10), 2)
   .option("--timeout <ms>", "Request timeout in ms", parseMs, 10000)
+  .option("--no-update-check", "Disable the startup CLI update notification", false)
   .option("--verbose", "Log request details to stderr", false)
   .option("--json", "Output raw JSON", false);
 
