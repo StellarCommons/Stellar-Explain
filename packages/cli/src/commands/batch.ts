@@ -47,6 +47,7 @@ export function registerBatch(program: Command): void {
       const opts = program.opts<{
         url: string;
         timeout: number;
+        retries: number;
         verbose: boolean;
         json: boolean;
       }>();
@@ -55,6 +56,7 @@ export function registerBatch(program: Command): void {
       const client = createClient({
         baseUrl: opts.url,
         timeout: opts.timeout,
+        retries: opts.retries,
         verbose: opts.verbose,
       });
 

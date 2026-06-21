@@ -27,6 +27,7 @@ export function registerWatch(program: Command): void {
         const opts = program.opts<{
           url: string;
           timeout: number;
+          retries: number;
           verbose: boolean;
           json: boolean;
         }>();
@@ -34,9 +35,10 @@ export function registerWatch(program: Command): void {
         validateHash(hash);
 
         const client = createClient({
-          baseUrl:  opts.url,
-          timeout:  opts.timeout,
-          verbose:  opts.verbose,
+          baseUrl: opts.url,
+          timeout: opts.timeout,
+          retries: opts.retries,
+          verbose: opts.verbose,
         });
 
         const intervalMs     = Math.max(500, cmdOpts.interval);
