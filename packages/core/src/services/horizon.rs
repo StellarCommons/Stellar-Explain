@@ -399,6 +399,8 @@ pub struct HorizonOperation {
     pub source_asset_issuer: Option<String>,
     // Clawback fields
     pub balance_id: Option<String>,
+    // Account merge fields
+    pub into: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

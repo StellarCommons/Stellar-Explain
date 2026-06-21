@@ -1,7 +1,3 @@
-//! Operation domain models.
-//!
-//! Internal representation of Stellar operations, independent of Horizon JSON.
-
 use crate::models::memo::Memo;
 use serde::{Deserialize, Serialize};
 
@@ -26,6 +22,7 @@ pub enum Operation {
     PathPayment(PathPaymentOperation),
     Clawback(ClawbackOperation),
     ClawbackClaimableBalance(ClawbackClaimableBalanceOperation),
+    AccountMerge(AccountMergeOperation),
     Other(OtherOperation),
 }
 
@@ -147,6 +144,17 @@ pub struct ClawbackClaimableBalanceOperation {
     pub balance_id: String,
 }
 
+/// An account_merge operation that merges one account into another,
+/// transferring all remaining XLM and removing the source account.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AccountMergeOperation {
+    pub id: String,
+    /// The account being merged away (the source).
+    pub source: String,
+    /// The account receiving the remaining XLM balance.
+    pub destination: String,
+}
+
 /// Placeholder for operation types we do not yet explain.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct OtherOperation {
@@ -173,6 +181,7 @@ impl Operation {
             Operation::PathPayment(p) => &p.id,
             Operation::Clawback(c) => &c.id,
             Operation::ClawbackClaimableBalance(c) => &c.id,
+            Operation::AccountMerge(a) => &a.id,
             Operation::Other(o) => &o.id,
         }
     }
@@ -346,6 +355,15 @@ impl From<HorizonOperation> for Operation {
                     balance_id: op.balance_id.unwrap_or_default(),
                 })
             }
+            "account_merge" => Operation::AccountMerge(AccountMergeOperation {
+                id: op.id,
+                source: op
+                    .source_account
+                    .clone()
+                    .or(op.account.clone())
+                    .unwrap_or_else(|| "Unknown".to_string()),
+                destination: op.into.unwrap_or_default(),
+            }),
             _ => Operation::Other(OtherOperation {
                 id: op.id,
                 operation_type: op.operation_type,
@@ -432,6 +450,16 @@ mod tests {
             limit: "1000".to_string(),
         });
         assert_eq!(op.id(), "ct-1");
+    }
+
+    #[test]
+    fn test_account_merge_id() {
+        let op = Operation::AccountMerge(AccountMergeOperation {
+            id: "am-1".to_string(),
+            source: "GSOURCE".to_string(),
+            destination: "GDEST".to_string(),
+        });
+        assert_eq!(op.id(), "am-1");
     }
 
     #[test]
