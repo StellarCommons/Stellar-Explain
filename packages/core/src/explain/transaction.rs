@@ -12,7 +12,7 @@ use super::operation::clawback::{explain_clawback, explain_clawback_claimable_ba
 use super::operation::create_account::explain_create_account;
 use super::operation::manage_offer::explain_manage_offer;
 use super::operation::path_payment::explain_path_payment;
-use super::operation::payment::{explain_payment, explain_payment_with_fee, PaymentExplanation};
+use super::operation::payment::{PaymentExplanation, explain_payment, explain_payment_with_fee};
 use super::operation::set_options::explain_set_options;
 
 /// A single explained operation within a transaction, in original order.
@@ -591,10 +591,12 @@ mod tests {
         };
         let explanation = explain_transaction(&tx, None).unwrap();
         assert!(explanation.memo_explanation.is_some());
-        assert!(explanation
-            .memo_explanation
-            .unwrap()
-            .contains("Invoice #12345"));
+        assert!(
+            explanation
+                .memo_explanation
+                .unwrap()
+                .contains("Invoice #12345")
+        );
     }
 
     #[test]
