@@ -27,10 +27,9 @@ export function registerWatch(program: Command): void {
         const opts = program.opts<{
           url: string;
           timeout: number;
+          retries: number;
           verbose: boolean;
-          retries: number;
           json: boolean;
-          retries: number;
         }>();
 
         validateHash(hash);

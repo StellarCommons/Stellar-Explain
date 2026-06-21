@@ -2,13 +2,22 @@ use crate::models::memo::Memo;
 use crate::models::operation::{Operation, PaymentOperation};
 use serde::{Deserialize, Serialize};
 
+/// Raw result codes from Horizon for a failed transaction.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ResultCodes {
+    pub transaction: Option<String>,
+    pub operations: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Transaction {
     pub hash: String,
     pub successful: bool,
     pub fee_charged: u64,
     pub operations: Vec<Operation>,
-    pub memo: Option<Memo>, // Added memo field
+    pub memo: Option<Memo>,
+    /// Raw Horizon result codes — only present for failed transactions.
+    pub result_codes: Option<ResultCodes>,
 }
 
 impl Transaction {
@@ -18,6 +27,7 @@ impl Transaction {
         fee_charged: u64,
         operations: Vec<Operation>,
         memo: Option<Memo>,
+        result_codes: Option<ResultCodes>,
     ) -> Self {
         Self {
             hash,
@@ -25,6 +35,7 @@ impl Transaction {
             fee_charged,
             operations,
             memo,
+            result_codes,
         }
     }
 
@@ -107,6 +118,7 @@ mod tests {
                 create_payment("25"),
             ],
             memo: None,
+            result_codes: None,
         };
 
         let payments = tx.payment_operations();
@@ -123,6 +135,7 @@ mod tests {
             fee_charged: 100,
             operations: vec![create_unsupported(), create_payment("10")],
             memo: None,
+            result_codes: None,
         };
 
         let tx_without_payment = Transaction {
@@ -131,6 +144,7 @@ mod tests {
             fee_charged: 100,
             operations: vec![create_unsupported()],
             memo: None,
+            result_codes: None,
         };
 
         assert!(tx_with_payment.has_payments());
@@ -150,6 +164,7 @@ mod tests {
                 create_payment("10"),
             ],
             memo: None,
+            result_codes: None,
         };
 
         assert_eq!(tx.payment_count(), 3);
@@ -163,6 +178,7 @@ mod tests {
             fee_charged: 100,
             operations: vec![create_payment("100")],
             memo: None,
+            result_codes: None,
         };
 
         assert!(tx.is_failed());
@@ -177,6 +193,7 @@ mod tests {
             fee_charged: 100,
             operations: vec![create_payment("10")],
             memo: Some(Memo::text("test").unwrap()),
+            result_codes: None,
         };
 
         let tx_without_memo = Transaction {
@@ -185,6 +202,7 @@ mod tests {
             fee_charged: 100,
             operations: vec![create_payment("10")],
             memo: None,
+            result_codes: None,
         };
 
         assert!(tx_with_memo.has_memo());
@@ -200,9 +218,45 @@ mod tests {
             fee_charged: 100,
             operations: vec![create_payment("10")],
             memo: Some(memo.clone()),
+            result_codes: None,
         };
 
         assert_eq!(tx.get_memo(), Some(&memo));
         assert_eq!(tx.memo_type(), Some("id"));
+    }
+
+    #[test]
+    fn test_failed_transaction_with_result_codes() {
+        let tx = Transaction {
+            hash: "failedtx".to_string(),
+            successful: false,
+            fee_charged: 100,
+            operations: vec![create_payment("100")],
+            memo: None,
+            result_codes: Some(ResultCodes {
+                transaction: Some("tx_bad_seq".to_string()),
+                operations: vec!["op_no_trust".to_string()],
+            }),
+        };
+
+        assert!(tx.is_failed());
+        let codes = tx.result_codes.unwrap();
+        assert_eq!(codes.transaction.as_deref(), Some("tx_bad_seq"));
+        assert_eq!(codes.operations, vec!["op_no_trust"]);
+    }
+
+    #[test]
+    fn test_successful_transaction_has_no_result_codes() {
+        let tx = Transaction {
+            hash: "successtx".to_string(),
+            successful: true,
+            fee_charged: 100,
+            operations: vec![create_payment("10")],
+            memo: None,
+            result_codes: None,
+        };
+
+        assert!(!tx.is_failed());
+        assert!(tx.result_codes.is_none());
     }
 }

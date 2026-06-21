@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::explain::failure::{OperationFailure, explain_failure};
 use crate::explain::memo::explain_memo;
 use crate::models::fee::FeeStats;
 use crate::models::transaction::Transaction;
@@ -24,6 +25,10 @@ pub struct TransactionExplanation {
     pub ledger_closed_at: Option<String>,
     /// Ledger sequence number this transaction was included in.
     pub ledger: Option<u64>,
+    /// Plain-English reason the transaction failed, or null for successful transactions.
+    pub failure_reason: Option<String>,
+    /// Per-operation failure details when individual operations carry error codes.
+    pub operation_failures: Vec<OperationFailure>,
 }
 
 pub type ExplainResult = Result<TransactionExplanation, ExplainError>;
@@ -157,6 +162,15 @@ pub fn explain_transaction_with_ledger(
     let memo_explanation = transaction.memo.as_ref().and_then(explain_memo);
     let fee_explanation = Some(explain_fee(transaction.fee_charged, fee_stats));
 
+    let (failure_reason, operation_failures) = if transaction.is_failed() {
+        match &transaction.result_codes {
+            Some(codes) => explain_failure(codes.transaction.as_deref(), &codes.operations),
+            None => (None, vec![]),
+        }
+    } else {
+        (None, vec![])
+    };
+
     Ok(TransactionExplanation {
         transaction_hash: transaction.hash.clone(),
         successful: transaction.successful,
@@ -167,6 +181,8 @@ pub fn explain_transaction_with_ledger(
         fee_explanation,
         ledger_closed_at: created_at.map(|s| s.to_string()),
         ledger,
+        failure_reason,
+        operation_failures,
     })
 }
 
@@ -239,6 +255,7 @@ mod tests {
             fee_charged: 100,
             operations: vec![create_payment_operation("1", "50.0")],
             memo: None,
+            result_codes: None,
         }
     }
 
@@ -409,5 +426,66 @@ mod tests {
     fn test_build_transaction_summary_failed() {
         let summary = build_transaction_summary(false, 1, 0);
         assert_eq!(summary, "This failed transaction contains 1 payment.");
+    }
+
+    // ── failure explanations ───────────────────────────────────────────────
+
+    #[test]
+    fn test_successful_tx_has_no_failure_fields() {
+        let result = explain_transaction(&base_tx(), None).unwrap();
+        assert!(result.failure_reason.is_none());
+        assert!(result.operation_failures.is_empty());
+    }
+
+    #[test]
+    fn test_failed_tx_with_result_codes_sets_failure_reason() {
+        use crate::models::transaction::ResultCodes;
+
+        let tx = Transaction {
+            successful: false,
+            result_codes: Some(ResultCodes {
+                transaction: Some("tx_bad_seq".to_string()),
+                operations: vec!["op_no_trust".to_string(), "op_success".to_string()],
+            }),
+            ..base_tx()
+        };
+
+        let result = explain_transaction(&tx, None).unwrap();
+        assert!(result.failure_reason.is_some());
+        assert!(result.failure_reason.unwrap().contains("Sequence number"));
+        assert_eq!(result.operation_failures.len(), 1);
+        assert_eq!(result.operation_failures[0].code, "op_no_trust");
+        assert_eq!(result.operation_failures[0].index, 0);
+    }
+
+    #[test]
+    fn test_failed_tx_without_result_codes_has_null_failure_fields() {
+        let tx = Transaction {
+            successful: false,
+            result_codes: None,
+            ..base_tx()
+        };
+
+        let result = explain_transaction(&tx, None).unwrap();
+        assert!(result.failure_reason.is_none());
+        assert!(result.operation_failures.is_empty());
+    }
+
+    #[test]
+    fn test_failed_tx_all_op_successes_yields_empty_operation_failures() {
+        use crate::models::transaction::ResultCodes;
+
+        let tx = Transaction {
+            successful: false,
+            result_codes: Some(ResultCodes {
+                transaction: Some("tx_bad_auth".to_string()),
+                operations: vec!["op_success".to_string()],
+            }),
+            ..base_tx()
+        };
+
+        let result = explain_transaction(&tx, None).unwrap();
+        assert!(result.failure_reason.is_some());
+        assert!(result.operation_failures.is_empty());
     }
 }
