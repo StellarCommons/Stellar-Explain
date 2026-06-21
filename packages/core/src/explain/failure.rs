@@ -9,9 +9,13 @@ pub struct OperationFailure {
 
 pub fn translate_tx_code(code: &str) -> String {
     let explanation = match code {
-        "tx_bad_seq" => "Sequence number is out of date — another transaction from this account may have been submitted first. Try again.",
+        "tx_bad_seq" => {
+            "Sequence number is out of date — another transaction from this account may have been submitted first. Try again."
+        }
         "tx_bad_auth" => "The transaction was not properly signed by the required keys.",
-        "tx_insufficient_balance" => "The account does not have enough XLM to cover this transaction and the minimum balance.",
+        "tx_insufficient_balance" => {
+            "The account does not have enough XLM to cover this transaction and the minimum balance."
+        }
         "tx_no_account" => "The source account does not exist on the Stellar network.",
         "tx_insufficient_fee" => "The fee offered was too low.",
         "tx_too_early" => "The transaction was submitted before its minimum time boundary.",
@@ -28,10 +32,14 @@ pub fn translate_op_code(code: &str) -> &str {
         "op_no_trust" => "The destination account has not opted in to hold this asset.",
         "op_underfunded" => "The source account does not have enough of this asset to send.",
         "op_no_destination" => "The destination account does not exist on the Stellar network.",
-        "op_not_authorized" => "The asset issuer has not authorised this account to hold the asset.",
+        "op_not_authorized" => {
+            "The asset issuer has not authorised this account to hold the asset."
+        }
         "op_line_full" => "The destination account's trust line is full and cannot receive more.",
         "op_no_issuer" => "The asset issuer account does not exist.",
-        "op_low_reserve" => "The account would fall below the minimum XLM reserve after this operation.",
+        "op_low_reserve" => {
+            "The account would fall below the minimum XLM reserve after this operation."
+        }
         _ => "An unexpected operation error occurred.",
     }
 }
@@ -235,10 +243,7 @@ mod tests {
 
     #[test]
     fn test_explain_failure_multiple_op_failures() {
-        let op_codes = vec![
-            "op_no_trust".to_string(),
-            "op_no_destination".to_string(),
-        ];
+        let op_codes = vec!["op_no_trust".to_string(), "op_no_destination".to_string()];
         let (_, failures) = explain_failure(Some("tx_bad_seq"), &op_codes);
         assert_eq!(failures.len(), 2);
         assert_eq!(failures[0].index, 0);

@@ -164,10 +164,7 @@ pub fn explain_transaction_with_ledger(
 
     let (failure_reason, operation_failures) = if transaction.is_failed() {
         match &transaction.result_codes {
-            Some(codes) => explain_failure(
-                codes.transaction.as_deref(),
-                &codes.operations,
-            ),
+            Some(codes) => explain_failure(codes.transaction.as_deref(), &codes.operations),
             None => (None, vec![]),
         }
     } else {
