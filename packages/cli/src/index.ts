@@ -7,6 +7,7 @@ import { registerAccount } from "./commands/account.js";
 import { registerHealth } from "./commands/health.js";
 import { registerBatch } from "./commands/batch.js";
 import { registerWatch } from "./commands/watch.js";
+import { registerCompletion } from "./commands/completion.js";
 import { InvalidInputError } from "./lib/errors.js";
 import { BIN_NAME } from "./lib/binName.js";
 import { EXIT_CODE } from "./lib/exitCodes.js";
@@ -46,6 +47,7 @@ registerAccount(program);
 registerHealth(program);
 registerBatch(program);
 registerWatch(program);
+registerCompletion(program);
 
 program.parseAsync(process.argv).catch((err: unknown) => {
   const msg = err instanceof Error ? err.message : String(err);
