@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import { resolveBaseUrl } from "./lib/config.js";
-import { runUpdateCheck } from "./lib/updateCheck.js";
+import { runUpdateCheck, shouldRunUpdateCheck } from "./lib/updateCheck.js";
 import { registerTx } from "./commands/tx.js";
 import { registerAccount } from "./commands/account.js";
 import { registerHealth } from "./commands/health.js";
@@ -12,6 +12,7 @@ import { InvalidInputError } from "./lib/errors.js";
 import { BIN_NAME } from "./lib/binName.js";
 import { EXIT_CODE } from "./lib/exitCodes.js";
 import { parseMs } from "./lib/parseMs.js";
+import { readConfigFile } from "./lib/configFile.js";
 import { getCliVersion } from "./lib/pkgVersion.js";
 
 // #99 — Node version check
@@ -31,6 +32,7 @@ program
   .name(BIN_NAME)
   .version(version)
   .option("--url <url>", "API base URL")
+  .option("--no-update-check", "Disable startup version checks")
   .option("--timeout <ms>", "Request timeout in ms", (v) => parseInt(v, 10), 10000)
   .option("--retries <n>", "Retry attempts for network errors", (v) => parseInt(v, 10), 2)
   .option("--timeout <ms>", "Request timeout in ms", parseMs, 10000)
@@ -38,8 +40,10 @@ program
   .option("--json", "Output raw JSON", false);
 
 program.hook("preAction", (thisCommand) => {
-  const opts = thisCommand.opts<{ url?: string }>();
+  const opts = thisCommand.opts<{ url?: string; updateCheck?: boolean }>();
+  const fileConfig = readConfigFile();
   if (!opts.url) thisCommand.setOptionValue("url", resolveBaseUrl());
+  runUpdateCheck(version, shouldRunUpdateCheck(opts.updateCheck, fileConfig.updateCheck));
 });
 
 registerTx(program);
