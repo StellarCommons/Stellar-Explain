@@ -23,7 +23,7 @@ function isLocalhost(url: string): boolean {
 export function warnIfInsecure(url: string): void {
   if (url.startsWith("http://") && !isLocalhost(url)) {
     process.stderr.write(
-      `Warning: STELLAR_EXPLAIN_URL is set to a non-HTTPS URL (${url}). ` +
+      `Warning: base URL is set to a non-HTTPS URL (${url}). ` +
       `Data will be transmitted over an insecure connection.\n`
     );
   }
@@ -31,9 +31,7 @@ export function warnIfInsecure(url: string): void {
 
 export function resolveBaseUrl(flagUrl?: string): string {
   const fileConfig = readConfigFile();
-  const url = flagUrl ?? process.env["STELLAR_EXPLAIN_URL"] ?? fileConfig.url ?? DEFAULT_URL;
-  warnIfInsecure(url);
-  return url;
+  return flagUrl ?? process.env["STELLAR_EXPLAIN_URL"] ?? fileConfig.url ?? DEFAULT_URL;
 }
 
 export function resolveTimeout(flagTimeout?: number): number {
@@ -51,8 +49,10 @@ export function validateUrl(url: string): string {
 }
 
 export function loadConfig(url?: string): { baseUrl: string; timeout: number } {
+  const baseUrl = resolveBaseUrl(url);
+  warnIfInsecure(baseUrl);
   return {
-    baseUrl: resolveBaseUrl(url),
+    baseUrl,
     timeout: resolveTimeout(),
   };
 }
