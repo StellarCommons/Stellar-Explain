@@ -5,7 +5,7 @@ const REGISTRY_URL = `https://registry.npmjs.org/${PACKAGE_NAME}/latest`;
 
 function fetchLatestVersion(): Promise<string> {
   return new Promise((resolve, reject) => {
-    https.get(REGISTRY_URL, (res) => {
+    const request = https.get(REGISTRY_URL, (res) => {
       let data = "";
       res.on("data", (chunk: string) => { data += chunk; });
       res.on("end", () => {
@@ -17,7 +17,12 @@ function fetchLatestVersion(): Promise<string> {
           reject(e);
         }
       });
-    }).on("error", reject);
+    });
+
+    request.on("socket", (socket) => {
+      socket.unref();
+    });
+    request.on("error", reject);
   });
 }
 
