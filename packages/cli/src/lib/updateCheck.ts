@@ -35,7 +35,15 @@ function isNewer(latest: string, current: string): boolean {
   return lPat > cPat;
 }
 
-export function runUpdateCheck(currentVersion: string): void {
+export function shouldRunUpdateCheck(updateCheckEnabled?: boolean, configUpdateCheck?: boolean): boolean {
+  return updateCheckEnabled !== false && configUpdateCheck !== false;
+}
+
+export function runUpdateCheck(currentVersion: string, enabled = true): void {
+  if (!enabled) {
+    return;
+  }
+
   fetchLatestVersion()
     .then((latest) => {
       if (isNewer(latest, currentVersion)) {

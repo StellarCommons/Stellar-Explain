@@ -5,6 +5,7 @@ import * as os from "os";
 export interface ConfigFileData {
   url?: string;
   timeout?: number;
+  updateCheck?: boolean;
 }
 
 const CONFIG_FILE_NAME = ".stellar-explain.json";
