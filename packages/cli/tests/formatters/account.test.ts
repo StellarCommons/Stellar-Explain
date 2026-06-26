@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { formatAccount } from "../../src/formatters/account.js";
+import { truncateAddress } from "../../src/lib/truncate.js";
 import type { AccountExplanation } from "../../src/types/index.js";
 
 const baseAccount: AccountExplanation = {
@@ -17,7 +18,7 @@ describe("formatAccount", () => {
   it("renders base fields (no balances, no signers, no home_domain)", () => {
     const output = formatAccount(baseAccount);
 
-    expect(output).toContain(`Account:     ${baseAccount.account_id}`);
+    expect(output).toContain(`Account:     ${truncateAddress(baseAccount.account_id)}`);
     expect(output).toContain(`Summary:     ${baseAccount.summary}`);
     expect(output).toContain(`Subentries:  ${baseAccount.subentry_count}`);
     expect(output).toContain(`Last ledger: ${baseAccount.last_modified_ledger}`);
@@ -129,8 +130,15 @@ describe("formatAccount", () => {
 
       expect(output).toContain("Signers:");
       expect(output).toContain(
-        "GDRW2VWJPOB2OQTQMP3ZXPWLF3OGIV5J5NL2M22WRKPPJCMLYJ6  weight=1",
+        `${truncateAddress("GDRW2VWJPOB2OQTQMP3ZXPWLF3OGIV5J5NL2M22WRKPPJCMLYJ6")}  weight=1`,
       );
+    });
+
+    it("renders full signer address with fullAddress=true", () => {
+      const key = "GDRW2VWJPOB2OQTQMP3ZXPWLF3OGIV5J5NL2M22WRKPPJCMLYJ6";
+      const acc: AccountExplanation = { ...baseAccount, signers: [{ key, weight: 1, type: "ed25519_public_key" }] };
+      const output = formatAccount(acc, false, true);
+      expect(output).toContain(`${key}  weight=1`);
     });
 
     it("renders multiple signers", () => {
@@ -201,7 +209,7 @@ describe("formatAccount", () => {
     const output = formatAccount(acc);
 
     // Base fields
-    expect(output).toContain(`Account:     ${acc.account_id}`);
+    expect(output).toContain(`Account:     ${truncateAddress(acc.account_id)}`);
     expect(output).toContain(`Summary:     ${acc.summary}`);
     expect(output).toContain(`Subentries:  ${acc.subentry_count}`);
     expect(output).toContain(`Last ledger: ${acc.last_modified_ledger}`);

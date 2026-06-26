@@ -1,7 +1,8 @@
 import type { TransactionExplanation } from "../types/index.js";
 import { colorize } from "../lib/config.js";
+import { truncateAddress } from "../lib/truncate.js";
 
-export function formatTransaction(tx: TransactionExplanation, useColor = false): string {
+export function formatTransaction(tx: TransactionExplanation, useColor = false, fullAddress = false): string {
   const lines: string[] = [
     `${colorize("Transaction:", 1, useColor)} ${tx.hash}`,
     `${colorize("Status:", 1, useColor)}      ${colorize(tx.status, tx.status === "success" ? 32 : 31, useColor)}`,
@@ -16,7 +17,7 @@ export function formatTransaction(tx: TransactionExplanation, useColor = false):
   if (tx.payments.length > 0) {
     lines.push("", "Payments:");
     for (const p of tx.payments) {
-      lines.push(`  ${p.from} → ${p.to}  ${colorize(p.amount, 32, useColor)} ${p.asset}`);
+      lines.push(`  ${truncateAddress(p.from, fullAddress)} → ${truncateAddress(p.to, fullAddress)}  ${colorize(p.amount, 32, useColor)} ${p.asset}`);
     }
   }
 
