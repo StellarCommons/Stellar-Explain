@@ -1,9 +1,10 @@
 import type { AccountExplanation } from "../types/index.js";
 import { colorize } from "../lib/config.js";
+import { truncateAddress } from "../lib/truncate.js";
 
-export function formatAccount(acc: AccountExplanation, useColor = false): string {
+export function formatAccount(acc: AccountExplanation, useColor = false, fullAddress = false): string {
   const lines: string[] = [
-    `${colorize("Account:", 1, useColor)}     ${acc.account_id}`,
+    `${colorize("Account:", 1, useColor)}     ${truncateAddress(acc.account_id, fullAddress)}`,
     `${colorize("Summary:", 1, useColor)}     ${acc.summary}`,
     `${colorize("Subentries:", 1, useColor)}  ${acc.subentry_count}`,
     `${colorize("Last ledger:", 1, useColor)} ${acc.last_modified_ledger}`,
@@ -22,7 +23,7 @@ export function formatAccount(acc: AccountExplanation, useColor = false): string
   if (acc.signers.length > 0) {
     lines.push("", "Signers:");
     for (const s of acc.signers) {
-      lines.push(`  ${s.key}  ${colorize(`weight=${s.weight}`, 36, useColor)}`);
+      lines.push(`  ${truncateAddress(s.key, fullAddress)}  ${colorize(`weight=${s.weight}`, 36, useColor)}`);
     }
   }
 
