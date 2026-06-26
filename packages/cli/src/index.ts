@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 import { Command } from "commander";
-import { resolveBaseUrl } from "./lib/config.js";
+import { resolveNetworkUrl } from "./lib/network.js";
 import { runUpdateCheck, shouldRunUpdateCheck } from "./lib/updateCheck.js";
 import { registerTx } from "./commands/tx.js";
 import { registerAccount } from "./commands/account.js";
 import { registerHealth } from "./commands/health.js";
 import { registerBatch } from "./commands/batch.js";
+import { registerExplain } from "./commands/explain.js";
 import { registerWatch } from "./commands/watch.js";
 import { registerCompletion } from "./commands/completion.js";
 import { InvalidInputError } from "./lib/errors.js";
@@ -32,6 +33,7 @@ program
   .name(BIN_NAME)
   .version(version)
   .option("--url <url>", "API base URL")
+  .option("--network <network>", "Stellar network to use (mainnet | testnet)")
   .option("--no-update-check", "Disable startup version checks")
   .option("--timeout <ms>", "Request timeout in ms", (v) => parseInt(v, 10), 10000)
   .option("--retries <n>", "Retry attempts for network errors", (v) => parseInt(v, 10), 2)
@@ -40,9 +42,10 @@ program
   .option("--json", "Output raw JSON", false);
 
 program.hook("preAction", (thisCommand) => {
-  const opts = thisCommand.opts<{ url?: string; updateCheck?: boolean }>();
+  const opts = thisCommand.opts<{ url?: string; network?: string; updateCheck?: boolean }>();
   const fileConfig = readConfigFile();
-  if (!opts.url) thisCommand.setOptionValue("url", resolveBaseUrl());
+  const rawUrl = opts.url ?? fileConfig.url;
+  thisCommand.setOptionValue("url", resolveNetworkUrl(opts.network as any, rawUrl));
   runUpdateCheck(version, shouldRunUpdateCheck(opts.updateCheck, fileConfig.updateCheck));
 });
 
@@ -50,6 +53,7 @@ registerTx(program);
 registerAccount(program);
 registerHealth(program);
 registerBatch(program);
+registerExplain(program);
 registerWatch(program);
 registerCompletion(program);
 
