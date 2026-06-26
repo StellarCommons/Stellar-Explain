@@ -10,6 +10,8 @@ import { registerExplain } from "./commands/explain.js";
 import { registerWatch } from "./commands/watch.js";
 import { registerCompletion } from "./commands/completion.js";
 import { registerConfigSet } from "./commands/configSet.js";
+import { registerConfigGet } from "./commands/configGet.js";
+import { registerConfigList } from "./commands/configList.js";
 import { BIN_NAME } from "./lib/binName.js";
 import { EXIT_CODE } from "./lib/exitCodes.js";
 import { parseMs } from "./lib/parseMs.js";
@@ -58,6 +60,8 @@ registerExplain(program);
 registerWatch(program);
 registerCompletion(program);
 registerConfigSet(program);
+registerConfigGet(program);
+registerConfigList(program);
 
 program.parseAsync(process.argv).catch((err: unknown) => {
   const msg = err instanceof Error ? err.message : String(err);
