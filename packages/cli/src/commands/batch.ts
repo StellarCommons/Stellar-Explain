@@ -43,7 +43,8 @@ export function registerBatch(program: Command): void {
     .description("Explain multiple transaction hashes read from a file (one per line)")
     .option("--output <path>", "Write results to a JSON file instead of stdout")
     .option("--concurrency <n>", "Number of parallel requests", (v) => parseInt(v, 10), 3)
-    .action(async (file: string, cmdOpts: { output?: string; concurrency: number }) => {
+    .option("--dry-run", "Validate hashes and show what would be processed without making API calls")
+    .action(async (file: string, cmdOpts: { output?: string; concurrency: number; dryRun?: boolean }) => {
       const opts = program.opts<{
         url: string;
         timeout: number;
@@ -64,6 +65,15 @@ export function registerBatch(program: Command): void {
       // network calls are made.
       for (const hash of hashes) {
         validateHash(hash);
+      }
+
+      // --dry-run: print what would be processed and exit
+      if (cmdOpts.dryRun) {
+        process.stdout.write(`[dry-run] Would process ${hashes.length} transaction(s):\n`);
+        for (const hash of hashes) {
+          process.stdout.write(`  ${hash}\n`);
+        }
+        return;
       }
 
       const results: BatchResult[] = [];

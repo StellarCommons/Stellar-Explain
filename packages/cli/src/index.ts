@@ -39,6 +39,7 @@ program
   .option("--retries <n>", "Retry attempts for network errors", (v) => parseInt(v, 10), 2)
   .option("--timeout <ms>", "Request timeout in ms", parseMs, 10000)
   .option("--verbose", "Log request details to stderr", false)
+  .option("--no-cache", "Skip reading from and writing to the local response cache")
   .option("--json", "Output raw JSON", false);
 
 program.hook("preAction", (thisCommand) => {
