@@ -8,7 +8,7 @@ import { registerHealth } from "./commands/health.js";
 import { registerBatch } from "./commands/batch.js";
 import { registerWatch } from "./commands/watch.js";
 import { registerCompletion } from "./commands/completion.js";
-import { InvalidInputError } from "./lib/errors.js";
+import { registerConfigSet } from "./commands/configSet.js";
 import { BIN_NAME } from "./lib/binName.js";
 import { EXIT_CODE } from "./lib/exitCodes.js";
 import { parseMs } from "./lib/parseMs.js";
@@ -52,10 +52,11 @@ registerHealth(program);
 registerBatch(program);
 registerWatch(program);
 registerCompletion(program);
+registerConfigSet(program);
 
 program.parseAsync(process.argv).catch((err: unknown) => {
   const msg = err instanceof Error ? err.message : String(err);
-  const code = err instanceof InvalidInputError ? EXIT_CODE.INVALID_INPUT : EXIT_CODE.ERROR;
+  const code = (err as { exitCode?: number }).exitCode ?? EXIT_CODE.ERROR;
   process.stderr.write(`Error: ${msg}\n`);
   process.exit(code);
 });
