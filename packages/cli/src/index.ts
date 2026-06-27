@@ -16,20 +16,37 @@ import { parseMs } from "./lib/parseMs.js";
 import { readConfigFile } from "./lib/configFile.js";
 import { getCliVersion } from "./lib/pkgVersion.js";
 
-// #99 — Node version check
-const [major = 0] = process.version.replace("v", "").split(".").map(Number);
-if (major < 18) {
-  process.stderr.write(`Error: Node.js 18 or higher is required (found ${process.version}).\n`);
-  process.exit(1);
-}
-
-const version = getCliVersion();
-
-// #100 — Non-blocking update check
-runUpdateCheck(version);
-
 const program = new Command();
+
 program
+  .name('stellar-explain')
+  .description('CLI for exploring and explaining Stellar transactions and accounts')
+  .version('0.1.0');
+
+// ── Existing commands (stubs shown; replace with real implementations) ────────
+
+program
+  .command('tx <hash>')
+  .description('Look up and explain a Stellar transaction')
+  .action((hash: string) => {
+    addEntry('tx', hash);
+    // TODO: delegate to tx command handler
+    console.log(`Looking up transaction: ${hash}`);
+  });
+
+program
+  .command('account <id>')
+  .description('Look up and explain a Stellar account')
+  .action((id: string) => {
+    addEntry('account', id);
+    // TODO: delegate to account command handler
+    console.log(`Looking up account: ${id}`);
+  });
+
+registerHistoryCommand(program);    // #441 / #442 / #443
+registerCompletionCommand(program); // #440
+
+program.parse(process.argv);
   .name(BIN_NAME)
   .version(version)
   .option("--url <url>", "API base URL")
