@@ -1,14 +1,41 @@
 "use client";
 
+import { useState } from "react";
 import { AppShellContext, AppShellContextValue } from "./AppShellContext";
 import StarLogo from "@/components/StarLogo";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { CommandPalette } from "@/components/CommandPalette";
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 
 interface Props {
   children: React.ReactNode;
 }
 
 export default function AppShell({ children }: Props) {
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [isHistoryPanelOpen, setIsHistoryPanelOpen] = useState(false);
+  const [isAddressBookOpen, setIsAddressBookOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<"tx" | "account">("tx");
+
+  useKeyboardShortcuts({
+    onOpenCommandPalette: () => setIsCommandPaletteOpen(true),
+    onFocusSearch: () => {
+      const searchInput = document.querySelector(
+        'input[placeholder*="Paste"]'
+      ) as HTMLInputElement;
+      searchInput?.focus();
+    },
+    onClosePanel: () => {
+      setIsCommandPaletteOpen(false);
+      setIsHistoryPanelOpen(false);
+      setIsAddressBookOpen(false);
+    },
+    onSwitchToTransaction: () => setActiveTab("tx"),
+    onSwitchToAccount: () => setActiveTab("account"),
+    onOpenHistory: () => setIsHistoryPanelOpen(true),
+    onOpenAddressBook: () => setIsAddressBookOpen(true),
+  });
+
   const contextValue: AppShellContextValue = {
     addEntry: () => {},
     isSaved: () => false,
@@ -90,6 +117,12 @@ export default function AppShell({ children }: Props) {
         <div className="relative z-10 max-w-2xl mx-auto px-4 pb-24">
           {children}
         </div>
+
+        {/* Command Palette */}
+        <CommandPalette
+          isOpen={isCommandPaletteOpen}
+          onClose={() => setIsCommandPaletteOpen(false)}
+        />
       </div>
     </AppShellContext.Provider>
   );
