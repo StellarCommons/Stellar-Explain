@@ -4,12 +4,14 @@ import type {
   AccountExplanation,
   HealthResponse,
 } from "../types/index.js";
+import { getEnvApiToken } from "../config/env.js";
 
 export interface ClientOptions {
   baseUrl: string;
   timeout: number;  // #276
   verbose: boolean; // #277
   retries: number; // #414
+  apiToken?: string;
 }
 
 async function requestOnce<T>(
@@ -19,9 +21,11 @@ async function requestOnce<T>(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), opts.timeout);
   const start = Date.now();
+  const apiToken = opts.apiToken ?? getEnvApiToken();
+  const headers = apiToken ? { Authorization: `Bearer ${apiToken}` } : undefined;
 
   try {
-    const res = await fetch(url, { signal: controller.signal });
+    const res = await fetch(url, { signal: controller.signal, headers });
     const duration = Date.now() - start;
 
     if (opts.verbose) {

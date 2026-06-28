@@ -27,6 +27,7 @@ describe("createClient", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
   });
 
   // ── Success cases ──────────────────────────────────────────────
@@ -88,6 +89,37 @@ describe("createClient", () => {
       expect(fetch).toHaveBeenCalledWith(
         "http://localhost:4000/health",
         expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
+    });
+
+    it("sends STELLAR_EXPLAIN_TOKEN as a Bearer token", async () => {
+      vi.stubEnv("STELLAR_EXPLAIN_TOKEN", "secret-token");
+      vi.stubGlobal("fetch", mockFetchResponse(200, { status: "ok" }));
+
+      const client = createClient(defaultOpts);
+      await client.getHealth();
+
+      expect(fetch).toHaveBeenCalledWith(
+        "http://localhost:4000/health",
+        expect.objectContaining({
+          headers: { Authorization: "Bearer secret-token" },
+          signal: expect.any(AbortSignal),
+        }),
+      );
+    });
+
+    it("prefers an explicit apiToken over STELLAR_EXPLAIN_TOKEN", async () => {
+      vi.stubEnv("STELLAR_EXPLAIN_TOKEN", "env-token");
+      vi.stubGlobal("fetch", mockFetchResponse(200, { status: "ok" }));
+
+      const client = createClient({ ...defaultOpts, apiToken: "option-token" });
+      await client.getHealth();
+
+      expect(fetch).toHaveBeenCalledWith(
+        "http://localhost:4000/health",
+        expect.objectContaining({
+          headers: { Authorization: "Bearer option-token" },
+        }),
       );
     });
   });

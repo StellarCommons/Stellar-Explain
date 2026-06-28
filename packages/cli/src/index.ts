@@ -8,7 +8,7 @@ import { registerHealth } from "./commands/health.js";
 import { registerBatch } from "./commands/batch.js";
 import { registerExplain } from "./commands/explain.js";
 import { registerWatch } from "./commands/watch.js";
-import { registerCompletion } from "./commands/completion.js";
+import { registerCompletionCommand } from "./commands/completion.js";
 import { registerConfigSet } from "./commands/configSet.js";
 import { registerConfigGet } from "./commands/configGet.js";
 import { registerConfigList } from "./commands/configList.js";
@@ -19,36 +19,9 @@ import { readConfigFile } from "./lib/configFile.js";
 import { getCliVersion } from "./lib/pkgVersion.js";
 
 const program = new Command();
+const version = getCliVersion();
 
 program
-  .name('stellar-explain')
-  .description('CLI for exploring and explaining Stellar transactions and accounts')
-  .version('0.1.0');
-
-// ── Existing commands (stubs shown; replace with real implementations) ────────
-
-program
-  .command('tx <hash>')
-  .description('Look up and explain a Stellar transaction')
-  .action((hash: string) => {
-    addEntry('tx', hash);
-    // TODO: delegate to tx command handler
-    console.log(`Looking up transaction: ${hash}`);
-  });
-
-program
-  .command('account <id>')
-  .description('Look up and explain a Stellar account')
-  .action((id: string) => {
-    addEntry('account', id);
-    // TODO: delegate to account command handler
-    console.log(`Looking up account: ${id}`);
-  });
-
-registerHistoryCommand(program);    // #441 / #442 / #443
-registerCompletionCommand(program); // #440
-
-program.parse(process.argv);
   .name(BIN_NAME)
   .version(version)
   .option("--url <url>", "API base URL")
@@ -75,7 +48,7 @@ registerHealth(program);
 registerBatch(program);
 registerExplain(program);
 registerWatch(program);
-registerCompletion(program);
+registerCompletionCommand(program);
 registerConfigSet(program);
 registerConfigGet(program);
 registerConfigList(program);
