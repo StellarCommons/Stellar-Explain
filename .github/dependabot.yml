@@ -1,18 +1,18 @@
 version: 2
-
 updates:
-  - package-ecosystem: "npm"
-    directory: "/packages/cli"
+  - package-ecosystem: npm
+    directory: /packages/cli
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: weekly
     open-pull-requests-limit: 5
     labels:
-      - "dependencies"
-      - "cli"
-    commit-message:
-      prefix: "chore(cli)"
-    ignore:
-      - dependency-name: "*"
-        update-types:
-          - "version-update:semver-major"
+      - dependencies
+      - cli
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
