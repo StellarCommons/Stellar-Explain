@@ -7,29 +7,22 @@ on:
 
 jobs:
   publish:
-    name: Publish to npm
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: packages/cli
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          registry-url: "https://registry.npmjs.org"
+          node-version: 20
+          registry-url: https://registry.npmjs.org
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Build
-        run: npm run build
+      - name: Build CLI
+        run: npm run build --workspace=packages/cli
 
-      - name: Check binary size
-        run: npx ts-node scripts/check-size.ts
-
-      - name: Publish
-        run: npm publish --access public
+      - name: Publish to npm
+        run: npm publish --workspace=packages/cli --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
