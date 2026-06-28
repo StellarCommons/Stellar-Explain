@@ -8,6 +8,8 @@ CLI tool for the Stellar Explain API.
 npx @stellar-explain/cli <command>
 ```
 
+Disable ANSI colors with `--no-color` or by setting the `NO_COLOR` environment variable.
+
 ## Configuration File
 
 You can create a `.stellar-explain.json` file in your project directory (or home directory) to set default options. The CLI will automatically pick it up — no flags required.

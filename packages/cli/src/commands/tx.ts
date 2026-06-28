@@ -12,7 +12,7 @@ export function registerTx(program: Command): void {
     .command("tx <hash>")
     .description("Explain a Stellar transaction")
     .action(async (hash: string) => {
-      const opts = program.opts<{ url: string; timeout: number; retries: number; verbose: boolean; json: boolean; cache: boolean }>();
+      const opts = program.opts<{ url: string; timeout: number; retries: number; verbose: boolean; json: boolean; cache: boolean; color: boolean }>();
       validateHash(hash);
 
       if (opts.cache !== false) {
@@ -25,7 +25,7 @@ export function registerTx(program: Command): void {
 
       const client = createClient({ baseUrl: opts.url, timeout: opts.timeout, retries: opts.retries, verbose: opts.verbose });
       const tx = await client.getTransaction(hash);
-      const useColor = shouldUseColorOutput() && !opts.json;
+      const useColor = shouldUseColorOutput({ noColor: opts.color === false }) && !opts.json;
       const output = opts.json ? JSON.stringify(tx, null, 2) : formatTransaction(tx, useColor);
       console.log(output);
 

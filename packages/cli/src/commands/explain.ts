@@ -22,6 +22,7 @@ export function registerExplain(program: Command): void {
         verbose: boolean;
         json: boolean;
         cache: boolean;
+        color: boolean;
       }>();
 
       const type = detectInputType(input);
@@ -46,7 +47,7 @@ export function registerExplain(program: Command): void {
         verbose: opts.verbose,
       });
 
-      const useColor = shouldUseColorOutput() && !opts.json;
+      const useColor = shouldUseColorOutput({ noColor: opts.color === false }) && !opts.json;
 
       if (type === "hash") {
         validateHash(input);

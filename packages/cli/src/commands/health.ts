@@ -8,10 +8,10 @@ export function registerHealth(program: Command): void {
     .command("health")
     .description("Check API health status")
     .action(async () => {
-      const opts = program.opts<{ url: string; timeout: number; retries: number; verbose: boolean; json: boolean }>();
+      const opts = program.opts<{ url: string; timeout: number; retries: number; verbose: boolean; json: boolean; color: boolean }>();
       const client = createClient({ baseUrl: opts.url, timeout: opts.timeout, retries: opts.retries, verbose: opts.verbose });
       const h = await client.getHealth();
       if (opts.json) { console.log(JSON.stringify(h, null, 2)); return; }
-      console.log(formatHealth(h, shouldUseColorOutput()));
+      console.log(formatHealth(h, shouldUseColorOutput({ noColor: opts.color === false })));
     });
 }

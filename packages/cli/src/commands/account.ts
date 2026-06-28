@@ -12,7 +12,7 @@ export function registerAccount(program: Command): void {
     .command("account <address>")
     .description("Explain a Stellar account")
     .action(async (address: string) => {
-      const opts = program.opts<{ url: string; timeout: number; retries: number; verbose: boolean; json: boolean; cache: boolean }>();
+      const opts = program.opts<{ url: string; timeout: number; retries: number; verbose: boolean; json: boolean; cache: boolean; color: boolean }>();
       validateAddress(address);
 
       if (opts.cache !== false) {
@@ -25,7 +25,7 @@ export function registerAccount(program: Command): void {
 
       const client = createClient({ baseUrl: opts.url, timeout: opts.timeout, retries: opts.retries, verbose: opts.verbose });
       const acc = await client.getAccount(address);
-      const useColor = shouldUseColorOutput() && !opts.json;
+      const useColor = shouldUseColorOutput({ noColor: opts.color === false }) && !opts.json;
       const output = opts.json ? JSON.stringify(acc, null, 2) : formatAccount(acc, useColor);
       console.log(output);
 
