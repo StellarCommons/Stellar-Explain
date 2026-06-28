@@ -1,15 +1,10 @@
 import { readConfigFile } from "./configFile";
+import { colorize, shouldUseColorOutput } from "../utils/color";
+
+export { colorize, shouldUseColorOutput };
 
 const DEFAULT_URL = "http://localhost:8080";
 const DEFAULT_TIMEOUT = 5000;
-
-export function shouldUseColorOutput(stdout: Pick<NodeJS.WriteStream, "isTTY"> = process.stdout): boolean {
-  return Boolean(stdout.isTTY) && process.env.NO_COLOR !== "1";
-}
-
-export function colorize(text: string, code: number, enabled: boolean): string {
-  return enabled ? `\u001b[${code}m${text}\u001b[0m` : text;
-}
 
 function isLocalhost(url: string): boolean {
   try {
