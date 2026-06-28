@@ -1,4 +1,5 @@
 import { readConfigFile } from "./configFile";
+import { resolveBaseUrlInput } from "../config/env";
 
 const DEFAULT_URL = "http://localhost:8080";
 const DEFAULT_TIMEOUT = 5000;
@@ -31,7 +32,7 @@ export function warnIfInsecure(url: string): void {
 
 export function resolveBaseUrl(flagUrl?: string): string {
   const fileConfig = readConfigFile();
-  return flagUrl ?? process.env["STELLAR_EXPLAIN_URL"] ?? fileConfig.url ?? DEFAULT_URL;
+  return resolveBaseUrlInput(flagUrl, fileConfig.url) ?? DEFAULT_URL;
 }
 
 export function resolveTimeout(flagTimeout?: number): number {

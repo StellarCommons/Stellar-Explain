@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
+import { getEnvBaseUrl, resolveBaseUrlInput } from "../src/config/env.js";
 import { loadConfig, resolveBaseUrl } from "../src/lib/config.js";
 
 const DEFAULT = "http://localhost:8080";
@@ -25,6 +26,27 @@ describe("resolveBaseUrl", () => {
   it("prefers flag over env var", () => {
     vi.stubEnv("STELLAR_EXPLAIN_URL", "https://env.example.com");
     expect(resolveBaseUrl("https://flag.example.com")).toBe("https://flag.example.com");
+  });
+});
+
+describe("environment base URL", () => {
+  it("trims STELLAR_EXPLAIN_URL and ignores empty values", () => {
+    expect(getEnvBaseUrl({ STELLAR_EXPLAIN_URL: "  https://env.example.com  " })).toBe(
+      "https://env.example.com",
+    );
+    expect(getEnvBaseUrl({ STELLAR_EXPLAIN_URL: "   " })).toBeUndefined();
+  });
+
+  it("resolves base URL priority as flag, env, then config file", () => {
+    vi.stubEnv("STELLAR_EXPLAIN_URL", "https://env.example.com");
+
+    expect(resolveBaseUrlInput("https://flag.example.com", "https://file.example.com")).toBe(
+      "https://flag.example.com",
+    );
+    expect(resolveBaseUrlInput(undefined, "https://file.example.com")).toBe("https://env.example.com");
+
+    vi.unstubAllEnvs();
+    expect(resolveBaseUrlInput(undefined, "https://file.example.com")).toBe("https://file.example.com");
   });
 });
 

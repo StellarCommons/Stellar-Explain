@@ -30,9 +30,16 @@ You can create a `.stellar-explain.json` file in your project directory (or home
 
 **Lookup order:**
 1. `--url` / `--timeout` CLI flags (highest priority)
-2. `.stellar-explain.json` in the current working directory
-3. `.stellar-explain.json` in the home directory (`~/`)
-4. Built-in defaults (`https://stellar-explain-core.onrender.com`, 10 000 ms)
+2. `STELLAR_EXPLAIN_URL` environment variable for the API base URL
+3. `.stellar-explain.json` in the current working directory
+4. `.stellar-explain.json` in the home directory (`~/`)
+5. Built-in defaults (`https://stellar-explain-core.onrender.com`, 10 000 ms)
+
+**Environment variable example:**
+
+```sh
+STELLAR_EXPLAIN_URL=http://localhost:3000 stellar-explain explain <transaction-or-account>
+```
 
 You can also manage the config file via the CLI:
 
