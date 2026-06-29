@@ -22,3 +22,11 @@ export class NonJsonResponseError extends Error {
     this.name = "NonJsonResponseError";
   }
 }
+
+export class ConnectionRefusedError extends Error {
+  readonly exitCode = EXIT_CODE.ERROR;
+  constructor(url: string) {
+    super(`Connection refused at ${url}. Is the Stellar Explain backend running?`);
+    this.name = "ConnectionRefusedError";
+  }
+}

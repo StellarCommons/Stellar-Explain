@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createClient } from "../src/lib/client.js";
-import { NetworkError, NotFoundError, NonJsonResponseError } from "../src/lib/errors.js";
+import { NetworkError, NotFoundError, NonJsonResponseError, ConnectionRefusedError } from "../src/lib/errors.js";
 
 const defaultOpts = {
   baseUrl: "http://localhost:4000",
   timeout: 5000,
   verbose: false,
+  retries: 0,
 };
 
 function mockFetchResponse(status: number, body: unknown) {
@@ -154,6 +155,38 @@ describe("createClient", () => {
 
       await expect(client.getHealth()).rejects.toThrow(NetworkError);
       await expect(client.getHealth()).rejects.toThrow("Request failed: Failed to fetch");
+    });
+  });
+
+  // ── ECONNREFUSED ──────────────────────────────────────────────
+
+  describe("connection refused", () => {
+    it("throws ConnectionRefusedError when fetch rejects with ECONNREFUSED cause", async () => {
+      const cause = new Error("connect ECONNREFUSED 127.0.0.1:4000");
+      const fetchError = new TypeError("fetch failed");
+      Object.assign(fetchError, { cause });
+
+      vi.stubGlobal("fetch", vi.fn(() => Promise.reject(fetchError)));
+
+      const client = createClient(defaultOpts);
+
+      await expect(client.getHealth()).rejects.toThrow(ConnectionRefusedError);
+      await expect(client.getHealth()).rejects.toThrow(
+        "Connection refused at http://localhost:4000/health. Is the Stellar Explain backend running?",
+      );
+    });
+
+    it("falls through to NetworkError when cause does not contain ECONNREFUSED", async () => {
+      const cause = new Error("connect ENOTFOUND example.com");
+      const fetchError = new TypeError("fetch failed");
+      Object.assign(fetchError, { cause });
+
+      vi.stubGlobal("fetch", vi.fn(() => Promise.reject(fetchError)));
+
+      const client = createClient(defaultOpts);
+
+      await expect(client.getHealth()).rejects.toThrow(NetworkError);
+      await expect(client.getHealth()).rejects.toThrow("Request failed: fetch failed");
     });
   });
 

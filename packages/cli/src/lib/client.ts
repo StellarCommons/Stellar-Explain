@@ -1,4 +1,4 @@
-import { NetworkError, NotFoundError, NonJsonResponseError } from "./errors.js";
+import { NetworkError, NotFoundError, NonJsonResponseError, ConnectionRefusedError } from "./errors.js";
 import type {
   TransactionExplanation,
   AccountExplanation,
@@ -49,6 +49,10 @@ async function requestOnce<T>(
     if (err instanceof NotFoundError || err instanceof NetworkError || err instanceof NonJsonResponseError) throw err;
     if ((err as Error).name === "AbortError")
       throw new NetworkError(`Request timed out after ${opts.timeout}ms`);
+    // Detect ECONNREFUSED from the underlying fetch error cause
+    const cause = (err as { cause?: { message?: string } }).cause;
+    if (cause?.message?.includes("ECONNREFUSED"))
+      throw new ConnectionRefusedError(url);
     throw new NetworkError(`Request failed: ${(err as Error).message}`);
   } finally {
     clearTimeout(timer);
