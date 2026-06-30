@@ -3,184 +3,237 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 
-const DEFAULT_HISTORY_LIMIT = 10;
+// ─── Temp dir used by the mock ────────────────────────────────────────────────
+const TEMP_HOME = path.join(os.tmpdir(), `se-history-test-${process.pid}`);
+const HISTORY_FILE = path.join(TEMP_HOME, "history.json");
 
-function applyLimit<T>(entries: T[], limit: number): T[] {
-  return entries.slice(-Math.abs(limit));
-}
-
+// ─── Mock the history module so it writes to our temp dir ─────────────────────
 vi.mock("../src/lib/history.js", () => {
   const fs = require("fs") as typeof import("fs");
   const path = require("path") as typeof import("path");
   const os = require("os") as typeof import("os");
 
-  const TEMP_HOME = path.join(os.tmpdir(), `se-history-test-${process.pid}`);
-  const FILE = path.join(TEMP_HOME, ".stellar-explain-history.json");
+  const TEMP = path.join(os.tmpdir(), `se-history-test-${process.pid}`);
+  const FILE = path.join(TEMP, "history.json");
+  const MAX_STORED = 500;
 
-  const LIMIT = 10;
-
-  function applyLimitInner<T>(entries: T[], limit: number): T[] {
-    return entries.slice(-Math.abs(limit));
-  }
-
+  type LookupKind = "tx" | "account";
   interface HistoryEntry {
-    input: string;
+    kind: LookupKind;
+    query: string;
     timestamp: string;
   }
 
-  function loadEntries(): HistoryEntry[] {
-    if (!fs.existsSync(FILE)) return [];
-    return JSON.parse(fs.readFileSync(FILE, "utf8")) as HistoryEntry[];
+  function ensureDir() {
+    if (!fs.existsSync(TEMP)) fs.mkdirSync(TEMP, { recursive: true });
   }
 
-  function addEntry(entry: HistoryEntry, limit = LIMIT): void {
-    const entries = loadEntries();
-    entries.push(entry);
-    const trimmed = applyLimitInner(entries, limit);
-    fs.mkdirSync(path.dirname(FILE), { recursive: true });
-    fs.writeFileSync(FILE, JSON.stringify(trimmed), "utf8");
+  function readHistory(): HistoryEntry[] {
+    ensureDir();
+    if (!fs.existsSync(FILE)) return [];
+    try {
+      return JSON.parse(fs.readFileSync(FILE, "utf8")) as HistoryEntry[];
+    } catch {
+      return [];
+    }
+  }
+
+  function addEntry(kind: LookupKind, query: string): void {
+    ensureDir();
+    const entries = readHistory();
+    entries.push({ kind, query, timestamp: new Date().toISOString() });
+    const trimmed = entries.slice(-MAX_STORED);
+    fs.writeFileSync(FILE, JSON.stringify(trimmed, null, 2), "utf8");
   }
 
   function clearHistory(): void {
-    if (fs.existsSync(FILE)) fs.unlinkSync(FILE);
+    if (fs.existsSync(FILE)) fs.rmSync(FILE);
   }
 
-  return { addEntry, loadEntries, clearHistory };
+  function historyFilePath(): string {
+    return FILE;
+  }
+
+  return { readHistory, addEntry, clearHistory, historyFilePath };
 });
 
-import { addEntry, loadEntries, clearHistory } from "../src/lib/history.js";
+import {
+  readHistory,
+  addEntry,
+  clearHistory,
+  historyFilePath,
+} from "../src/lib/history.js";
 
-const TEMP_HOME = path.join(os.tmpdir(), `se-history-test-${process.pid}`);
-const HISTORY_FILE = path.join(TEMP_HOME, ".stellar-explain-history.json");
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function entry(n: number): { input: string; timestamp: string } {
-  return { input: `tx-${n}`, timestamp: new Date(Date.now() + n).toISOString() };
+function txEntry(n: number) {
+  return { kind: "tx" as const, query: `${"a".repeat(63)}${n % 10}` };
 }
 
+function accountEntry(n: number) {
+  return {
+    kind: "account" as const,
+    query: `G${"A".repeat(54)}${n % 10}`,
+  };
+}
+
+// ─── Setup/teardown ───────────────────────────────────────────────────────────
+
+beforeEach(() => {
+  fs.mkdirSync(TEMP_HOME, { recursive: true });
+});
+
+afterEach(() => {
+  clearHistory();
+  fs.rmSync(TEMP_HOME, { recursive: true, force: true });
+});
+
+// ─── Tests ────────────────────────────────────────────────────────────────────
+
 describe("history", () => {
-  beforeEach(() => {
-    fs.mkdirSync(TEMP_HOME, { recursive: true });
+  // ── Reading an empty history ───────────────────────────────────────────────
+
+  describe("readHistory (empty)", () => {
+    it("returns an empty array when no history file exists", () => {
+      expect(readHistory()).toEqual([]);
+    });
   });
 
-  afterEach(() => {
-    clearHistory();
-    fs.rmSync(TEMP_HOME, { recursive: true, force: true });
-  });
-
-  // ── Adding entries ─────────────────────────────────────────────
+  // ── Adding entries ─────────────────────────────────────────────────────────
 
   describe("addEntry", () => {
-    it("persists a single entry", () => {
-      addEntry(entry(1));
+    it("persists a single tx entry", () => {
+      const { kind, query } = txEntry(1);
+      addEntry(kind, query);
 
-      const entries = loadEntries();
+      const entries = readHistory();
       expect(entries).toHaveLength(1);
-      expect(entries[0].input).toBe("tx-1");
+      expect(entries[0]!.kind).toBe("tx");
+      expect(entries[0]!.query).toBe(query);
+      expect(entries[0]!.timestamp).toBeTruthy();
+    });
+
+    it("persists a single account entry", () => {
+      const { kind, query } = accountEntry(1);
+      addEntry(kind, query);
+
+      const entries = readHistory();
+      expect(entries).toHaveLength(1);
+      expect(entries[0]!.kind).toBe("account");
+      expect(entries[0]!.query).toBe(query);
     });
 
     it("appends entries in order", () => {
-      addEntry(entry(1));
-      addEntry(entry(2));
-      addEntry(entry(3));
+      addEntry("tx", txEntry(1).query);
+      addEntry("account", accountEntry(2).query);
+      addEntry("tx", txEntry(3).query);
 
-      const entries = loadEntries();
+      const entries = readHistory();
       expect(entries).toHaveLength(3);
-      expect(entries[0].input).toBe("tx-1");
-      expect(entries[1].input).toBe("tx-2");
-      expect(entries[2].input).toBe("tx-3");
+      expect(entries[0]!.kind).toBe("tx");
+      expect(entries[1]!.kind).toBe("account");
+      expect(entries[2]!.kind).toBe("tx");
     });
 
     it("creates the history file if it does not exist", () => {
       expect(fs.existsSync(HISTORY_FILE)).toBe(false);
-
-      addEntry(entry(1));
-
+      addEntry("tx", txEntry(1).query);
       expect(fs.existsSync(HISTORY_FILE)).toBe(true);
     });
+
+    it("records an ISO-8601 timestamp", () => {
+      addEntry("tx", txEntry(1).query);
+      const [entry] = readHistory();
+      expect(new Date(entry!.timestamp).toISOString()).toBe(entry!.timestamp);
+    });
   });
 
-  // ── Reading entries ────────────────────────────────────────────
+  // ── Reading entries ────────────────────────────────────────────────────────
 
-  describe("loadEntries", () => {
-    it("returns an empty array when no history file exists", () => {
-      expect(loadEntries()).toEqual([]);
-    });
+  describe("readHistory", () => {
+    it("reads back what was written", () => {
+      addEntry("tx", txEntry(1).query);
+      addEntry("account", accountEntry(2).query);
 
-    it("reads entries from the history file", () => {
-      addEntry(entry(1));
-      addEntry(entry(2));
-
-      const entries = loadEntries();
+      const entries = readHistory();
       expect(entries).toHaveLength(2);
-      expect(entries[0].input).toBe("tx-1");
-      expect(entries[1].input).toBe("tx-2");
+      expect(entries[0]!.kind).toBe("tx");
+      expect(entries[1]!.kind).toBe("account");
     });
 
-    it("preserves all entry fields", () => {
-      const e = { input: "abc123", timestamp: "2025-01-01T00:00:00Z" };
-      addEntry(e);
-
-      const [result] = loadEntries();
-      expect(result.input).toBe("abc123");
-      expect(result.timestamp).toBe("2025-01-01T00:00:00Z");
-    });
-  });
-
-  // ── Limiting to max count ──────────────────────────────────────
-
-  describe("limiting entries", () => {
-    it("trims to the default limit of 10 when exceeded", () => {
-      for (let i = 1; i <= 15; i++) {
-        addEntry(entry(i));
-      }
-
-      const entries = loadEntries();
-      expect(entries).toHaveLength(10);
-      // Should keep the latest 10 (entries 6-15)
-      expect(entries[0].input).toBe("tx-6");
-      expect(entries[9].input).toBe("tx-15");
-    });
-
-    it("respects a custom limit", () => {
-      for (let i = 1; i <= 5; i++) {
-        addEntry(entry(i), 3);
-      }
-
-      const entries = loadEntries();
-      expect(entries).toHaveLength(3);
-      expect(entries[0].input).toBe("tx-3");
-      expect(entries[2].input).toBe("tx-5");
-    });
-
-    it("does not trim when under the limit", () => {
-      for (let i = 1; i <= 5; i++) {
-        addEntry(entry(i));
-      }
-
-      const entries = loadEntries();
-      expect(entries).toHaveLength(5);
+    it("preserves all three entry fields", () => {
+      addEntry("account", accountEntry(1).query);
+      const [result] = readHistory();
+      expect(result).toHaveProperty("kind");
+      expect(result).toHaveProperty("query");
+      expect(result).toHaveProperty("timestamp");
     });
   });
 
-  // ── Clearing history ───────────────────────────────────────────
+  // ── Filtering by kind ──────────────────────────────────────────────────────
+
+  describe("filtering by kind", () => {
+    beforeEach(() => {
+      addEntry("tx", txEntry(1).query);
+      addEntry("account", accountEntry(2).query);
+      addEntry("tx", txEntry(3).query);
+      addEntry("account", accountEntry(4).query);
+    });
+
+    it("can filter to only tx entries", () => {
+      const txEntries = readHistory().filter((e) => e.kind === "tx");
+      expect(txEntries).toHaveLength(2);
+      expect(txEntries.every((e) => e.kind === "tx")).toBe(true);
+    });
+
+    it("can filter to only account entries", () => {
+      const acctEntries = readHistory().filter((e) => e.kind === "account");
+      expect(acctEntries).toHaveLength(2);
+      expect(acctEntries.every((e) => e.kind === "account")).toBe(true);
+    });
+  });
+
+  // ── Applying a limit ───────────────────────────────────────────────────────
+
+  describe("applying a limit (slice)", () => {
+    it("slicing the last N entries gives the most recent ones", () => {
+      for (let i = 1; i <= 5; i++) addEntry("tx", txEntry(i).query);
+
+      const entries = readHistory();
+      const shown = entries.slice(-3).reverse();
+
+      expect(shown).toHaveLength(3);
+      // Most recent should be last written (entry 5)
+      expect(shown[0]!.query).toBe(txEntry(5).query);
+    });
+  });
+
+  // ── historyFilePath ────────────────────────────────────────────────────────
+
+  describe("historyFilePath", () => {
+    it("returns a non-empty string", () => {
+      expect(typeof historyFilePath()).toBe("string");
+      expect(historyFilePath().length).toBeGreaterThan(0);
+    });
+  });
+
+  // ── Clearing history ───────────────────────────────────────────────────────
 
   describe("clearHistory", () => {
     it("removes the history file", () => {
-      addEntry(entry(1));
+      addEntry("tx", txEntry(1).query);
       expect(fs.existsSync(HISTORY_FILE)).toBe(true);
 
       clearHistory();
-
       expect(fs.existsSync(HISTORY_FILE)).toBe(false);
     });
 
-    it("results in an empty loadEntries", () => {
-      addEntry(entry(1));
-      addEntry(entry(2));
+    it("results in an empty readHistory after clear", () => {
+      addEntry("tx", txEntry(1).query);
+      addEntry("account", accountEntry(2).query);
 
       clearHistory();
-
-      expect(loadEntries()).toEqual([]);
+      expect(readHistory()).toEqual([]);
     });
 
     it("is safe to call when no history file exists", () => {

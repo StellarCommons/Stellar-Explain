@@ -1,1 +1,63 @@
-"import { mkdtempSync, rmSync, writeFileSync } from \"node:fs\";\nimport { tmpdir } from \"node:os\";\nimport { join } from \"node:path\";\nimport { afterEach, describe, expect, it, vi } from \"vitest\";\nimport { readConfigFile } from \"../src/lib/configFile.js\";\n\nafterEach(() => {\n  vi.restoreAllMocks();\n});\n\ndescribe(\"readConfigFile\", () => {\n  it(\"reads updateCheck from the local config file\", () => {\n    const dir = mkdtempSync(join(tmpdir(), \"stellar-explain-\"));\n    writeFileSync(\n      join(dir, \".stellar-explain.json\"),\n      JSON.stringify({ url: \"https://example.com\", timeout: 4500, updateCheck: false }),\n      \"utf8\",\n    );\n\n    const cwdSpy = vi.spyOn(process, \"cwd\").mockReturnValue(dir);\n\n    expect(readConfigFile()).toEqual({\n      url: \"https://example.com\",\n      timeout: 4500,\n      updateCheck: false,\n    });\n\n    cwdSpy.mockRestore();\n    rmSync(dir, { recursive: true, force: true });\n  });\n\n  it(\"returns empty object when no config file exists\", () => {\n    const dir = mkdtempSync(join(tmpdir(), \"stellar-explain-\"));\n    const cwdSpy = vi.spyOn(process, \"cwd\").mockReturnValue(dir);\n\n    expect(readConfigFile()).toEqual({});\n\n    cwdSpy.mockRestore();\n    rmSync(dir, { recursive: true, force: true });\n  });\n\n  it(\"returns empty object for malformed JSON config\", () => {\n    const dir = mkdtempSync(join(tmpdir(), \"stellar-explain-\"));\n    writeFileSync(join(dir, \".stellar-explain.json\"), \"not valid json\", \"utf8\");\n    const cwdSpy = vi.spyOn(process, \"cwd\").mockReturnValue(dir);\n\n    expect(readConfigFile()).toEqual({});\n\n    cwdSpy.mockRestore();\n    rmSync(dir, { recursive: true, force: true });\n  });\n\n  it(\"returns empty object for empty config file\", () => {\n    const dir = mkdtempSync(join(tmpdir(), \"stellar-explain-\"));\n    writeFileSync(join(dir, \".stellar-explain.json\"), \"\", \"utf8\");\n    const cwdSpy = vi.spyOn(process, \"cwd\").mockReturnValue(dir);\n\n    expect(readConfigFile()).toEqual({});\n\n    cwdSpy.mockRestore();\n    rmSync(dir, { recursive: true, force: true });\n  });\n});\n"
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { readConfigFile } from "../src/lib/configFile.js";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe("readConfigFile", () => {
+  it("reads updateCheck from the local config file", () => {
+    const dir = mkdtempSync(join(tmpdir(), "stellar-explain-"));
+    writeFileSync(
+      join(dir, ".stellar-explain.json"),
+      JSON.stringify({ url: "https://example.com", timeout: 4500, updateCheck: false }),
+      "utf8",
+    );
+
+    const cwdSpy = vi.spyOn(process, "cwd").mockReturnValue(dir);
+
+    expect(readConfigFile()).toEqual({
+      url: "https://example.com",
+      timeout: 4500,
+      updateCheck: false,
+    });
+
+    cwdSpy.mockRestore();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("returns empty object when no config file exists", () => {
+    const dir = mkdtempSync(join(tmpdir(), "stellar-explain-"));
+    const cwdSpy = vi.spyOn(process, "cwd").mockReturnValue(dir);
+
+    expect(readConfigFile()).toEqual({});
+
+    cwdSpy.mockRestore();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("returns empty object for malformed JSON config", () => {
+    const dir = mkdtempSync(join(tmpdir(), "stellar-explain-"));
+    writeFileSync(join(dir, ".stellar-explain.json"), "not valid json", "utf8");
+    const cwdSpy = vi.spyOn(process, "cwd").mockReturnValue(dir);
+
+    expect(readConfigFile()).toEqual({});
+
+    cwdSpy.mockRestore();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("returns empty object for empty config file", () => {
+    const dir = mkdtempSync(join(tmpdir(), "stellar-explain-"));
+    writeFileSync(join(dir, ".stellar-explain.json"), "", "utf8");
+    const cwdSpy = vi.spyOn(process, "cwd").mockReturnValue(dir);
+
+    expect(readConfigFile()).toEqual({});
+
+    cwdSpy.mockRestore();
+    rmSync(dir, { recursive: true, force: true });
+  });
+});

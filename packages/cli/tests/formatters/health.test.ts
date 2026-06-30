@@ -1,1 +1,28 @@
-"import { describe, it, expect } from \"vitest\";\nimport { formatHealth } from \"../../src/formatters/health.js\";\n\ndescribe(\"formatHealth\", () => {\n  it(\"renders ok status with reachable horizon\", () => {\n    const output = formatHealth({ status: \"ok\", horizon_reachable: true, version: \"1.0.0\" });\n    expect(output).toContain(\"Status:   ok\");\n    expect(output).toContain(\"Horizon:  reachable\");\n    expect(output).toContain(\"Version:  1.0.0\");\n  });\n\n  it(\"renders degraded status\", () => {\n    const output = formatHealth({ status: \"degraded\", horizon_reachable: true, version: \"1.0.0\" });\n    expect(output).toContain(\"Status:   degraded\");\n  });\n\n  it(\"renders down status with unreachable horizon\", () => {\n    const output = formatHealth({ status: \"down\", horizon_reachable: false, version: \"1.0.0\" });\n    expect(output).toContain(\"Status:   down\");\n    expect(output).toContain(\"Horizon:  unreachable\");\n  });\n\n  it(\"handles horizon unreachable with ok status\", () => {\n    const output = formatHealth({ status: \"ok\", horizon_reachable: false, version: \"2.0.0\" });\n    expect(output).toContain(\"Status:   ok\");\n    expect(output).toContain(\"Horizon:  unreachable\");\n  });\n});\n"
+import { describe, it, expect } from "vitest";
+import { formatHealth } from "../../src/formatters/health.js";
+
+describe("formatHealth", () => {
+  it("renders ok status with reachable horizon", () => {
+    const output = formatHealth({ status: "ok", horizon_reachable: true, version: "1.0.0" });
+    expect(output).toContain("Status:   ok");
+    expect(output).toContain("Horizon:  reachable");
+    expect(output).toContain("Version:  1.0.0");
+  });
+
+  it("renders degraded status", () => {
+    const output = formatHealth({ status: "degraded", horizon_reachable: true, version: "1.0.0" });
+    expect(output).toContain("Status:   degraded");
+  });
+
+  it("renders down status with unreachable horizon", () => {
+    const output = formatHealth({ status: "down", horizon_reachable: false, version: "1.0.0" });
+    expect(output).toContain("Status:   down");
+    expect(output).toContain("Horizon:  unreachable");
+  });
+
+  it("handles horizon unreachable with ok status", () => {
+    const output = formatHealth({ status: "ok", horizon_reachable: false, version: "2.0.0" });
+    expect(output).toContain("Status:   ok");
+    expect(output).toContain("Horizon:  unreachable");
+  });
+});
