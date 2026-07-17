@@ -124,29 +124,27 @@ require a changeset.
 
 1. **Install dependencies** (first time only):
    ```bash
-   cd packages/sdk
+   cd packages/cli
    npm install
    ```
 
-2. **Run the interactive prompt** from the repo root or the SDK directory:
+2. **Run the interactive prompt** from the CLI package directory:
    ```bash
-   # from repo root
-   npx changeset
-
-   # or from packages/sdk
+   cd packages/cli
    npm run changeset
    ```
 
 3. The CLI will ask you:
-   - Which package is affected → select `@stellar-explain/sdk`
+   - Which package is affected → select `@stellar-explain/cli`
    - What type of bump → `patch`, `minor`, or `major`
    - A short summary of the change (this becomes the changelog entry)
 
-4. A new file is created in `.changeset/` (e.g. `.changeset/teal-lions-laugh.md`).
+4. A new file is created in `packages/cli/.changeset/` (e.g.
+   `packages/cli/.changeset/teal-lions-laugh.md`).
    **Commit this file as part of your PR.**
 
    ```bash
-   git add .changeset/
+   git add packages/cli/.changeset/
    git commit -m "chore: add changeset for <your change>"
    ```
 
