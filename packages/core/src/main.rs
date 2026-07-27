@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+mod analytics;
 mod config;
 mod errors;
 mod explain;

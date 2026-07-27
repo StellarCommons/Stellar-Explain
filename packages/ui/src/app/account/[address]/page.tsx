@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { fetchAccount } from '@/lib/api';
+import { fetchAccount, isApiError } from '@/lib/api';
+import { trackNotFound } from '@/lib/analyticsEvents';
 import type { AccountExplanation } from '@/types';
 import { AccountResult } from '@/components/AccountResult';
 import { TransactionHistoryTab } from '@/components/account/TransactionHistoryTab';
@@ -47,6 +48,9 @@ function AccountPageInner() {
       setData(result);
       addEntry('account', address, result.summary);
     } catch (err) {
+      if (isApiError(err) && err.error.code === 'NOT_FOUND') {
+        trackNotFound('account', address);
+      }
       setError(err instanceof Error ? err : new Error(String(err)));
     } finally {
       setLoading(false);
