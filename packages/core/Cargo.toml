@@ -21,6 +21,7 @@ utoipa = { version = "4", features = ["axum_extras"] }
 utoipa-swagger-ui = { version = "6", features = ["axum"] }
 uuid = { version = "1", features = ["v4"] }
 toml = "0.8"
+time = { version = "0.3", features = ["formatting", "parsing", "std"] }
 
 [dev-dependencies]
 httpmock = "0.7"

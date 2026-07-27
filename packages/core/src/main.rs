@@ -26,6 +26,7 @@ use utoipa_swagger_ui::SwaggerUi;
 use crate::config::network::StellarNetwork;
 use crate::middleware::request_id::request_id_middleware;
 use crate::routes::{ApiDoc, health::health};
+use crate::routes::analytics::{AnalyticsStore, new_store, get_summary, ingest_event};
 use crate::services::horizon::HorizonClient;
 
 fn init_tracing() {
@@ -74,10 +75,17 @@ async fn main() {
 
     let horizon_client = Arc::new(HorizonClient::new(horizon_url));
 
+    let analytics_store: AnalyticsStore = new_store();
+
     // SwaggerUi::url() registers /openapi.json internally.
     // Do NOT add a separate .route("/openapi.json") or Axum will panic
     // with "Overlapping method route" at startup.
     let openapi = ApiDoc::openapi();
+
+    let analytics_router = axum::Router::new()
+        .route("/analytics/events", axum::routing::post(ingest_event))
+        .route("/analytics/summary", axum::routing::get(get_summary))
+        .with_state(analytics_store);
 
     let app = Router::new()
         .route("/health", get(health))
@@ -88,6 +96,7 @@ async fn main() {
         )
         .merge(SwaggerUi::new("/docs").url("/openapi.json", openapi))
         .with_state(horizon_client)
+        .merge(analytics_router)
         .layer(cors)
         .layer(ServiceBuilder::new().layer(axum_middleware::from_fn(request_id_middleware)));
 
