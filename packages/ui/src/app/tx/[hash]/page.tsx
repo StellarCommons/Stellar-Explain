@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { fetchTransaction } from "@/lib/api";
+import { fetchTransaction, isApiError } from "@/lib/api";
+import { trackNotFound } from "@/lib/analyticsEvents";
 import type { TransactionExplanation } from "@/types";
 import { TransactionResult } from "@/components/TransactionResult";
 import ErrorDisplay from "@/components/ErrorDisplay";
@@ -27,6 +28,9 @@ function TxPageInner() {
       setData(result);
       addEntry("transaction", hash, result.summary);
     } catch (err) {
+      if (isApiError(err) && err.error.code === "NOT_FOUND") {
+        trackNotFound("tx", hash);
+      }
       setError(err instanceof Error ? err : new Error(String(err)));
     } finally {
       setLoading(false);
