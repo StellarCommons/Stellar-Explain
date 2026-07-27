@@ -75,9 +75,6 @@ async fn main() {
 
     let horizon_client = Arc::new(HorizonClient::new(horizon_url));
 
-    // SwaggerUi::url() registers /openapi.json internally.
-    // Do NOT add a separate .route("/openapi.json") or Axum will panic
-    // with "Overlapping method route" at startup.
     let openapi = ApiDoc::openapi();
 
     let app = Router::new()
