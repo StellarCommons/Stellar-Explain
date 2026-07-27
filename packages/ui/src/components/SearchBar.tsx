@@ -1,6 +1,7 @@
 import type { Tab } from "@/types";
 import { useRef, useEffect } from "react";
 import { KeyboardShortcutHint } from "@/components/KeyboardShortcutHint";
+import { searchPerformed } from "@/lib/searchTracking";
 
 interface SearchBarProps {
   tab: Tab;
@@ -36,8 +37,13 @@ export function SearchBar({ tab, value, loading, onChange, onSubmit }: SearchBar
     };
   }, []);
 
+  function handleSubmit() {
+    searchPerformed(tab, value);
+    onSubmit();
+  }
+
   function handleKey(e: React.KeyboardEvent) {
-    if (e.key === "Enter") onSubmit();
+    if (e.key === "Enter") handleSubmit();
   }
 
   return (
@@ -68,7 +74,7 @@ export function SearchBar({ tab, value, loading, onChange, onSubmit }: SearchBar
       <div className="flex items-center gap-2">
         <KeyboardShortcutHint keys=["/"]} />
         <button
-          onClick={onSubmit}
+          onClick={handleSubmit}
           disabled={loading || !value.trim()}
           className="px-5 py-3 rounded-lg text-xs font-mono transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
           style={{
