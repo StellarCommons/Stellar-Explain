@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+mod analytics;
 mod config;
 mod errors;
 mod explain;
@@ -81,6 +82,10 @@ async fn main() {
 
     let app = Router::new()
         .route("/health", get(health))
+        .route(
+            "/analytics/timeseries",
+            get(routes::analytics::analytics_timeseries),
+        )
         .route("/tx/:hash", get(routes::tx::get_tx_explanation))
         .route(
             "/account/:address",
