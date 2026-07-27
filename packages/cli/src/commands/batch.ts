@@ -1,6 +1,7 @@
 import type { Command } from 'commander';
 import * as fs from 'node:fs';
 import { ApiClient } from '../client/api.js';
+import { clampConcurrency, mapWithConcurrency } from '../utils/concurrency.js';
 
 interface BatchItem {
   type: string;
@@ -12,7 +13,8 @@ export function registerBatchCommand(program: Command): void {
     .command('batch <file>')
     .description('Process a batch of lookups from a JSON file')
     .option('--dry-run', 'Validate input and print planned actions without making API calls', false)
-    .action(async (file: string, opts: { dryRun: boolean; parent: { opts: { url: string } } }) => {
+    .option('--concurrency <n>', 'Number of requests to run in parallel (default 3, max 10)', '3')
+    .action(async (file: string, opts: { dryRun: boolean; concurrency: string; parent: { opts: { url: string } } }) => {
       const content = fs.readFileSync(file, 'utf-8');
       let items: BatchItem[];
       try {
@@ -40,8 +42,9 @@ export function registerBatchCommand(program: Command): void {
       }
 
       const client = new ApiClient(opts.parent.opts.url);
+      const concurrency = clampConcurrency(Number(opts.concurrency));
 
-      for (const item of items) {
+      await mapWithConcurrency(items, concurrency, async (item) => {
         try {
           let data: unknown;
           if (item.type === 'tx') {
@@ -50,12 +53,12 @@ export function registerBatchCommand(program: Command): void {
             data = await client.explainAccount(item.identifier);
           } else {
             console.error(`Unknown type: ${item.type}`);
-            continue;
+            return;
           }
           console.log(JSON.stringify({ type: item.type, identifier: item.identifier, result: data }, null, 2));
         } catch (err) {
           console.error(`Failed: ${item.type} ${item.identifier}: ${err}`);
         }
-      }
+      });
     });
 }
