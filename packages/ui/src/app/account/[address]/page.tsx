@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { fetchAccount } from '@/lib/api';
+import { accountExplained } from '@/lib/analytics';
 import type { AccountExplanation } from '@/types';
 import { AccountResult } from '@/components/AccountResult';
 import { TransactionHistoryTab } from '@/components/account/TransactionHistoryTab';
@@ -42,10 +43,12 @@ function AccountPageInner() {
     if (!address) return;
     setLoading(true);
     setError(null);
+    const startedAt = Date.now();
     try {
       const result = await fetchAccount(address);
       setData(result);
       addEntry('account', address, result.summary);
+      accountExplained(address, Date.now() - startedAt);
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)));
     } finally {
