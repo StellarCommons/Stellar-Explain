@@ -9,6 +9,7 @@ import { TransactionHistoryTab } from '@/components/account/TransactionHistoryTa
 import ErrorDisplay from '@/components/ErrorDisplay';
 import AppShell from '@/components/AppShell';
 import { useAppShell } from '@/components/AppShellContext';
+import { useDwellTime } from '@/hooks/useDwellTime';
 
 type AccountTab = 'overview' | 'history';
 
@@ -21,6 +22,10 @@ function AccountPageInner() {
   const { address } = useParams<{ address: string }>();
   const router = useRouter();
   const { addEntry, isSaved, getEntry, saveAddress, removeAddress } = useAppShell();
+
+  useDwellTime((dwellMs) => {
+    console.debug('page.dwell', { page: 'account', address, dwellMs });
+  });
 
   const [data, setData] = useState<AccountExplanation | null>(null);
   const [loading, setLoading] = useState(true);
