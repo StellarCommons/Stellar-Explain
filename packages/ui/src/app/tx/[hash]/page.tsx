@@ -9,11 +9,16 @@ import { TransactionResult } from "@/components/TransactionResult";
 import ErrorDisplay from "@/components/ErrorDisplay";
 import AppShell from "@/components/AppShell";
 import { useAppShell } from "@/components/AppShellContext";
+import { useDwellTime } from "@/hooks/useDwellTime";
 
 function TxPageInner() {
   const { hash } = useParams<{ hash: string }>();
   const router = useRouter();
   const { addEntry } = useAppShell();
+
+  useDwellTime((dwellMs) => {
+    console.debug("page.dwell", { page: "tx", hash, dwellMs });
+  });
 
   const [data, setData] = useState<TransactionExplanation | null>(null);
   const [loading, setLoading] = useState(true);
