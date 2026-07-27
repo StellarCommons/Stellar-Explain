@@ -12,7 +12,7 @@ use axum::{
     Router,
     http::{HeaderValue, Method, header},
     middleware as axum_middleware,
-    routing::get,
+    routing::{get, post},
 };
 use std::{env, sync::Arc};
 use tokio::net::TcpListener;
@@ -81,6 +81,18 @@ async fn main() {
 
     let app = Router::new()
         .route("/health", get(health))
+        .route(
+            "/analytics/errors",
+            get(routes::analytics::analytics_errors),
+        )
+        .route(
+            "/analytics/top-hashes",
+            get(routes::analytics::analytics_top_hashes),
+        )
+        .route(
+            "/analytics/ingest",
+            post(routes::analytics::analytics_ingest),
+        )
         .route("/tx/:hash", get(routes::tx::get_tx_explanation))
         .route(
             "/account/:address",
