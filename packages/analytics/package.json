@@ -8,5 +8,8 @@
     "test": "vitest run",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.8"
   }
 }
