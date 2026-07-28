@@ -1,120 +1,141 @@
 import { describe, it, expect } from "vitest";
-import { limitPayload, DEFAULT_MAX_BYTES } from "../src/utils/limitPayload";
-import type { AnalyticsEvent } from "../src/types/events";
+import { limitPayload } from "../src/limitPayload";
+import { AnalyticsEvent } from "../src/types/events";
 
-function makeEvent(overrides: Partial<AnalyticsEvent> = {}): AnalyticsEvent {
-  return {
-    id: "evt-limit",
-    name: "search",
-    timestamp: new Date("2024-05-01T00:00:00.000Z"),
-    ...overrides,
-  };
-}
+const makeEvent = (overrides: Partial<AnalyticsEvent> = {}): AnalyticsEvent => ({
+  id: "evt-001",
+  name: "page_view",
+  timestamp: new Date("2024-01-15T12:00:00.000Z"),
+  userId: "user-42",
+  sessionId: "session-abc",
+  ...overrides,
+});
 
-describe("limitPayload()", () => {
-  describe("events under the byte limit", () => {
+describe("limitPayload", () => {
+  describe("events under the limit", () => {
     it("returns the same event reference when there are no properties", () => {
-      const event = makeEvent();
-      expect(limitPayload(event)).toBe(event);
-    });
-
-    it("returns the same event reference when all props are within limit", () => {
-      const event = makeEvent({ properties: { label: "short" } });
-      expect(limitPayload(event)).toBe(event);
-    });
-
-    it("does not set _truncated on untouched events", () => {
-      const event = makeEvent({ properties: { label: "short" } });
-      const result = limitPayload(event);
-      expect(result.properties?._truncated).toBeUndefined();
-    });
-
-    it("preserves non-string property values without modification", () => {
-      const event = makeEvent({ properties: { count: 42, active: true } });
-      const result = limitPayload(event);
-      expect(result.properties?.count).toBe(42);
-      expect(result.properties?.active).toBe(true);
-    });
-  });
-
-  describe("events that exceed the byte limit", () => {
-    const MAX = 10; // tiny limit for easy testing
-
-    it("returns a new event object (not the same reference)", () => {
-      const longString = "a".repeat(MAX + 1);
-      const event = makeEvent({ properties: { big: longString } });
-      expect(limitPayload(event, MAX)).not.toBe(event);
-    });
-
-    it("truncates a string property that exceeds maxBytes", () => {
-      const longString = "x".repeat(MAX + 50);
-      const event = makeEvent({ properties: { msg: longString } });
-      const result = limitPayload(event, MAX);
-      const encoded = new TextEncoder().encode(result.properties?.msg as string);
-      expect(encoded.byteLength).toBeLessThanOrEqual(MAX);
-    });
-
-    it("sets _truncated: true on the properties object", () => {
-      const longString = "z".repeat(MAX + 1);
-      const event = makeEvent({ properties: { data: longString } });
-      const result = limitPayload(event, MAX);
-      expect(result.properties?._truncated).toBe(true);
-    });
-
-    it("leaves non-string values untouched when other props are truncated", () => {
-      const longString = "q".repeat(MAX + 1);
-      const event = makeEvent({ properties: { big: longString, num: 99 } });
-      const result = limitPayload(event, MAX);
-      expect(result.properties?.num).toBe(99);
-    });
-
-    it("truncates multiple oversized string properties", () => {
-      const event = makeEvent({
-        properties: {
-          a: "a".repeat(MAX + 5),
-          b: "b".repeat(MAX + 10),
-          c: "short",
-        },
-      });
-      const result = limitPayload(event, MAX);
-
-      const encA = new TextEncoder().encode(result.properties?.a as string);
-      const encB = new TextEncoder().encode(result.properties?.b as string);
-
-      expect(encA.byteLength).toBeLessThanOrEqual(MAX);
-      expect(encB.byteLength).toBeLessThanOrEqual(MAX);
-      expect(result.properties?.c).toBe("short");
-      expect(result.properties?._truncated).toBe(true);
-    });
-
-    it("preserves the original event properties unchanged", () => {
-      const originalValue = "y".repeat(MAX + 1);
-      const event = makeEvent({ properties: { data: originalValue } });
-      limitPayload(event, MAX);
-      // original must be untouched
-      expect(event.properties?.data).toBe(originalValue);
-    });
-  });
-
-  describe("default byte limit", () => {
-    it("DEFAULT_MAX_BYTES is 1024", () => {
-      expect(DEFAULT_MAX_BYTES).toBe(1024);
-    });
-
-    it("does not truncate a string of exactly 1024 bytes", () => {
-      const exactly1024 = "a".repeat(1024);
-      const event = makeEvent({ properties: { payload: exactly1024 } });
-      const result = limitPayload(event);
+      const event = makeEvent({ properties: undefined });
+      const result = limitPayload(event, 100);
       expect(result).toBe(event);
     });
 
-    it("truncates a string of 1025 bytes", () => {
-      const over1024 = "a".repeat(1025);
-      const event = makeEvent({ properties: { payload: over1024 } });
-      const result = limitPayload(event);
-      const encoded = new TextEncoder().encode(result.properties?.payload as string);
-      expect(encoded.byteLength).toBeLessThanOrEqual(1024);
+    it("returns the same event reference when properties is an empty object", () => {
+      const event = makeEvent({ properties: {} });
+      const result = limitPayload(event, 100);
+      expect(result).toBe(event);
+    });
+
+    it("returns the same event reference when all properties are within the limit", () => {
+      const event = makeEvent({ properties: { key: "short" } });
+      const result = limitPayload(event, 100);
+      expect(result).toBe(event);
+    });
+
+    it("does not set _truncated on events within the limit", () => {
+      const event = makeEvent({ properties: { label: "hello" } });
+      const result = limitPayload(event, 100);
+      expect(result.properties?._truncated).toBeUndefined();
+    });
+
+    it("preserves all property values when none exceed the limit", () => {
+      const event = makeEvent({ properties: { a: "foo", b: "bar", c: 42 } });
+      const result = limitPayload(event, 100);
+      expect(result.properties).toEqual({ a: "foo", b: "bar", c: 42 });
+    });
+
+    it("preserves non-string property values regardless of limit", () => {
+      const event = makeEvent({ properties: { count: 999, active: true, tags: ["x", "y"] } });
+      const result = limitPayload(event, 5);
+      expect(result.properties?.count).toBe(999);
+      expect(result.properties?.active).toBe(true);
+      expect(result.properties?.tags).toEqual(["x", "y"]);
+    });
+  });
+
+  describe("events over the limit", () => {
+    it("truncates a string property that exceeds the limit", () => {
+      const longValue = "a".repeat(200);
+      const event = makeEvent({ properties: { data: longValue } });
+      const result = limitPayload(event, 100);
+      const truncated = result.properties?.data as string;
+      expect(truncated.length).toBeLessThan(longValue.length);
+    });
+
+    it("sets _truncated: true when any property is truncated", () => {
+      const longValue = "x".repeat(500);
+      const event = makeEvent({ properties: { payload: longValue } });
+      const result = limitPayload(event, 100);
       expect(result.properties?._truncated).toBe(true);
+    });
+
+    it("does not mutate the original event", () => {
+      const longValue = "y".repeat(500);
+      const event = makeEvent({ properties: { data: longValue } });
+      const original = event.properties?.data;
+      limitPayload(event, 100);
+      expect(event.properties?.data).toBe(original);
+      expect(event.properties?._truncated).toBeUndefined();
+    });
+
+    it("returns a new event object when truncation occurs", () => {
+      const longValue = "z".repeat(500);
+      const event = makeEvent({ properties: { value: longValue } });
+      const result = limitPayload(event, 100);
+      expect(result).not.toBe(event);
+    });
+
+    it("only truncates string properties that exceed the limit, leaving others unchanged", () => {
+      const event = makeEvent({
+        properties: {
+          short: "ok",
+          long: "b".repeat(500),
+          count: 42,
+        },
+      });
+      const result = limitPayload(event, 100);
+      expect(result.properties?.short).toBe("ok");
+      expect(result.properties?.count).toBe(42);
+      expect((result.properties?.long as string).length).toBeLessThanOrEqual(
+        100 + "...[truncated]".length
+      );
+    });
+
+    it("truncates multiple oversized string properties in one pass", () => {
+      const event = makeEvent({
+        properties: {
+          first: "a".repeat(300),
+          second: "b".repeat(400),
+        },
+      });
+      const result = limitPayload(event, 50);
+      expect(result.properties?._truncated).toBe(true);
+      expect((result.properties?.first as string).startsWith("aaaa")).toBe(true);
+      expect((result.properties?.second as string).startsWith("bbbb")).toBe(true);
+    });
+
+    it("uses the default limit of 1024 when no maxBytes is provided", () => {
+      const exactly1025 = "c".repeat(1025);
+      const event = makeEvent({ properties: { big: exactly1025 } });
+      const result = limitPayload(event);
+      expect(result.properties?._truncated).toBe(true);
+    });
+
+    it("does not truncate a string of exactly maxBytes length", () => {
+      const exactly100 = "d".repeat(100);
+      const event = makeEvent({ properties: { val: exactly100 } });
+      const result = limitPayload(event, 100);
+      expect(result).toBe(event);
+      expect(result.properties?._truncated).toBeUndefined();
+    });
+
+    it("preserves all top-level event fields when truncation occurs", () => {
+      const event = makeEvent({ properties: { data: "e".repeat(500) } });
+      const result = limitPayload(event, 10);
+      expect(result.id).toBe(event.id);
+      expect(result.name).toBe(event.name);
+      expect(result.timestamp).toBe(event.timestamp);
+      expect(result.userId).toBe(event.userId);
+      expect(result.sessionId).toBe(event.sessionId);
     });
   });
 });

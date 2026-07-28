@@ -1,21 +1,21 @@
-import type { AnalyticsEvent } from "../types/events";
+import { AnalyticsEvent } from "../types/events";
 
 /**
- * ConsoleSink — writes each analytics event to the console as a formatted
- * JSON log line.  Useful for development and debugging.
+ * Logs each analytics event to the console in a structured, human-readable
+ * format.
+ *
+ * Output format:
+ *   [analytics] <name> <ISO-timestamp> <JSON properties>
  */
 export class ConsoleSink {
   send(event: AnalyticsEvent): void {
+    const timestamp = event.timestamp instanceof Date
+      ? event.timestamp.toISOString()
+      : String(event.timestamp);
+
     console.log(
-      JSON.stringify({
-        level: "analytics",
-        event: event.name,
-        id: event.id,
-        userId: event.userId ?? null,
-        sessionId: event.sessionId ?? null,
-        timestamp: event.timestamp.toISOString(),
-        properties: event.properties ?? {},
-      }),
+      `[analytics] ${event.name} ${timestamp}`,
+      event.properties ?? {},
     );
   }
 }
