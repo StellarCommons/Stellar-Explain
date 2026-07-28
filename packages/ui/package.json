@@ -10,7 +10,7 @@
     "smoke-test": "bash ../../scripts/smoke-test.sh"
   },
   "dependencies": {
-    "next": "15.5.3",
+    "next": "16.2.12",
     "react": "19.1.0",
     "react-dom": "19.1.0"
   },
