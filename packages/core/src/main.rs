@@ -13,7 +13,7 @@ use axum::{
     Router,
     http::{HeaderValue, Method, header},
     middleware as axum_middleware,
-    routing::get,
+    routing::{get, post},
 };
 use std::{env, sync::Arc};
 use tokio::net::TcpListener;
