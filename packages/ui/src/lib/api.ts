@@ -23,6 +23,8 @@ export type {
   PaymentExplanation,
 } from "@/types";
 
+import { apiError, isTrackableApiError } from "@/lib/apiErrorTracking";
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 export function isApiError(value: unknown): value is ApiError {
@@ -42,7 +44,12 @@ export function getErrorMessage(error: unknown): string {
 
 async function handleResponse<T>(res: Response): Promise<T> {
   const data = await res.json();
-  if (!res.ok) throw data as ApiError;
+  if (!res.ok) {
+    if (isTrackableApiError(res.status)) {
+      apiError(new URL(res.url).pathname, res.status);
+    }
+    throw data as ApiError;
+  }
   return data as T;
 }
 
