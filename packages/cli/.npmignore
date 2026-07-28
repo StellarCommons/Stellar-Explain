@@ -1,0 +1,29 @@
+# Exclude tests, fixtures, and config from the published package
+
+# Tests and test-related
+tests/
+__tests__/
+*.test.ts
+*.spec.ts
+vitest.config.ts
+
+# Source maps
+*.map
+
+# TypeScript source
+*.ts
+!dist/**/*
+
+# Config files
+tsconfig.json
+tsconfig.*.json
+.eslintrc*
+.eslintignore
+.prettierrc
+.prettierignore
+
+# Development artifacts
+node_modules/
+src/
+
+# Only publish dist/ and README.md
