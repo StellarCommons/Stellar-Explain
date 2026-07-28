@@ -2,14 +2,15 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { fetchAccount } from '@/lib/api';
-import { accountExplained } from '@/lib/analytics';
+import { fetchAccount, isApiError } from '@/lib/api';
+import { trackNotFound } from '@/lib/analyticsEvents';
 import type { AccountExplanation } from '@/types';
 import { AccountResult } from '@/components/AccountResult';
 import { TransactionHistoryTab } from '@/components/account/TransactionHistoryTab';
 import ErrorDisplay from '@/components/ErrorDisplay';
 import AppShell from '@/components/AppShell';
 import { useAppShell } from '@/components/AppShellContext';
+import { useDwellTime } from '@/hooks/useDwellTime';
 
 type AccountTab = 'overview' | 'history';
 
@@ -22,6 +23,10 @@ function AccountPageInner() {
   const { address } = useParams<{ address: string }>();
   const router = useRouter();
   const { addEntry, isSaved, getEntry, saveAddress, removeAddress } = useAppShell();
+
+  useDwellTime((dwellMs) => {
+    console.debug('page.dwell', { page: 'account', address, dwellMs });
+  });
 
   const [data, setData] = useState<AccountExplanation | null>(null);
   const [loading, setLoading] = useState(true);
@@ -50,6 +55,9 @@ function AccountPageInner() {
       addEntry('account', address, result.summary);
       accountExplained(address, Date.now() - startedAt);
     } catch (err) {
+      if (isApiError(err) && err.error.code === 'NOT_FOUND') {
+        trackNotFound('account', address);
+      }
       setError(err instanceof Error ? err : new Error(String(err)));
     } finally {
       setLoading(false);
