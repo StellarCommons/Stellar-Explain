@@ -50,7 +50,7 @@ describe('disk cache unavailable fallback', () => {
     const result = cacheGet<{ data: number }>('fallback-key');
     expect(result).toEqual({ data: 42 });
     expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Falling back to in-memory cache')
+      expect.stringContaining('Could not create cache directory')
     );
     warnSpy.mockRestore();
   });
