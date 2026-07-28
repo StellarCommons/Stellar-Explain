@@ -10,6 +10,15 @@ updates:
       - analytics
 
   - package-ecosystem: npm
+    directory: /packages/cli
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - cli
+
+  - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
