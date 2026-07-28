@@ -48,10 +48,12 @@ function AccountPageInner() {
     if (!address) return;
     setLoading(true);
     setError(null);
+    const startedAt = Date.now();
     try {
       const result = await fetchAccount(address);
       setData(result);
       addEntry('account', address, result.summary);
+      accountExplained(address, Date.now() - startedAt);
     } catch (err) {
       if (isApiError(err) && err.error.code === 'NOT_FOUND') {
         trackNotFound('account', address);

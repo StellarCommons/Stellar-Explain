@@ -79,6 +79,14 @@ async fn main() {
 
     let app = Router::new()
         .route("/health", get(health))
+        .route(
+            "/analytics/health",
+            get(routes::analytics::analytics_health),
+        )
+        .route(
+            "/analytics/sessions",
+            get(routes::analytics::analytics_sessions),
+        )
         .route("/tx/:hash", get(routes::tx::get_tx_explanation))
         .route(
             "/account/:address",
