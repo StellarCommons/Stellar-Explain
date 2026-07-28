@@ -2,17 +2,23 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { fetchTransaction } from "@/lib/api";
+import { fetchTransaction, isApiError } from "@/lib/api";
+import { trackNotFound } from "@/lib/analyticsEvents";
 import type { TransactionExplanation } from "@/types";
 import { TransactionResult } from "@/components/TransactionResult";
 import ErrorDisplay from "@/components/ErrorDisplay";
 import AppShell from "@/components/AppShell";
 import { useAppShell } from "@/components/AppShellContext";
+import { useDwellTime } from "@/hooks/useDwellTime";
 
 function TxPageInner() {
   const { hash } = useParams<{ hash: string }>();
   const router = useRouter();
   const { addEntry } = useAppShell();
+
+  useDwellTime((dwellMs) => {
+    console.debug("page.dwell", { page: "tx", hash, dwellMs });
+  });
 
   const [data, setData] = useState<TransactionExplanation | null>(null);
   const [loading, setLoading] = useState(true);
@@ -27,6 +33,9 @@ function TxPageInner() {
       setData(result);
       addEntry("transaction", hash, result.summary);
     } catch (err) {
+      if (isApiError(err) && err.error.code === "NOT_FOUND") {
+        trackNotFound("tx", hash);
+      }
       setError(err instanceof Error ? err : new Error(String(err)));
     } finally {
       setLoading(false);

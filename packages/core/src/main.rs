@@ -13,7 +13,7 @@ use axum::{
     Router,
     http::{HeaderValue, Method, header},
     middleware as axum_middleware,
-    routing::get,
+    routing::{get, post},
 };
 use std::{env, sync::Arc};
 use tokio::net::TcpListener;
@@ -75,21 +75,26 @@ async fn main() {
 
     let horizon_client = Arc::new(HorizonClient::new(horizon_url));
 
-    // SwaggerUi::url() registers /openapi.json internally.
-    // Do NOT add a separate .route("/openapi.json") or Axum will panic
-    // with "Overlapping method route" at startup.
     let openapi = ApiDoc::openapi();
 
     let app = Router::new()
         .route("/health", get(health))
         .route(
-            "/analytics/timeseries",
-            get(routes::analytics::analytics_timeseries),
+            "/analytics/health",
+            get(routes::analytics::analytics_health),
+        )
+        .route(
+            "/analytics/sessions",
+            get(routes::analytics::analytics_sessions),
         )
         .route("/tx/:hash", get(routes::tx::get_tx_explanation))
         .route(
             "/account/:address",
             get(routes::account::get_account_explanation),
+        )
+        .route(
+            "/analytics/summary",
+            get(routes::analytics::get_analytics_summary),
         )
         .merge(SwaggerUi::new("/docs").url("/openapi.json", openapi))
         .with_state(horizon_client)
