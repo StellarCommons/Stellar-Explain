@@ -7,6 +7,7 @@
     "build:watch": "tsc --watch",
     "dev": "tsc --watch",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit"
   },
