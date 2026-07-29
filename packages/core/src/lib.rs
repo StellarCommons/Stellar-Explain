@@ -4,6 +4,7 @@
 
 #![allow(dead_code)]
 
+pub mod analytics;
 pub mod errors;
 pub mod explain;
 pub mod middleware;
