@@ -7,7 +7,8 @@
   },
   "files": [
     "dist",
-    "bin"
+    "bin",
+    "man"
   ],
   "scripts": {
     "build": "tsc",
@@ -16,6 +17,7 @@
     "test": "vitest run",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
+    "generate:man": "bash scripts/generate-man.sh",
     "changeset": "changeset",
     "version": "changeset version",
     "release": "npm run build && changeset publish",
