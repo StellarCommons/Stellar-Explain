@@ -4,9 +4,17 @@
   "private": true,
   "scripts": {
     "build": "tsc",
+    "build:watch": "tsc --watch",
     "dev": "tsc --watch",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0",
+    "@vitest/coverage-v8": "^2.0.0"
   }
 }
