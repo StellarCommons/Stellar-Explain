@@ -15,7 +15,21 @@ export class ApiClient {
 
   async get<T>(endpoint: string): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
-    const response = await fetch(url);
+    let response: Response;
+    try {
+      response = await fetch(url);
+    } catch (err: unknown) {
+      if (err instanceof TypeError) {
+        const msg = String(err.message);
+        if (msg.includes('ECONNREFUSED')) {
+          throw new Error(`Connection refused at ${this.baseUrl}. Is the Stellar Explain backend running?`);
+        }
+        if (msg.includes('ENOTFOUND') || msg.includes('getaddrinfo')) {
+          throw new Error(`Cannot reach ${this.baseUrl}. Check the URL and your internet connection.`);
+        }
+      }
+      throw err;
+    }
 
     if (!response.ok) {
       throw new Error(`API error: ${response.status} ${response.statusText}`);
