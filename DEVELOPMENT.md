@@ -218,3 +218,19 @@ The backend is deployed via **Render Blueprint** (`render.yaml` at repo root).
 4. Open a pull request from your fork into `StellarCommons/Stellar-Explain`
 
 For available issues, see the project's issue tracker.
+
+
+## Analytics Environment Variables
+
+The analytics pipeline requires the following environment variables:
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `ANALYTICS_READ_TOKEN` | No | — | Bearer token for analytics read endpoints (`GET /analytics/*`) |
+| `ANALYTICS_WRITE_TOKEN` | No | — | Bearer token for analytics write endpoint (`POST /analytics/ingest`) |
+
+If set, the ingest endpoint requires `Authorization: Bearer <ANALYTICS_WRITE_TOKEN>`
+on each request. Read endpoints similarly require `ANALYTICS_READ_TOKEN`.
+
+These tokens are not required for local development but should be configured in
+production deployments (see CI secrets in repository Settings).
