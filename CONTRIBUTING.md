@@ -101,23 +101,23 @@ Thanks again for helping make **StellarCommons** better! ✨
 
 ---
 
-## 📦 SDK Version Management (Changesets)
+## 📦 CLI Version Management (Changesets)
 
-The `@stellar-explain/sdk` package uses [Changesets](https://github.com/changesets/changesets)
+The `@stellar-explain/cli` package uses [Changesets](https://github.com/changesets/changesets)
 to manage semantic versioning and auto-generate `CHANGELOG.md` entries.
 
 ### When do I need a changeset?
 
-Any PR that modifies `packages/sdk/` **and** changes the public API or behaviour
-visible to consumers needs a changeset. This includes:
+Any PR that modifies `packages/cli/` **and** changes the CLI's behaviour
+visible to end users needs a changeset. This includes:
 
 | Change type | Semver bump |
 |---|---|
-| Breaking API change (rename, removal, incompatible signature) | `major` |
-| New exported symbol, new option, new behaviour (backwards-compatible) | `minor` |
+| Breaking CLI change (flag removal, output format change) | `major` |
+| New command, new option, new feature (backwards-compatible) | `minor` |
 | Bug fix, dependency update, documentation only | `patch` |
 
-Pure internal refactors with no observable difference to consumers do not
+Pure internal refactors with no observable difference to users do not
 require a changeset.
 
 ### Step-by-step: adding a changeset to your PR
@@ -153,20 +153,15 @@ require a changeset.
 
 ### Release flow (maintainers only)
 
-When PRs with changeset files are merged to `main`, the
-[Release workflow](.github/workflows/release.yml) runs automatically:
+When a new version of the CLI is ready for release, a maintainer pushes a
+tag matching `cli-v*` (e.g. `cli-v0.1.1`). The
+[CLI Publish workflow](.github/workflows/cli-publish.yml) runs automatically:
 
-1. **If unreleased changesets exist** — the workflow opens (or updates) a
-   "Version Packages" PR that bumps `packages/sdk/package.json` and prepends
-   entries to `packages/sdk/CHANGELOG.md`.
+1. Checks out the tag, installs dependencies, builds the CLI, and runs tests.
+2. Publishes `@stellar-explain/cli` to npm using the `NPM_TOKEN` secret.
 
-2. **When the "Version Packages" PR is merged** — the workflow runs
-   `changeset publish`, which tags the commit and publishes
-   `@stellar-explain/sdk` to npm.
-
-> The workflow requires two repository secrets:
-> - `GITHUB_TOKEN` — provided automatically by GitHub Actions.
+> The workflow requires one repository secret:
 > - `NPM_TOKEN` — a granular npm access token with publish rights for
->   `@stellar-explain/sdk`. Add it in **Settings → Secrets and variables →
+>   `@stellar-explain/cli`. Add it in **Settings → Secrets and variables →
 >   Actions**.
 
