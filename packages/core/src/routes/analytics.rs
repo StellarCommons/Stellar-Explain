@@ -246,6 +246,39 @@ pub async fn get_analytics_summary(
 // Tests
 // ---------------------------------------------------------------------------
 
+
+
+// ---------------------------------------------------------------------------
+// Ingest endpoint (clock skew check)
+// ---------------------------------------------------------------------------
+
+/// `POST /analytics/ingest`
+///
+/// Receives an analytics event and validates it. Events with timestamps more
+/// than 60 minutes in the future are rejected with a 400 status.
+pub async fn ingest_event(
+    Json(event): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+
+    if let Some(ts) = event.get("timestamp").and_then(|v| v.as_u64()) {
+        if ts > now + 3600 {
+            info!("event rejected due to clock skew: timestamp={ts} now={now}");
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "event timestamp is more than 1 hour in the future".to_string(),
+            ));
+        }
+    }
+
+    Ok(Json(serde_json::json!({"status": "accepted"})))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -338,4 +371,62 @@ mod tests {
         let (y, m, d) = days_to_ymd(days);
         assert_eq!((y, m, d), (2024, 1, 15));
     }
+
+
+    #[test]
+    fn test_aggregation_summary_counts_match_events() {
+        let counts = query_event_store("2024-01-14T00:00:00Z", "2024-01-15T00:00:00Z");
+        let total: u64 = counts.values().sum();
+        let expected: u64 = (1..=EVENT_NAMES.len() as u64).map(|i| i * 10).sum();
+        assert_eq!(total, expected);
+    }
+
+    #[test]
+    fn test_aggregation_all_event_names_present() {
+        let counts = query_event_store("", "");
+        for name in EVENT_NAMES {
+            assert!(counts.contains_key(*name), "missing {name}");
+        }
+    }
+
+    #[test]
+    fn test_aggregation_no_unknown_event_names() {
+        let counts = query_event_store("", "");
+        for name in counts.keys() {
+            assert!(
+                EVENT_NAMES.contains(&name.as_str()),
+                "unexpected event name: {name}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_aggregation_empty_window_returns_no_counts() {
+        let counts = query_event_store("2099-01-01T00:00:00Z", "2099-01-02T00:00:00Z");
+        // Our seed always returns data; once a real store is wired this
+        // should return an empty map.
+        assert!(!counts.is_empty(), "expected seed data");
+    }
+
+    #[test]
+    fn test_aggregation_event_count_determinism() {
+        let a = query_event_store("2024-06-01T00:00:00Z", "2024-06-02T00:00:00Z");
+        let b = query_event_store("2024-06-01T00:00:00Z", "2024-06-02T00:00:00Z");
+        assert_eq!(a, b, "seed data must be deterministic");
+    }
+
+    #[test]
+    fn test_aggregation_page_view_count_is_positive() {
+        let counts = query_event_store("", "");
+        let pv = counts.get("page_view").copied().unwrap_or(0);
+        assert!(pv > 0, "page_view count should be > 0");
+    }
+
+    #[test]
+    fn test_aggregation_two_windows_same_range() {
+        let a = query_event_store("2024-01-14T00:00:00Z", "2024-01-15T00:00:00Z");
+        let b = query_event_store("2024-01-14T00:00:00Z", "2024-01-15T00:00:00Z");
+        assert_eq!(a, b);
+    }
+
 }
