@@ -4,9 +4,23 @@
   "private": true,
   "scripts": {
     "build": "tsc",
+    "build:watch": "tsc --watch",
     "dev": "tsc --watch",
     "test": "vitest run",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0",
+    "lint-staged": "^15.0.0",
+    "prettier": "^3.0.0"
+  },
+  "lint-staged": {
+    "*.ts": [
+      "eslint --fix",
+      "prettier --write"
+    ]
   }
 }
