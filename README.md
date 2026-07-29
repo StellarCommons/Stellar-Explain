@@ -108,6 +108,32 @@ Join the Telegram group to ask questions or coordinate with maintainers:
 
 ---
 
+
+
+## 📊 Analytics
+
+Stellar Explain collects **anonymous** usage analytics. No PII is collected,
+session IDs are ephemeral, and DNT headers are respected.
+
+### What is tracked?
+
+- Page views, button clicks, form submissions, API calls
+- Error occurrences (type and count only)
+- Login/logout, search, purchase, refund
+
+### What is NOT tracked?
+
+- IP addresses, email addresses, or names
+- Cookies or cross-site behavior
+
+### How to opt out
+
+Set the `DNT: 1` HTTP header, or use `--no-analytics` in the CLI.
+
+### Privacy
+
+See [PRIVACY.md](./PRIVACY.md) for the full privacy policy.
+
 ## 📄 License
 
 MIT License.  
