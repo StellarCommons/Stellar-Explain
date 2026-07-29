@@ -48,6 +48,39 @@ curl https://stellar-explain-core.onrender.com/tx/b9d0b2292c4e09e8eb22d036171491
 
 ---
 
+## 🖥️ CLI
+
+Query the Stellar Explain backend directly from your terminal with the `@stellar-explain/cli` package.
+
+### Install
+
+```bash
+npm install -g @stellar-explain/cli
+```
+
+Or use it on the fly with npx:
+
+```bash
+npx @stellar-explain/cli tx <hash>
+```
+
+### Usage Examples
+
+```bash
+# Explain a transaction
+stellar-explain tx b9d0b2292c4e09e8eb22d036171491e87b8d2086bf8b265874c8d182cb9c9020
+
+# Explain an account
+stellar-explain account GA4SX4J5H7J4KJQ2J3X4Z5M6N7P8Q9R0ASDFGHJKL
+
+# Check backend health
+stellar-explain health
+```
+
+See `packages/cli/README.md` for full documentation.
+
+---
+
 ## 🏗️ Architecture Overview
 
 Stellar Explain is a **monorepo** with three packages:
