@@ -1,0 +1,38 @@
+name: CLI
+
+on:
+  pull_request:
+    paths:
+      - 'packages/cli/**'
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/cli/**'
+
+concurrency:
+  group: cli-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cli-checks:
+    name: CLI Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: packages/cli
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: packages/cli/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - name: Coverage check
+        run: npx vitest run --coverage.enabled --coverage.thresholds.lines 80
+        continue-on-error: true
