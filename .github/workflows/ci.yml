@@ -4,7 +4,15 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 'packages/core/**'
+      - 'packages/cli/**'
+      - '.github/workflows/ci.yml'
   pull_request:
+    paths:
+      - 'packages/core/**'
+      - 'packages/cli/**'
+      - '.github/workflows/ci.yml'
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -49,4 +57,35 @@ jobs:
 
       - name: Run tests
         run: cargo test --all-targets --all-features
+
+  cli:
+    name: CLI Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: packages/cli
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript check
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Check binary size
+        run: bash scripts/check-size.sh
+
+      - name: Run tests
+        run: npm run test
 
