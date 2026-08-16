@@ -20,5 +20,6 @@ use utoipa::OpenApi;
 pub struct ApiDoc;
 
 pub mod account;
+pub mod analytics;
 pub mod health;
 pub mod tx;

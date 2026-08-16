@@ -1,7 +1,0 @@
-export const BASE_URL = "http://localhost:4000";
-
-export const VALID_TX_HASH =
-  "6bc97b244a6a2a5b8522c4e6e8e3b1f2d9a0c7e5f3b1d8a2c4e6f8b0d2a4c6e8";
-
-export const VALID_ACCOUNT_ID =
-  "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN";

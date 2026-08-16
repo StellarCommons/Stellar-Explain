@@ -1,65 +1,56 @@
-import type { Command } from "commander";
-import { createClient } from "../lib/client.js";
-import { detectInputType } from "../lib/autoDetect.js";
-import { validateHash, validateAddress } from "../lib/validate.js";
-import { formatTransaction } from "../formatters/transaction.js";
-import { formatAccount } from "../formatters/account.js";
-import { getCached, setCache } from "../lib/cache.js";
-import { shouldUseColorOutput } from "../lib/config.js";
-import { InvalidInputError } from "../lib/errors.js";
+import { Command } from 'commander';
+import { ApiClient } from '../client/api.js';
+import { cacheGet, cacheSet } from '../utils/cache.js';
+import { saveToHistory, HistoryEntry } from '../utils/history.js';
 
-const CACHE_TTL_MS = 5 * 60 * 1000;
-
-export function registerExplain(program: Command): void {
+export function registerExplainCommands(program: Command): void {
   program
-    .command("explain <input>")
-    .description("Auto-detect and explain a transaction hash or account address")
-    .action(async (input: string) => {
-      const opts = program.opts<{
-        url: string;
-        timeout: number;
-        retries: number;
-        verbose: boolean;
-        json: boolean;
-        cache: boolean;
-      }>();
-
-      const type = detectInputType(input);
-      if (type === "unknown") {
-        throw new InvalidInputError(
-          `Unable to auto-detect input type: ${input}. Provide a transaction hash (64 hex chars) or Stellar address (G...).`,
-        );
-      }
-
-      if (opts.cache !== false) {
-        const cached = getCached<unknown>(input, CACHE_TTL_MS);
-        if (cached) {
-          console.log(opts.json ? JSON.stringify(cached, null, 2) : cached);
-          return;
+    .command('tx <hash>')
+    .description('Explain a transaction by hash')
+    .option('--save-to-history', 'Save this lookup to local history', false)
+    .action(async (hash: string, opts: { parent: { opts: { url: string } }; saveToHistory: boolean }) => {
+      const client = new ApiClient(opts.parent.opts.url);
+      const cacheKey = `tx:${hash}`;
+      const cached = cacheGet<unknown>(cacheKey);
+      if (cached) {
+        console.log(JSON.stringify(cached, null, 2));
+        if (opts.saveToHistory) {
+          saveToHistoryEntry({ type: 'tx', identifier: hash, result: cached });
         }
+        return;
       }
-
-      const client = createClient({
-        baseUrl: opts.url,
-        timeout: opts.timeout,
-        retries: opts.retries ?? 0,
-        verbose: opts.verbose,
-      });
-
-      const useColor = shouldUseColorOutput() && !opts.json;
-
-      if (type === "hash") {
-        validateHash(input);
-        const tx = await client.getTransaction(input);
-        const output = opts.json ? JSON.stringify(tx, null, 2) : formatTransaction(tx, useColor);
-        console.log(output);
-        if (opts.cache !== false) setCache(input, tx);
-      } else {
-        validateAddress(input);
-        const acc = await client.getAccount(input);
-        const output = opts.json ? JSON.stringify(acc, null, 2) : formatAccount(acc, useColor);
-        console.log(output);
-        if (opts.cache !== false) setCache(input, acc);
+      const data = await client.explainTx(hash);
+      cacheSet(cacheKey, data, 5 * 60 * 1000);
+      console.log(JSON.stringify(data, null, 2));
+      if (opts.saveToHistory) {
+        saveToHistoryEntry({ type: 'tx', identifier: hash, result: data });
       }
     });
+
+  program
+    .command('account <address>')
+    .description('Explain an account by address')
+    .option('--save-to-history', 'Save this lookup to local history', false)
+    .action(async (address: string, opts: { parent: { opts: { url: string } }; saveToHistory: boolean }) => {
+      const client = new ApiClient(opts.parent.opts.url);
+      const cacheKey = `account:${address}`;
+      const cached = cacheGet<unknown>(cacheKey);
+      if (cached) {
+        console.log(JSON.stringify(cached, null, 2));
+        if (opts.saveToHistory) {
+          saveToHistoryEntry({ type: 'account', identifier: address, result: cached });
+        }
+        return;
+      }
+      const data = await client.explainAccount(address);
+      cacheSet(cacheKey, data, 5 * 60 * 1000);
+      console.log(JSON.stringify(data, null, 2));
+      if (opts.saveToHistory) {
+        saveToHistoryEntry({ type: 'account', identifier: address, result: data });
+      }
+    });
+}
+
+function saveToHistoryEntry(entry: Omit<HistoryEntry, 'timestamp'>): void {
+  saveToHistory({ ...entry, timestamp: new Date().toISOString() });
 }

@@ -21,7 +21,12 @@ jobs:
       - name: Ping backend health endpoint
         run: |
           echo "Pinging ${{ vars.BACKEND_URL }}/health ..."
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "${{ vars.BACKEND_URL }}/health")
+          # Render free-tier instances spin down after ~15 min idle and can take
+          # well over 10s to cold-start; give curl enough time to wait that out.
+          # curl already reports "000" via -w on any connection failure/timeout;
+          # `|| true` just stops that non-zero curl exit from aborting the script
+          # under `bash -e` before the warning below runs.
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 60 "${{ vars.BACKEND_URL }}/health" || true)
           echo "Response: $STATUS"
           if [ "$STATUS" != "200" ]; then
             echo "Warning: health check returned $STATUS"

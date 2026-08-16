@@ -1,46 +1,23 @@
-# @stellar-explain/cli Changelog
+# Changelog
 
-All notable changes to this package will be documented here.
+All notable changes to this project will be documented in this file.
 
-## 0.1.0
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-### Initial release
+## [0.1.0] — 2026-07-29
 
-A command-line interface for querying and explaining Stellar blockchain data via the Stellar Explain API.
+### Added
 
-#### Commands
-
-- `tx <hash>` — Explain a Stellar transaction by hash
-- `account <address>` — Explain a Stellar account by address
-- `health` — Check API health status
-- `batch <file>` — Explain multiple transaction hashes from a file (one per line)
-- `watch <hash>` — Poll a transaction until it reaches 'success' or 'failed' status
-
-#### Global options
-
-- `--url <url>` — API base URL
-- `--timeout <ms>` — Request timeout in milliseconds (default: 10000)
-- `--retries <n>` — Retry attempts for network errors (default: 2)
-- `--verbose` — Log request details to stderr
-- `--json` — Output raw JSON
-- `--version` — Display CLI version
-- `--help` — Display help information
-
-#### Command-specific options
-
-**batch**
-- `--output <path>` — Write results to a JSON file instead of stdout
-- `--concurrency <n>` — Number of parallel requests (default: 3)
-
-**watch**
-- `--interval <ms>` — Polling interval in milliseconds (default: 4000)
-- `--watch-timeout <ms>` — Maximum total time to wait in milliseconds (default: 120000)
-
-#### Features
-
-- Human-readable formatted output with optional color support
-- JSON output mode for machine consumption
-- Non-blocking update check on startup
-- Node.js 18+ requirement enforcement
-- Network retry logic with configurable attempts
-- Input validation for transaction hashes and account addresses
+- Initial release of `@stellar-explain/cli`
+- `tx <hash>` command — explain a Stellar transaction by hash
+- `account <address>` command — explain a Stellar account by address
+- `health` command — check backend API health
+- `batch <file>` command — process a batch of lookups from a JSON file
+- `cache clear` command — clear local response cache
+- `version` command — show CLI and API versions
+- `--url` option — configure a custom backend URL
+- `--no-update-check` option — disable background update check
+- Local disk cache with in-memory fallback (`~/.stellar-explain/`)
+- Background update check on startup
+- Colored error output formatting

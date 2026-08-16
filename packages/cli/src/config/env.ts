@@ -1,29 +1,19 @@
-export interface EnvConfig {
-  token?: string;
-  url?: string;
-  timeout?: number;
-  color?: boolean;
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as os from 'node:os';
+
+export const CLI_VERSION = '0.1.0';
+
+export const DEFAULT_BASE_URL = 'https://stellar-explain-core.onrender.com';
+
+export function getCacheDir(): string {
+  return path.join(os.homedir(), '.stellar-explain');
 }
 
-export function loadEnvConfig(): EnvConfig {
-  const config: EnvConfig = {};
+export function getHistoryFile(): string {
+  return path.join(getCacheDir(), 'history.json');
+}
 
-  if (process.env.STELLAR_EXPLAIN_TOKEN) {
-    config.token = process.env.STELLAR_EXPLAIN_TOKEN;
-  }
-
-  if (process.env.STELLAR_EXPLAIN_URL) {
-    config.url = process.env.STELLAR_EXPLAIN_URL;
-  }
-
-  if (process.env.STELLAR_EXPLAIN_TIMEOUT) {
-    const t = parseInt(process.env.STELLAR_EXPLAIN_TIMEOUT, 10);
-    if (!isNaN(t) && t > 0) config.timeout = t;
-  }
-
-  if (process.env.NO_COLOR) {
-    config.color = false;
-  }
-
-  return config;
+export function isUpdateCheckDisabled(): boolean {
+  return process.env.NO_UPDATE_CHECK === '1';
 }

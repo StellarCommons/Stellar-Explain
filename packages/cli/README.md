@@ -1,97 +1,101 @@
 # @stellar-explain/cli
 
-CLI tool for the Stellar Explain API.
+Query the Stellar Explain backend from your terminal.
+
+## Install
+
+```bash
+npm install -g @stellar-explain/cli
+```
+
+Or run directly with npx:
+
+```bash
+npx @stellar-explain/cli tx <hash>
+```
 
 ## Usage
 
-```sh
-npx @stellar-explain/cli <command>
+```
+stellar-explain <command> [options]
 ```
 
-## Configuration File
-
-You can create a `.stellar-explain.json` file in your project directory (or home directory) to set default options. The CLI will automatically pick it up — no flags required.
-
-**Schema:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `url` | `string` | Base URL of the Stellar Explain API (must be `http://` or `https://`) |
-| `timeout` | `number` | Request timeout in milliseconds (positive integer) |
-
-**Example `.stellar-explain.json`:**
-
-```json
-{
-  "url": "http://localhost:3000",
-  "timeout": 5000
-}
-```
-
-**Lookup order:**
-1. `--url` / `--timeout` CLI flags (highest priority)
-2. `.stellar-explain.json` in the current working directory
-3. `.stellar-explain.json` in the home directory (`~/`)
-4. Built-in defaults (`https://stellar-explain-core.onrender.com`, 10 000 ms)
-
-You can also manage the config file via the CLI:
-
-```sh
-stellar-explain config set url http://localhost:3000
-stellar-explain config set timeout 5000
-stellar-explain config list
-```
-
-## Commands
+### Commands
 
 | Command | Description |
 |---------|-------------|
 | `tx <hash>` | Explain a transaction |
 | `account <address>` | Explain an account |
-| `health` | Check API health |
-| `batch` | Explain multiple items |
-| `watch` | Watch for updates |
-| `history` | View command history |
-| `version` | Print version |
-| `config` | Manage configuration |
-| `completion <shell>` | Output shell completion script |
+| `health` | Check backend health |
+| `batch <file>` | Process a batch of lookups |
+| `cache clear` | Clear local response cache |
+| `version` | Show CLI and API versions |
 
-## Shell Completion
+### Options
 
-Enable tab completion for `stellar-explain` commands in your shell.
+| Option | Description |
+|--------|-------------|
+| `--url <url>` | Backend URL (default: https://stellar-explain-core.onrender.com) |
+| `--no-update-check` | Disable background update check |
+| `--help` | Show help |
 
-### Bash
+## Configuration
 
-```sh
-stellar-explain completion bash >> ~/.bash_completion
-source ~/.bash_completion
+The CLI reads configuration from `.stellar-explain.json` in the current working directory. Supported keys:
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `url` | string | `https://stellar-explain-core.onrender.com` | Backend API base URL |
+| `noUpdateCheck` | boolean | `false` | Disable background update check |
+| `network` | string | `testnet` | Stellar network (`mainnet` or `testnet`) |
+| `cacheTtl.tx` | number | `300000` | Cache TTL for transaction lookups (ms) |
+| `cacheTtl.account` | number | `60000` | Cache TTL for account lookups (ms) |
+
+Example:
+
+```json
+{
+  "url": "https://stellar-explain-core.onrender.com",
+  "network": "testnet",
+  "noUpdateCheck": true,
+  "cacheTtl": {
+    "tx": 300000,
+    "account": 60000
+  }
+}
 ```
 
-To persist across sessions, add the `source` line to your `~/.bashrc`:
+CLI flags take precedence over config file values, which take precedence over defaults.
 
-```sh
-echo 'source ~/.bash_completion' >> ~/.bashrc
+## Shell Completions
+
+Generate completion scripts for your shell and source them from your `.bashrc`, `.zshrc`, or fish config.
+
+### bash
+
+```bash
+stellar-explain completion bash > ~/.stellar-explain-completion.bash
+echo "source ~/.stellar-explain-completion.bash" >> ~/.bashrc
 ```
 
-### Zsh
+### zsh
 
-```sh
+```bash
 stellar-explain completion zsh > "${fpath[1]}/_stellar-explain"
-exec zsh
 ```
 
-> Make sure `~/.zfunc` or another directory is in your `$fpath`. If needed:
-> ```sh
-> mkdir -p ~/.zfunc
-> stellar-explain completion zsh > ~/.zfunc/_stellar-explain
-> echo 'fpath=(~/.zfunc $fpath)' >> ~/.zshrc
-> echo 'autoload -Uz compinit && compinit' >> ~/.zshrc
-> exec zsh
-> ```
+### fish
 
-## Development
-
-```sh
-npm run build
-npm run dev
+```bash
+stellar-explain completion fish > ~/.config/fish/completions/stellar-explain.fish
 ```
+
+After adding the completion script, restart your shell or source the config file.
+
+## Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | API or network error |
+| 2 | Invalid input or configuration error |

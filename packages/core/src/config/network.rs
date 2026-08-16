@@ -30,19 +30,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn defaults_to_public_network() {
+    fn env_var_configuration() {
         unsafe {
             std::env::remove_var("STELLAR_NETWORK");
         }
         assert_eq!(StellarNetwork::from_env(), StellarNetwork::Public);
-    }
 
-    #[test]
-    fn resolves_testnet_network() {
         unsafe {
             std::env::set_var("STELLAR_NETWORK", "testnet");
         }
         assert_eq!(StellarNetwork::from_env(), StellarNetwork::Testnet);
+
+        unsafe {
+            std::env::remove_var("STELLAR_NETWORK");
+        }
     }
 
     #[test]

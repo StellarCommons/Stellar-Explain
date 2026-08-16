@@ -1,146 +1,64 @@
-import fs from "fs";
-import path from "path";
-import readline from "readline";
-import type { Command } from "commander";
-import cliProgress from "cli-progress";
-import { createClient } from "../lib/client.js";
-import { validateHash } from "../lib/validate.js";
-import { formatTransaction } from "../formatters/transaction.js";
-import { InvalidInputError } from "../lib/errors.js";
-import type { TransactionExplanation } from "../types/index.js";
+import type { Command } from 'commander';
+import * as fs from 'node:fs';
+import { ApiClient } from '../client/api.js';
+import { clampConcurrency, mapWithConcurrency } from '../utils/concurrency.js';
 
-interface BatchResult {
-  hash: string;
-  status: "ok" | "error";
-  data?: TransactionExplanation;
-  error?: string;
+interface BatchItem {
+  type: string;
+  identifier: string;
 }
 
-/** Read non-empty, non-comment lines from a file, one hash per line. */
-async function readHashes(filePath: string): Promise<string[]> {
-  const resolved = path.resolve(filePath);
-  if (!fs.existsSync(resolved)) {
-    throw new InvalidInputError(`File not found: ${resolved}`);
-  }
-  const rl = readline.createInterface({
-    input: fs.createReadStream(resolved),
-    crlfDelay: Infinity,
-  });
-  const hashes: string[] = [];
-  for await (const line of rl) {
-    const trimmed = line.trim();
-    if (trimmed && !trimmed.startsWith("#")) hashes.push(trimmed);
-  }
-  if (hashes.length === 0) {
-    throw new InvalidInputError(`No hashes found in file: ${resolved}`);
-  }
-  return hashes;
-}
-
-export function registerBatch(program: Command): void {
+export function registerBatchCommand(program: Command): void {
   program
-    .command("batch <file>")
-    .description("Explain multiple transaction hashes read from a file (one per line)")
-    .option("--output <path>", "Write results to a JSON file instead of stdout")
-    .option("--concurrency <n>", "Number of parallel requests", (v) => parseInt(v, 10), 3)
-    .option("--dry-run", "Validate hashes and show what would be processed without making API calls")
-    .action(async (file: string, cmdOpts: { output?: string; concurrency: number; dryRun?: boolean }) => {
-      const opts = program.opts<{
-        url: string;
-        timeout: number;
-        retries: number;
-        verbose: boolean;
-        json: boolean;
-      }>();
-
-      const hashes = await readHashes(file);
-      const client = createClient({
-        baseUrl: opts.url,
-        timeout: opts.timeout,
-        retries: opts.retries ?? 0,
-        verbose: opts.verbose,
-      });
-
-      // Validate all hashes upfront so the user gets a clear error before any
-      // network calls are made.
-      for (const hash of hashes) {
-        validateHash(hash);
+    .command('batch <file>')
+    .description('Process a batch of lookups from a JSON file')
+    .option('--dry-run', 'Validate input and print planned actions without making API calls', false)
+    .option('--concurrency <n>', 'Number of requests to run in parallel (default 3, max 10)', '3')
+    .action(async (file: string, opts: { dryRun: boolean; concurrency: string; parent: { opts: { url: string } } }) => {
+      const content = fs.readFileSync(file, 'utf-8');
+      let items: BatchItem[];
+      try {
+        items = JSON.parse(content) as BatchItem[];
+      } catch {
+        console.error(`Error: invalid JSON in ${file}`);
+        process.exit(1);
       }
 
-      // --dry-run: print what would be processed and exit
-      if (cmdOpts.dryRun) {
-        process.stdout.write(`[dry-run] Would process ${hashes.length} transaction(s):\n`);
-        for (const hash of hashes) {
-          process.stdout.write(`  ${hash}\n`);
-        }
-        return;
+      if (!Array.isArray(items)) {
+        console.error('Error: input must be a JSON array');
+        process.exit(1);
       }
 
-      const results: BatchResult[] = [];
-      const toOutput = Boolean(cmdOpts.output);
-
-      // Only show the progress bar when not piping to a file and not in
-      // --json mode, so stdout stays clean for downstream consumers.
-      const showBar = !toOutput && !opts.json;
-      const bar = showBar
-        ? new cliProgress.SingleBar(
-            {
-              format: "Processing [{bar}] {value}/{total} hashes | ETA: {eta}s",
-              clearOnComplete: true,
-            },
-            cliProgress.Presets.shades_classic,
-          )
-        : null;
-
-      bar?.start(hashes.length, 0);
-
-      // Process in chunks of `concurrency` to bound parallelism.
-      const concurrency = Math.max(1, cmdOpts.concurrency);
-      for (let i = 0; i < hashes.length; i += concurrency) {
-        const chunk = hashes.slice(i, i + concurrency);
-        const settled = await Promise.allSettled(
-          chunk.map((hash) => client.getTransaction(hash)),
-        );
-        for (let j = 0; j < chunk.length; j++) {
-          const hash = chunk[j]!;
-          const outcome = settled[j]!;
-          if (outcome.status === "fulfilled") {
-            results.push({ hash, status: "ok", data: outcome.value });
+      if (opts.dryRun) {
+        console.log(`[dry-run] Would process ${items.length} item(s) from ${file}:\n`);
+        for (const item of items) {
+          if (item.type !== 'tx' && item.type !== 'account') {
+            console.log(`  ⚠  ${item.type}/${item.identifier} — unknown type, would skip`);
           } else {
-            const msg =
-              outcome.reason instanceof Error
-                ? outcome.reason.message
-                : String(outcome.reason);
-            results.push({ hash, status: "error", error: msg });
+            console.log(`  →  ${item.type}/${item.identifier}`);
           }
-          bar?.increment();
         }
-      }
-
-      bar?.stop();
-
-      // --output: write JSON file
-      if (cmdOpts.output) {
-        const outPath = path.resolve(cmdOpts.output);
-        fs.writeFileSync(outPath, JSON.stringify(results, null, 2), "utf8");
-        process.stdout.write(`Wrote ${results.length} results to ${outPath}\n`);
         return;
       }
 
-      // --json: raw JSON to stdout
-      if (opts.json) {
-        console.log(JSON.stringify(results, null, 2));
-        return;
-      }
+      const client = new ApiClient(opts.parent.opts.url);
+      const concurrency = clampConcurrency(Number(opts.concurrency));
 
-      // Default: human-readable output
-      for (const result of results) {
-        process.stdout.write(`\n— ${result.hash}\n`);
-        if (result.status === "error") {
-          process.stderr.write(`  Error: ${result.error}\n`);
-        } else if (result.data !== undefined) {
-          console.log(formatTransaction(result.data));
+      await mapWithConcurrency(items, concurrency, async (item) => {
+        try {
+          let data: unknown;
+          if (item.type === 'tx') {
+            data = await client.explainTx(item.identifier);
+          } else if (item.type === 'account') {
+            data = await client.explainAccount(item.identifier);
+          } else {
+            console.error(`Unknown type: ${item.type}`);
+            return;
+          }
+          console.log(JSON.stringify({ type: item.type, identifier: item.identifier, result: data }, null, 2));
+        } catch (err) {
+          console.error(`Failed: ${item.type} ${item.identifier}: ${err}`);
         }
-      }
+      });
     });
 }
