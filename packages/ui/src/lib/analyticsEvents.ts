@@ -1,28 +1,19 @@
-export interface TrackedEvent {
-  name: string;
-  properties?: Record<string, unknown>;
-  timestamp: string;
-}
+import { EventEmitter, ConsoleSink } from "@stellar-explain/analytics";
+import type { EventName } from "@stellar-explain/analytics";
 
-type Listener = (event: TrackedEvent) => void;
+const emitter = new EventEmitter();
+const sink = new ConsoleSink();
 
-const listeners: Listener[] = [];
-
-/** Registers a listener for tracked events; returns an unsubscribe function. */
-export function onAnalyticsEvent(listener: Listener): () => void {
-  listeners.push(listener);
-  return () => {
-    const index = listeners.indexOf(listener);
-    if (index !== -1) listeners.splice(index, 1);
-  };
-}
-
-function track(name: string, properties?: Record<string, unknown>): void {
-  const event: TrackedEvent = { name, properties, timestamp: new Date().toISOString() };
-  for (const listener of listeners) listener(event);
-}
+emitter.on("tx.not_found", (event) => sink.send(event));
+emitter.on("account.not_found", (event) => sink.send(event));
 
 /** Fires `tx.not_found` or `account.not_found` when a lookup returns 404. */
 export function trackNotFound(kind: "tx" | "account", identifier: string): void {
-  track(`${kind}.not_found`, { identifier });
+  const eventName = kind === "tx" ? "tx.not_found" : "account.not_found";
+  emitter.track({
+    id: crypto.randomUUID(),
+    name: eventName as EventName,
+    timestamp: new Date(),
+    properties: { identifier },
+  });
 }

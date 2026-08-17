@@ -9,6 +9,11 @@ export const EventName = [
   "search",
   "purchase",
   "refund",
+  "account.explained",
+  "account.not_found",
+  "tx.not_found",
+  "error.api",
+  "search.performed",
 ] as const;
 
 export type EventName = (typeof EventName)[number];

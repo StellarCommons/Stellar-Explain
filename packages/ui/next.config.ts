@@ -8,6 +8,7 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  transpilePackages: ["@stellar-explain/analytics"],
   async headers() {
     return [
       {

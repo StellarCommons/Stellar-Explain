@@ -10,6 +10,7 @@
     "smoke-test": "bash ../../scripts/smoke-test.sh"
   },
   "dependencies": {
+    "@stellar-explain/analytics": "*",
     "next": "15.5.3",
     "react": "19.1.0",
     "react-dom": "19.1.0"
