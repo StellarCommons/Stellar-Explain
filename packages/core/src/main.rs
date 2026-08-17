@@ -13,7 +13,7 @@ use axum::{
     Router,
     http::{HeaderValue, Method, header},
     middleware as axum_middleware,
-    routing::{get, post},
+    routing::get,
 };
 use std::{env, sync::Arc};
 use tokio::net::TcpListener;
@@ -26,8 +26,8 @@ use utoipa_swagger_ui::SwaggerUi;
 
 use crate::config::network::StellarNetwork;
 use crate::middleware::request_id::request_id_middleware;
+use crate::routes::analytics::{get_analytics_summary, ingest_event};
 use crate::routes::{ApiDoc, health::health};
-use crate::routes::analytics::{AnalyticsStore, new_store, get_summary, ingest_event};
 use crate::services::horizon::HorizonClient;
 
 fn init_tracing() {
@@ -78,33 +78,20 @@ async fn main() {
 
     let openapi = ApiDoc::openapi();
 
-    let analytics_router = axum::Router::new()
-        .route("/analytics/events", axum::routing::post(ingest_event))
-        .route("/analytics/summary", axum::routing::get(get_summary))
-        .with_state(analytics_store);
-
     let app = Router::new()
         .route("/health", get(health))
+        .route("/analytics/events", axum::routing::post(ingest_event))
         .route(
-            "/analytics/health",
-            get(routes::analytics::analytics_health),
-        )
-        .route(
-            "/analytics/sessions",
-            get(routes::analytics::analytics_sessions),
+            "/analytics/summary",
+            axum::routing::get(get_analytics_summary),
         )
         .route("/tx/:hash", get(routes::tx::get_tx_explanation))
         .route(
             "/account/:address",
             get(routes::account::get_account_explanation),
         )
-        .route(
-            "/analytics/summary",
-            get(routes::analytics::get_analytics_summary),
-        )
         .merge(SwaggerUi::new("/docs").url("/openapi.json", openapi))
         .with_state(horizon_client)
-        .merge(analytics_router)
         .layer(cors)
         .layer(ServiceBuilder::new().layer(axum_middleware::from_fn(request_id_middleware)));
 

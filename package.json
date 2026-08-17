@@ -1,8 +1,4 @@
 {
   "name": "stellar-explain",
-  "private": true,
-  "workspaces": [
-    "packages/analytics",
-    "packages/ui"
-  ]
+  "private": true
 }
