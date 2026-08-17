@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { fetchAccount, isApiError } from '@/lib/api';
 import { trackNotFound } from '@/lib/analyticsEvents';
+import { accountExplained } from '@/lib/analytics';
 import type { AccountExplanation } from '@/types';
 import { AccountResult } from '@/components/AccountResult';
 import { TransactionHistoryTab } from '@/components/account/TransactionHistoryTab';

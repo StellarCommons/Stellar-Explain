@@ -93,10 +93,7 @@ fn format_unix_as_iso(secs: u64) -> String {
     let total_days = secs / 86400;
     let (year, month, day) = days_to_ymd(total_days);
 
-    format!(
-        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
-        year, month, day, h, m, s
-    )
+    format!("{year:04}-{month:02}-{day:02}T{h:02}:{m:02}:{s:02}Z")
 }
 
 /// Converts days since the Unix epoch to (year, month, day).
@@ -141,7 +138,7 @@ fn days_to_ymd(mut days: u64) -> (u64, u64, u64) {
 }
 
 fn is_leap(year: u64) -> bool {
-    (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)
+    (year.is_multiple_of(4) && !year.is_multiple_of(100)) || year.is_multiple_of(400)
 }
 
 // ---------------------------------------------------------------------------
@@ -246,8 +243,6 @@ pub async fn get_analytics_summary(
 // Tests
 // ---------------------------------------------------------------------------
 
-
-
 // ---------------------------------------------------------------------------
 // Ingest endpoint (clock skew check)
 // ---------------------------------------------------------------------------
@@ -260,20 +255,20 @@ pub async fn ingest_event(
     Json(event): Json<serde_json::Value>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
     use std::time::{SystemTime, UNIX_EPOCH};
-    
+
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
 
-    if let Some(ts) = event.get("timestamp").and_then(|v| v.as_u64()) {
-        if ts > now + 3600 {
-            info!("event rejected due to clock skew: timestamp={ts} now={now}");
-            return Err((
-                StatusCode::BAD_REQUEST,
-                "event timestamp is more than 1 hour in the future".to_string(),
-            ));
-        }
+    if let Some(ts) = event.get("timestamp").and_then(|v| v.as_u64())
+        && ts > now + 3600
+    {
+        info!("event rejected due to clock skew: timestamp={ts} now={now}");
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "event timestamp is more than 1 hour in the future".to_string(),
+        ));
     }
 
     Ok(Json(serde_json::json!({"status": "accepted"})))
@@ -300,20 +295,14 @@ mod tests {
     #[test]
     fn test_format_unix_as_iso_known_date() {
         // 2024-01-15 12:00:00 UTC = 1705320000
-        assert_eq!(
-            format_unix_as_iso(1_705_320_000),
-            "2024-01-15T12:00:00Z"
-        );
+        assert_eq!(format_unix_as_iso(1_705_320_000), "2024-01-15T12:00:00Z");
     }
 
     #[test]
     fn test_query_event_store_returns_all_event_names() {
         let counts = query_event_store("2024-01-14T00:00:00Z", "2024-01-15T00:00:00Z");
         for name in EVENT_NAMES {
-            assert!(
-                counts.contains_key(*name),
-                "missing event name: {name}"
-            );
+            assert!(counts.contains_key(*name), "missing event name: {name}");
         }
     }
 
@@ -372,7 +361,6 @@ mod tests {
         assert_eq!((y, m, d), (2024, 1, 15));
     }
 
-
     #[test]
     fn test_aggregation_summary_counts_match_events() {
         let counts = query_event_store("2024-01-14T00:00:00Z", "2024-01-15T00:00:00Z");
@@ -428,5 +416,4 @@ mod tests {
         let b = query_event_store("2024-01-14T00:00:00Z", "2024-01-15T00:00:00Z");
         assert_eq!(a, b);
     }
-
 }

@@ -72,7 +72,7 @@ export function SearchBar({ tab, value, loading, onChange, onSubmit }: SearchBar
         }}
       />
       <div className="flex items-center gap-2">
-        <KeyboardShortcutHint keys=["/"]} />
+        <KeyboardShortcutHint keys={["/"]} />
         <button
           onClick={handleSubmit}
           disabled={loading || !value.trim()}
