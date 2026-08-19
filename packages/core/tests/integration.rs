@@ -280,7 +280,10 @@ async fn malformed_account_address_returns_400_without_horizon_call() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
     let payload: Value = response.json().await.expect("json parse failed");
-    assert_eq!(payload["error"]["code"], "BAD_REQUEST");
+    // After #867, malformed addresses carry a stable validation code
+    // instead of the ad-hoc "BAD_REQUEST". The response envelope shape
+    // ({ "error": { "code": ..., "message": ... } }) is unchanged.
+    assert_eq!(payload["error"]["code"], "INVALID_ADDRESS_LENGTH");
     assert!(
         payload["error"]["message"]
             .as_str()

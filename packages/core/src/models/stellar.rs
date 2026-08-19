@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
 use thiserror::Error;
@@ -48,7 +49,7 @@ impl StellarAddressError {
 /// - CRC16-XMODEM checksum over version + payload
 /// - 56 characters total
 /// - Muxed accounts (`M...`) are rejected
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct StellarAddress(String);
 
 impl StellarAddress {
@@ -160,7 +161,7 @@ fn crc16_xmodem(data: &[u8]) -> u16 {
 // ─── Asset ───────────────────────────────────────────────────────────────
 
 /// A Stellar asset — either native XLM or a credit asset with code + issuer.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Asset {
     Native,
     Credit {
@@ -227,7 +228,7 @@ impl fmt::Display for Asset {
 /// - Trustline `limit` carries a special "unlimited" sentinel (`922337203685.4775807`)
 ///   that collides with the numeric max; using `Amount` for trustline limits
 ///   without re-examining that collision is a bug.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct Amount(u64);
 
 /// Maximum stroops value: `922337203685.4775807` (i64::MAX in stroops).
