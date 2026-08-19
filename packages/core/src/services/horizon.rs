@@ -67,6 +67,15 @@ struct HorizonAccount {
     /// Horizon sends "" when not set, never null or absent
     #[serde(default)]
     pub home_domain: String,
+    /// Number of subentries (offers, trustlines, signers, etc.)
+    #[serde(default)]
+    pub subentry_count: u32,
+    /// Number of entries sponsored by other accounts
+    #[serde(default)]
+    pub num_sponsoring: u32,
+    /// Number of entries this account sponsors for others
+    #[serde(default)]
+    pub num_sponsored: u32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -77,6 +86,9 @@ struct HorizonBalance {
     #[serde(default)]
     pub asset_issuer: Option<String>,
     pub balance: String,
+    /// Whether this trustline is authorised by the asset issuer.
+    #[serde(default)]
+    pub is_authorized: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -107,6 +119,7 @@ impl HorizonAccount {
                 asset_code: b.asset_code,
                 asset_issuer: b.asset_issuer,
                 balance: b.balance,
+                is_authorized: b.is_authorized,
             })
             .collect();
 
@@ -130,6 +143,9 @@ impl HorizonAccount {
             } else {
                 Some(self.home_domain)
             },
+            subentry_count: self.subentry_count,
+            num_sponsoring: self.num_sponsoring,
+            num_sponsored: self.num_sponsored,
         }
     }
 }
@@ -245,6 +261,20 @@ impl HorizonClient {
         let p90_fee = raw.fee_charged.p90.parse::<u64>().unwrap_or(base_fee);
 
         Some(FeeStats::new(base_fee, min_fee, max_fee, mode_fee, p90_fee))
+    }
+
+    /// Fetch the base reserve in stroops from the most recent ledger.
+    /// Returns `None` if the request fails — callers degrade gracefully,
+    /// consistent with `fetch_fee_stats`'s pattern.
+    pub async fn fetch_ledger_base_reserve(&self) -> Option<u64> {
+        let url = format!("{}/ledgers?order=desc&limit=1", self.base_url);
+        let res = self.client.get(url).send().await.ok()?;
+        if res.status().as_u16() != 200 {
+            return None;
+        }
+        let wrapper: HorizonLedgersResponse = res.json().await.ok()?;
+        let ledger = wrapper._embedded.records.first()?;
+        ledger.base_reserve_in_stroops.parse::<u64>().ok()
     }
 
     /// Check whether Horizon is reachable by hitting the root endpoint.
@@ -425,6 +455,21 @@ struct HorizonFeeDistribution {
     max: String,
     mode: String,
     p90: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct HorizonLedgersResponse {
+    _embedded: HorizonEmbeddedLedgers,
+}
+
+#[derive(Debug, Deserialize)]
+struct HorizonEmbeddedLedgers {
+    records: Vec<HorizonLedger>,
+}
+
+#[derive(Debug, Deserialize)]
+struct HorizonLedger {
+    base_reserve_in_stroops: String,
 }
 
 #[derive(Debug, Deserialize)]
