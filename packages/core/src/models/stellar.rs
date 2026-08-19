@@ -117,6 +117,9 @@ fn base32_decode(s: &str) -> Result<Vec<u8>, StellarAddressError> {
     let mut result = Vec::with_capacity((s.len() * 5) / 8);
 
     for c in s.chars() {
+        if !c.is_ascii() {
+            return Err(StellarAddressError::InvalidBase32Char(c));
+        }
         let val = BASE32_ALPHABET
             .iter()
             .position(|&b| b == c as u8)
@@ -172,6 +175,26 @@ impl Asset {
         Asset::Credit {
             code: code.into(),
             issuer,
+        }
+    }
+
+    /// Build an `Asset` from Horizon's separate type/code/issuer fields.
+    ///
+    /// Returns `"XLM (native)"`-style output when the type is `"native"` or missing.
+    /// Falls back to `None` when issuer is absent (e.g. unlisted credit asset from Horizon).
+    pub fn from_horizon_fields(
+        asset_type: Option<&str>,
+        asset_code: Option<&str>,
+        asset_issuer: Option<&str>,
+    ) -> Option<Self> {
+        match asset_type {
+            Some("native") | None => Some(Asset::Native),
+            _ => {
+                let code = asset_code?.to_string();
+                let issuer_str = asset_issuer?;
+                let issuer = StellarAddress::parse(issuer_str).ok()?;
+                Some(Asset::Credit { code, issuer })
+            }
         }
     }
 
@@ -277,9 +300,13 @@ impl FromStr for Amount {
         }
 
         let negative = s.starts_with('-');
-        let s = s.trim_start_matches('-').trim_start_matches('+');
+        let s = if negative || s.starts_with('+') {
+            &s[1..]
+        } else {
+            s
+        };
 
-        if s.is_empty() {
+        if s.is_empty() || s.starts_with('-') || s.starts_with('+') {
             return Err(AmountError::NotNumeric(s.to_string()));
         }
 
@@ -327,7 +354,7 @@ impl FromStr for Amount {
             .and_then(|v| v.checked_add(frac_val))
             .ok_or(AmountError::Overflow)?;
 
-        if negative && stroops != 0 {
+        if negative {
             return Err(AmountError::Negative);
         }
 
@@ -450,6 +477,28 @@ mod tests {
     }
 
     #[test]
+    fn test_non_ascii_character_rejected() {
+        // 'Ł' (U+0141) is 2 UTF-8 bytes — test base32_decode directly to avoid
+        // the byte-length check in parse() catching WrongLength first
+        let result = base32_decode("ABCŁEFGHJ");
+        assert!(matches!(
+            result,
+            Err(StellarAddressError::InvalidBase32Char('Ł'))
+        ));
+    }
+
+    #[test]
+    fn test_non_zero_padding_bits_rejected() {
+        // 9-char input: 9*5 = 45 bits → 5 bytes + 5 leftover bits (non-zero)
+        // "ABCDEFGHJ" decodes cleanly but the padding bits are non-zero
+        let result = base32_decode("ABCDEFGHJ");
+        assert!(matches!(
+            result,
+            Err(StellarAddressError::NonZeroPaddingBits)
+        ));
+    }
+
+    #[test]
     fn test_wrong_length_error_code() {
         let err = StellarAddressError::WrongLength(10);
         assert_eq!(err.code(), "INVALID_ADDRESS_LENGTH");
@@ -525,6 +574,35 @@ mod tests {
     #[test]
     fn test_amount_rejects_negative() {
         assert!(matches!("-1".parse::<Amount>(), Err(AmountError::Negative)));
+    }
+
+    #[test]
+    fn test_amount_rejects_negative_zero() {
+        assert!(matches!("-0".parse::<Amount>(), Err(AmountError::Negative)));
+        assert!(matches!(
+            "-0.0000000".parse::<Amount>(),
+            Err(AmountError::Negative)
+        ));
+    }
+
+    #[test]
+    fn test_amount_rejects_repeated_signs() {
+        assert!(matches!(
+            "++5".parse::<Amount>(),
+            Err(AmountError::NotNumeric(_))
+        ));
+        assert!(matches!(
+            "+-5".parse::<Amount>(),
+            Err(AmountError::NotNumeric(_))
+        ));
+        assert!(matches!(
+            "+".parse::<Amount>(),
+            Err(AmountError::NotNumeric(_))
+        ));
+        assert!(matches!(
+            "-".parse::<Amount>(),
+            Err(AmountError::NotNumeric(_))
+        ));
     }
 
     #[test]
