@@ -8,8 +8,10 @@ use std::time::Instant;
 use tracing::{error, info, info_span};
 
 use crate::{
-    errors::AppError, explain::account::explain_account_with_org_name,
-    middleware::request_id::RequestId, models::stellar::StellarAddress,
+    errors::{AppError, ValidationError},
+    explain::account::explain_account_with_org_name,
+    middleware::request_id::RequestId,
+    models::stellar::StellarAddress,
     services::horizon::HorizonClient,
 };
 
@@ -190,7 +192,7 @@ pub async fn get_account_explanation(
 
     // Validate address format before making any Horizon call
     let _validated = StellarAddress::parse(&address).map_err(|e| {
-        let app_error: AppError = AppError::BadRequest(format!("Invalid Stellar address: {e}"));
+        let app_error: AppError = AppError::from(ValidationError::InvalidAddress(e));
         info!(
             request_id = %request_id,
             address = %address,

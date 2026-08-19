@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
 use thiserror::Error;
@@ -48,8 +49,18 @@ impl StellarAddressError {
 /// - CRC16-XMODEM checksum over version + payload
 /// - 56 characters total
 /// - Muxed accounts (`M...`) are rejected
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
 pub struct StellarAddress(String);
+
+impl<'de> serde::Deserialize<'de> for StellarAddress {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Self::parse(&s).map_err(serde::de::Error::custom)
+    }
+}
 
 impl StellarAddress {
     /// Parse and validate a Stellar address string.
@@ -160,7 +171,7 @@ fn crc16_xmodem(data: &[u8]) -> u16 {
 // ─── Asset ───────────────────────────────────────────────────────────────
 
 /// A Stellar asset — either native XLM or a credit asset with code + issuer.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Asset {
     Native,
     Credit {
@@ -229,6 +240,25 @@ impl fmt::Display for Asset {
 ///   without re-examining that collision is a bug.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Amount(u64);
+
+impl serde::Serialize for Amount {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.collect_str(self)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Amount {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        s.parse().map_err(serde::de::Error::custom)
+    }
+}
 
 /// Maximum stroops value: `922337203685.4775807` (i64::MAX in stroops).
 pub const AMOUNT_MAX_STROOPS: u64 = 9_223_372_036_854_775_807;
@@ -749,5 +779,39 @@ mod tests {
         let issuer = StellarAddress::parse(&valid_addr()).unwrap();
         let asset = Asset::credit("USDC", issuer);
         assert_eq!(asset.format(), format!("USDC ({})", valid_addr()));
+    }
+
+    // ── Deserialization validation tests ───────────────────────────────
+
+    #[test]
+    fn test_stellar_address_deserialize_rejects_invalid() {
+        let result: Result<StellarAddress, _> = serde_json::from_str(r#""not-a-valid-address"#);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_stellar_address_deserialize_accepts_valid() {
+        let addr = valid_addr();
+        let json = format!("\"{addr}\"");
+        let result: StellarAddress = serde_json::from_str(&json).unwrap();
+        assert_eq!(result.as_str(), addr);
+    }
+
+    #[test]
+    fn test_amount_deserialize_rejects_overflow() {
+        let result: Result<Amount, _> = serde_json::from_str(r#""18000000000000000000""#);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_amount_deserialize_rejects_negative() {
+        let result: Result<Amount, _> = serde_json::from_str(r#""-5""#);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_amount_deserialize_accepts_valid() {
+        let amt: Amount = serde_json::from_str(r#""100.0000000""#).unwrap();
+        assert_eq!(amt.stroops(), 1_000_000_000);
     }
 }
