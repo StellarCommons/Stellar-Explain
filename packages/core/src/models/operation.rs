@@ -187,6 +187,7 @@ impl Operation {
     }
 }
 
+use crate::models::stellar::Asset;
 use crate::services::horizon::HorizonOperation;
 
 /// Format an asset from Horizon's separate code/issuer/type fields into
@@ -196,9 +197,9 @@ fn format_asset(
     asset_code: Option<&str>,
     asset_issuer: Option<&str>,
 ) -> String {
-    match asset_type {
-        Some("native") | None => "XLM (native)".to_string(),
-        _ => match (asset_code, asset_issuer) {
+    match Asset::from_horizon_fields(asset_type, asset_code, asset_issuer) {
+        Some(asset) => asset.format(),
+        None => match (asset_code, asset_issuer) {
             (Some(code), Some(issuer)) => format!("{code} ({issuer})"),
             (Some(code), None) => code.to_string(),
             _ => "Unknown".to_string(),

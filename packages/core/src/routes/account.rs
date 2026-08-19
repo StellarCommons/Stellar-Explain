@@ -9,7 +9,8 @@ use tracing::{error, info, info_span};
 
 use crate::{
     errors::AppError, explain::account::explain_account_with_org_name,
-    middleware::request_id::RequestId, services::horizon::HorizonClient,
+    middleware::request_id::RequestId, models::stellar::StellarAddress,
+    services::horizon::HorizonClient,
 };
 
 #[derive(Debug, Serialize)]
@@ -186,6 +187,20 @@ pub async fn get_account_explanation(
     let request_started_at = Instant::now();
 
     info!(request_id = %request_id, address = %address, "incoming_request");
+
+    // Validate address format before making any Horizon call
+    let _validated = StellarAddress::parse(&address).map_err(|e| {
+        let app_error: AppError = AppError::BadRequest(format!("Invalid Stellar address: {e}"));
+        info!(
+            request_id = %request_id,
+            address = %address,
+            status = app_error.status_code().as_u16(),
+            total_duration_ms = request_started_at.elapsed().as_millis() as u64,
+            error = ?app_error,
+            "request_completed"
+        );
+        app_error
+    })?;
 
     let account = match horizon_client.fetch_account(&address).await {
         Ok(a) => a,
