@@ -89,6 +89,17 @@ impl PaymentIntent {
             return Err(ValidationError::ZeroAmount);
         }
 
+        if let Asset::Credit { ref code, .. } = asset {
+            if code.is_empty()
+                || code.len() > 12
+                || !code.chars().all(|c| c.is_ascii_alphanumeric())
+            {
+                return Err(ValidationError::InvalidAsset(format!(
+                    "Asset code must be 1-12 alphanumeric characters, got '{code}'"
+                )));
+            }
+        }
+
         if let Some(Memo::Text(ref text)) = memo {
             if text.len() > 28 {
                 return Err(ValidationError::InvalidMemo(format!(
@@ -311,5 +322,91 @@ mod tests {
     fn test_invalid_memo_error_code() {
         let err = ValidationError::InvalidMemo("too long".to_string());
         assert_eq!(err.code(), "INVALID_MEMO");
+    }
+
+    #[test]
+    fn test_try_new_empty_asset_code_rejected() {
+        let source = make_addr(0x01);
+        let dest = make_addr(0x02);
+        let asset = Asset::Credit {
+            code: String::new(),
+            issuer: make_addr(0x03),
+        };
+        let amount = Amount::from_stroops(100_000).unwrap();
+
+        let result = PaymentIntent::try_new(source, dest, asset, amount, None);
+        assert!(matches!(result, Err(ValidationError::InvalidAsset(_))));
+    }
+
+    #[test]
+    fn test_try_new_long_asset_code_rejected() {
+        let source = make_addr(0x01);
+        let dest = make_addr(0x02);
+        let asset = Asset::Credit {
+            code: "TOOLONGCODEXXXX".to_string(),
+            issuer: make_addr(0x03),
+        };
+        let amount = Amount::from_stroops(100_000).unwrap();
+
+        let result = PaymentIntent::try_new(source, dest, asset, amount, None);
+        assert!(matches!(result, Err(ValidationError::InvalidAsset(_))));
+    }
+
+    #[test]
+    fn test_try_new_non_alphanumeric_asset_code_rejected() {
+        let source = make_addr(0x01);
+        let dest = make_addr(0x02);
+        let asset = Asset::Credit {
+            code: "US-DC!".to_string(),
+            issuer: make_addr(0x03),
+        };
+        let amount = Amount::from_stroops(100_000).unwrap();
+
+        let result = PaymentIntent::try_new(source, dest, asset, amount, None);
+        assert!(matches!(result, Err(ValidationError::InvalidAsset(_))));
+    }
+
+    #[test]
+    fn test_try_new_valid_12_char_asset_code_accepted() {
+        let source = make_addr(0x01);
+        let dest = make_addr(0x02);
+        let asset = Asset::Credit {
+            code: "ABCDEFGHIJKL".to_string(),
+            issuer: make_addr(0x03),
+        };
+        let amount = Amount::from_stroops(100_000).unwrap();
+
+        let result = PaymentIntent::try_new(source, dest, asset, amount, None);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_invalid_asset_error_code() {
+        let err = ValidationError::InvalidAsset("bad".to_string());
+        assert_eq!(err.code(), "INVALID_ASSET");
+    }
+
+    #[test]
+    fn test_payment_intent_deserialize_rejects_invalid_amount() {
+        let json = r#"{
+            "source": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+            "destination": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+            "asset": {"Native": null},
+            "amount": "99999999999999999999"
+        }"#;
+        let result: Result<PaymentIntent, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_payment_intent_deserialize_rejects_invalid_address() {
+        let json = r#"{
+            "source": "not-valid",
+            "destination": "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+            "asset": {"Native": null},
+            "amount": "1.0000000"
+        }"#;
+        let result: Result<PaymentIntent, _> = serde_json::from_str(json);
+        assert!(result.is_err());
     }
 }
