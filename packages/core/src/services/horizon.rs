@@ -51,6 +51,10 @@ pub struct HorizonAccountTransaction {
     pub operation_count: u32,
     pub memo_type: Option<String>,
     pub memo: Option<String>,
+    /// Ledger sequence number this transaction was included in.
+    pub ledger: Option<u64>,
+    /// Fee charged in stroops (as a decimal string from Horizon).
+    pub fee_charged: Option<String>,
 }
 
 /// Raw Horizon account response shape.
