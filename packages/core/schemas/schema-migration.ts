@@ -1,21 +1,24 @@
-import { ExplanationSchemaV1 } from "./explanation-schema";
+// Migration utilities for API response shapes across versions.
+//
+// As of the Third Campaign track (issues #866–#871), the backend does not
+// include a `version` field on any response type. This file previously
+// referenced a hypothetical `version` field that never existed in the actual
+// Rust responses. It has been corrected to reflect the current contract.
 
-// Future: when v2 comes, add migration function
-export function migrateToLatest(response: any): ExplanationSchemaV1 {
-  // If already v1, return as-is
-  if (response.version === "v1") {
-    return response as ExplanationSchemaV1;
-  }
+import type {
+  TransactionExplanation,
+  AccountExplanationResponse,
+  AccountHistoryResponse,
+} from "./explanation-schema";
 
-  // Handle legacy responses without version
-  if (!response.version && typeof response === "string") {
-    return {
-      version: "v1",
-      data: {
-        explanation: response,
-      },
-    };
-  }
+export type AnyApiSchema =
+  | TransactionExplanation
+  | AccountExplanationResponse
+  | AccountHistoryResponse;
 
-  throw new Error(`Unsupported schema version: ${response.version}`);
+/// Identity function — the backend no longer versions responses.
+/// This exists as a typed entrypoint for callers that previously used
+/// migrateToLatest and can be removed once all call sites are updated.
+export function migrateToLatest(response: unknown): AnyApiSchema {
+  return response as AnyApiSchema;
 }

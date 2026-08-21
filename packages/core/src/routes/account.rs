@@ -17,7 +17,7 @@ use crate::{
     services::horizon::HorizonClient,
 };
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct AccountExplanationResponse {
     pub address: String,
     pub summary: String,
@@ -206,6 +206,18 @@ pub async fn get_account_transactions(
 
 /// GET /account/:address
 /// Returns a plain-English explanation of a Stellar account.
+#[utoipa::path(
+    get,
+    path = "/account/{address}",
+    params(
+        ("address" = String, Path, description = "Stellar account address (SEP-23 G... format)")
+    ),
+    responses(
+        (status = 200, description = "Account explanation", body = AccountExplanationResponse),
+        (status = 400, description = "Invalid Stellar address"),
+        (status = 404, description = "Account not found on the Stellar network"),
+    )
+)]
 pub async fn get_account_explanation(
     Path(address): Path<String>,
     State(horizon_client): State<Arc<HorizonClient>>,

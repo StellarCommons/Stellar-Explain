@@ -5,12 +5,14 @@ use utoipa::OpenApi;
     paths(
         health::health,
         tx::get_tx_explanation,
+        account::get_account_explanation,
         account::get_account_transactions,
     ),
     components(
         schemas(
             health::HealthResponse,
             tx::TxExplanationResponse,
+            account::AccountExplanationResponse,
             account::AccountHistoryTransaction,
             account::AccountHistoryResponse,
         )
@@ -18,7 +20,7 @@ use utoipa::OpenApi;
     tags(
         (name = "health", description = "Health check endpoints"),
         (name = "transactions", description = "Transaction explanation endpoints"),
-        (name = "accounts", description = "Account history endpoints")
+        (name = "accounts", description = "Account explanation and history endpoints")
     )
 )]
 pub struct ApiDoc;
