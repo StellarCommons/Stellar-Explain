@@ -8,12 +8,18 @@ use crate::models::transaction::Transaction;
 
 use super::operation::account_merge::explain_account_merge;
 use super::operation::change_trust::explain_change_trust;
+use super::operation::claimable_balance::{
+    explain_claim_claimable_balance, explain_create_claimable_balance,
+};
 use super::operation::clawback::{explain_clawback, explain_clawback_claimable_balance};
 use super::operation::create_account::explain_create_account;
 use super::operation::manage_offer::explain_manage_offer;
 use super::operation::path_payment::explain_path_payment;
 use super::operation::payment::{PaymentExplanation, explain_payment, explain_payment_with_fee};
 use super::operation::set_options::explain_set_options;
+use super::operation::sponsorship::{
+    explain_begin_sponsoring_future_reserves, explain_end_sponsoring_future_reserves,
+};
 
 /// A single explained operation within a transaction, in original order.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -368,6 +374,57 @@ fn explain_operation(
                 details: serde_json::json!({
                     "issuer": explanation.issuer,
                     "balance_id": explanation.balance_id,
+                }),
+            }
+        }
+        Operation::CreateClaimableBalance(create_cb) => {
+            let explanation = explain_create_claimable_balance(create_cb);
+            OperationExplanation {
+                index,
+                operation_type: "create_claimable_balance".to_string(),
+                summary: explanation.summary.clone(),
+                details: serde_json::json!({
+                    "source_account": explanation.source_account,
+                    "asset": explanation.asset,
+                    "amount": explanation.amount,
+                    "claimant_count": explanation.claimant_count,
+                    "claimant_descriptions": explanation.claimant_descriptions,
+                }),
+            }
+        }
+        Operation::ClaimClaimableBalance(claim_cb) => {
+            let explanation = explain_claim_claimable_balance(claim_cb);
+            OperationExplanation {
+                index,
+                operation_type: "claim_claimable_balance".to_string(),
+                summary: explanation.summary.clone(),
+                details: serde_json::json!({
+                    "claimant": explanation.claimant,
+                    "balance_id": explanation.balance_id,
+                }),
+            }
+        }
+        Operation::BeginSponsoringFutureReserves(begin) => {
+            let explanation = explain_begin_sponsoring_future_reserves(begin);
+            OperationExplanation {
+                index,
+                operation_type: "begin_sponsoring_future_reserves".to_string(),
+                summary: explanation.summary.clone(),
+                details: serde_json::json!({
+                    "sponsor": explanation.sponsor,
+                    "sponsored_id": explanation.sponsored_id,
+                }),
+            }
+        }
+        Operation::EndSponsoringFutureReserves(end) => {
+            let explanation = explain_end_sponsoring_future_reserves(end);
+            OperationExplanation {
+                index,
+                operation_type: "end_sponsoring_future_reserves".to_string(),
+                summary: explanation.summary.clone(),
+                details: serde_json::json!({
+                    "sponsored_id": explanation.sponsored_id,
+                    "begin_sponsor": explanation.begin_sponsor,
                 }),
             }
         }

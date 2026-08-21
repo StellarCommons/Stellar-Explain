@@ -431,6 +431,22 @@ pub struct HorizonOperation {
     pub balance_id: Option<String>,
     // Account merge fields
     pub into: Option<String>,
+    // Create claimable balance fields
+    pub asset: Option<String>,
+    pub claimants: Option<Vec<HorizonClaimant>>,
+    // Claim claimable balance fields
+    pub claimant: Option<String>,
+    // Sponsorship fields
+    pub sponsored_id: Option<String>,
+    pub begin_sponsor: Option<String>,
+}
+
+/// A claimant within a `create_claimable_balance` Horizon response.
+#[derive(Debug, Deserialize, Clone)]
+pub struct HorizonClaimant {
+    pub destination: String,
+    /// Nested predicate object — handled as generic JSON since structure is recursive.
+    pub predicate: serde_json::Value,
 }
 
 #[derive(Debug, Deserialize)]

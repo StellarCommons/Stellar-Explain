@@ -4,6 +4,7 @@
 //! funds from a holder's account. It is often unexpected by the recipient
 //! so explanations include contextual information about what clawback means.
 
+use super::format::shorten_id;
 use crate::models::operation::{ClawbackClaimableBalanceOperation, ClawbackOperation};
 use serde::{Deserialize, Serialize};
 
@@ -92,15 +93,6 @@ pub fn explain_clawback_claimable_balance(
         summary,
         issuer,
         balance_id: op.balance_id.clone(),
-    }
-}
-
-/// Shorten a long balance ID for display: "00000000abcd...ef12"
-fn shorten_id(id: &str) -> String {
-    if id.len() > 16 {
-        format!("{}...{}", &id[..8], &id[id.len() - 4..])
-    } else {
-        id.to_string()
     }
 }
 
