@@ -577,3 +577,134 @@ async fn account_history_final_page_with_nonnull_next_link_returns_has_more_fals
     // next_cursor IS present (Horizon included it), but we ignore it for has_more
     assert_eq!(payload["next_cursor"], "STALE_CURSOR_TOKEN");
 }
+
+// ── Snapshot / golden-file regression tests ──────────────────────────────────
+//
+// These tests compare serialized Rust structs against checked-in JSON fixtures
+// under tests/integration/fixtures/. The goal is to catch accidental wording
+// or shape drift across releases.
+//
+// Update workflow:
+//   1. Run the test — it will fail with a diff if the shape changed.
+//   2. Regenerate the fixture: serialize the struct to JSON and write it to the
+//      fixture file (e.g. via serde_json::to_string_pretty).
+//   3. Review the diff in your PR to confirm the change is intentional.
+//
+// To deliberately test that the mechanism catches drift, temporarily edit a
+// fixture string and run `cargo test --test integration snapshot`. The test
+// must fail. Revert before merging.
+
+/// Helper: load a checked-in JSON fixture from tests/integration/fixtures/.
+fn load_fixture(name: &str) -> Value {
+    let path = format!("tests/integration/fixtures/{name}");
+    let content = std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("failed to read fixture {path}: {e}"));
+    serde_json::from_str(&content)
+        .unwrap_or_else(|e| panic!("fixture {path} is not valid JSON: {e}"))
+}
+
+#[test]
+fn snapshot_transaction_explanation_payment() {
+    use stellar_explain_core::explain::operation::payment::PaymentExplanation;
+    use stellar_explain_core::explain::transaction::TransactionExplanation;
+
+    let expected = TransactionExplanation {
+        transaction_hash: "abc123def456789012345678901234567890123456789012345678901234abcd".to_string(),
+        successful: true,
+        summary: "This successful transaction contains 1 payment. This transaction was confirmed on 2024-01-15 at 14:32 UTC (ledger #49823145).".to_string(),
+        operations: vec![stellar_explain_core::explain::transaction::OperationExplanation {
+            index: 0,
+            operation_type: "payment".to_string(),
+            summary: "Sent 500.0000000 XLM to GBINANCEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.".to_string(),
+            details: serde_json::json!({
+                "from": "GCOINBASEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                "to": "GBINANCEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                "amount": "500.0000000",
+                "asset": "XLM (native)"
+            }),
+        }],
+        payment_explanations: vec![PaymentExplanation {
+            summary: "Sent 500.0000000 XLM to GBINANCEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.".to_string(),
+            from: "GCOINBASEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_string(),
+            to: "GBINANCEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_string(),
+            amount: "500.0000000".to_string(),
+            asset: "XLM (native)".to_string(),
+            fee_note: None,
+        }],
+        skipped_operations: 0,
+        memo_explanation: None,
+        fee_explanation: Some("A fee of 0.0000100 XLM was charged. This is a standard network fee.".to_string()),
+        ledger_closed_at: Some("2024-01-15T14:32:00Z".to_string()),
+        ledger: Some(49823145),
+        failure_reason: None,
+        operation_failures: vec![],
+    };
+
+    let fixture = load_fixture("transaction_explanation_payment.json");
+    let actual = serde_json::to_value(&expected).unwrap();
+    assert_eq!(fixture, actual);
+}
+
+#[test]
+fn snapshot_account_explanation() {
+    use stellar_explain_core::routes::account::AccountExplanationResponse;
+
+    let expected = AccountExplanationResponse {
+        address: "GAAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQDZ7H".to_string(),
+        summary: "This account holds 100.0000000 XLM with 1 asset trustline and 1 active signer."
+            .to_string(),
+        xlm_balance: "100.0000000".to_string(),
+        asset_count: 1,
+        signer_count: 1,
+        home_domain: None,
+        org_name: None,
+        flag_descriptions: vec![],
+    };
+
+    let fixture = load_fixture("account_explanation.json");
+    let actual = serde_json::to_value(&expected).unwrap();
+    assert_eq!(fixture, actual);
+}
+
+#[test]
+fn snapshot_account_history() {
+    use stellar_explain_core::routes::account::{
+        AccountHistoryResponse, AccountHistoryTransaction,
+    };
+
+    let expected = AccountHistoryResponse {
+        address: "GAAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQDZ7H".to_string(),
+        transactions: vec![
+            AccountHistoryTransaction {
+                transaction_hash: "tx_hash_001".to_string(),
+                successful: true,
+                summary: "Successful transaction with 1 operation.".to_string(),
+                ledger_closed_at: Some("2024-06-15T10:30:00Z".to_string()),
+                ledger: Some(49823145),
+                operation_count: 1,
+                fee_explanation: Some(
+                    "A fee of 0.0000100 XLM was charged. This is a standard network fee."
+                        .to_string(),
+                ),
+            },
+            AccountHistoryTransaction {
+                transaction_hash: "tx_hash_002".to_string(),
+                successful: false,
+                summary: "Failed transaction with 2 operations.".to_string(),
+                ledger_closed_at: Some("2024-06-14T08:15:00Z".to_string()),
+                ledger: Some(49823000),
+                operation_count: 2,
+                fee_explanation: Some(
+                    "A fee of 0.0000100 XLM was charged. This is a standard network fee."
+                        .to_string(),
+                ),
+            },
+        ],
+        next_cursor: Some("157639564177408001".to_string()),
+        has_more: true,
+    };
+
+    let fixture = load_fixture("account_history.json");
+    let actual = serde_json::to_value(&expected).unwrap();
+    assert_eq!(fixture, actual);
+}

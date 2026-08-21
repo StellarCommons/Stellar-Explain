@@ -1,0 +1,35 @@
+{
+  "transaction_hash": "abc123def456789012345678901234567890123456789012345678901234abcd",
+  "successful": true,
+  "summary": "This successful transaction contains 1 payment. This transaction was confirmed on 2024-01-15 at 14:32 UTC (ledger #49823145).",
+  "operations": [
+    {
+      "index": 0,
+      "type": "payment",
+      "summary": "Sent 500.0000000 XLM to GBINANCEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.",
+      "details": {
+        "from": "GCOINBASEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "to": "GBINANCEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "amount": "500.0000000",
+        "asset": "XLM (native)"
+      }
+    }
+  ],
+  "payment_explanations": [
+    {
+      "summary": "Sent 500.0000000 XLM to GBINANCEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.",
+      "from": "GCOINBASEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "to": "GBINANCEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "amount": "500.0000000",
+      "asset": "XLM (native)",
+      "fee_note": null
+    }
+  ],
+  "skipped_operations": 0,
+  "memo_explanation": null,
+  "fee_explanation": "A fee of 0.0000100 XLM was charged. This is a standard network fee.",
+  "ledger_closed_at": "2024-01-15T14:32:00Z",
+  "ledger": 49823145,
+  "failure_reason": null,
+  "operation_failures": []
+}
