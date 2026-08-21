@@ -5,7 +5,10 @@ use reqwest::StatusCode;
 use serde_json::{Value, json};
 use stellar_explain_core::{
     middleware::request_id::request_id_middleware,
-    routes::{account::get_account_explanation, tx::get_tx_explanation},
+    routes::{
+        account::{get_account_explanation, get_account_transactions},
+        tx::get_tx_explanation,
+    },
     services::horizon::HorizonClient,
 };
 use tokio::net::TcpListener;
@@ -27,6 +30,7 @@ async fn spawn_app(horizon_base_url: &str) -> String {
     let app = Router::new()
         .route("/tx/:hash", get(get_tx_explanation))
         .route("/account/:address", get(get_account_explanation))
+        .route("/account/:address/history", get(get_account_transactions))
         .with_state(Arc::new(HorizonClient::new(horizon_base_url.to_string())))
         .layer(middleware::from_fn(request_id_middleware));
 
@@ -290,4 +294,286 @@ async fn malformed_account_address_returns_400_without_horizon_call() {
             .unwrap_or_default()
             .contains("Invalid Stellar address")
     );
+}
+
+fn valid_stellar_address() -> String {
+    "GAAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQDZ7H".to_string()
+}
+
+async fn mock_account_transactions(
+    server: &MockServer,
+    address: &str,
+    records: Value,
+    next_cursor: Option<&str>,
+) {
+    let base = server.uri();
+    let next_href = next_cursor
+        .map(|c| format!("{base}/accounts/{address}/transactions?cursor={c}&limit=10&order=desc"))
+        .unwrap_or_default();
+    let prev_href =
+        format!("{base}/accounts/{address}/transactions?cursor=PREV&limit=10&order=desc");
+
+    Mock::given(method("GET"))
+        .and(path(format!("/accounts/{address}/transactions")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "_links": {
+                "next": if next_cursor.is_some() {
+                    json!({ "href": next_href })
+                } else {
+                    json!(null)
+                },
+                "prev": { "href": prev_href }
+            },
+            "_embedded": {
+                "records": records
+            }
+        })))
+        .mount(server)
+        .await;
+}
+
+/// Like `mock_account_transactions` but always includes a non-null `_links.next`
+/// with the given cursor, regardless of whether next_cursor is Some/None.
+/// Used to test that `has_more` is derived from record count, not link presence.
+async fn mock_account_transactions_with_next(
+    server: &MockServer,
+    address: &str,
+    records: Value,
+    cursor_token: &str,
+) {
+    let base = server.uri();
+    let next_href =
+        format!("{base}/accounts/{address}/transactions?cursor={cursor_token}&limit=10&order=desc");
+    let prev_href =
+        format!("{base}/accounts/{address}/transactions?cursor=PREV&limit=10&order=desc");
+
+    Mock::given(method("GET"))
+        .and(path(format!("/accounts/{address}/transactions")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "_links": {
+                "next": { "href": next_href },
+                "prev": { "href": prev_href }
+            },
+            "_embedded": {
+                "records": records
+            }
+        })))
+        .mount(server)
+        .await;
+}
+
+#[tokio::test]
+async fn account_history_returns_frontend_contract_shape() {
+    let horizon_mock = MockServer::start().await;
+    let address = valid_stellar_address();
+
+    mock_fee_stats(&horizon_mock).await;
+    mock_account_transactions(
+        &horizon_mock,
+        &address,
+        json!([
+            {
+                "hash": "abc123def456",
+                "successful": true,
+                "created_at": "2024-06-15T10:30:00Z",
+                "source_account": address,
+                "operation_count": 2,
+                "memo_type": "text",
+                "memo": "Test payment",
+                "ledger": 49823145,
+                "fee_charged": "200"
+            }
+        ]),
+        Some("NEXT_CURSOR_TOKEN"),
+    )
+    .await;
+
+    let app_url = spawn_app(&horizon_mock.uri()).await;
+    let response = reqwest::get(format!("{app_url}/account/{address}/history?limit=1"))
+        .await
+        .expect("request failed");
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let payload: Value = response.json().await.expect("json parse failed");
+
+    assert_eq!(payload["address"], address);
+    assert_eq!(payload["has_more"], true);
+    assert_eq!(payload["next_cursor"], "NEXT_CURSOR_TOKEN");
+
+    let tx = &payload["transactions"][0];
+    assert_eq!(tx["transaction_hash"], "abc123def456");
+    assert_eq!(tx["successful"], true);
+    assert_eq!(tx["operation_count"], 2);
+    assert_eq!(tx["ledger"], 49823145);
+    assert_eq!(tx["ledger_closed_at"], "2024-06-15T10:30:00Z");
+    assert!(
+        tx["summary"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("Successful transaction with 2 operations")
+    );
+    assert!(
+        tx["fee_explanation"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("0.0000200 XLM")
+    );
+}
+
+#[tokio::test]
+async fn account_history_has_more_false_when_no_next_cursor() {
+    let horizon_mock = MockServer::start().await;
+    let address = valid_stellar_address();
+
+    mock_fee_stats(&horizon_mock).await;
+    mock_account_transactions(
+        &horizon_mock,
+        &address,
+        json!([{
+            "hash": "single_tx",
+            "successful": true,
+            "created_at": "2024-01-01T00:00:00Z",
+            "operation_count": 1,
+            "memo_type": "none",
+            "ledger": 100,
+            "fee_charged": "100"
+        }]),
+        None,
+    )
+    .await;
+
+    let app_url = spawn_app(&horizon_mock.uri()).await;
+    let response = reqwest::get(format!("{app_url}/account/{address}/history"))
+        .await
+        .expect("request failed");
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let payload: Value = response.json().await.expect("json parse failed");
+    assert_eq!(payload["has_more"], false);
+    assert!(payload["next_cursor"].is_null());
+}
+
+#[tokio::test]
+async fn account_history_invalid_address_returns_400() {
+    let horizon_mock = MockServer::start().await;
+
+    let app_url = spawn_app(&horizon_mock.uri()).await;
+    let response = reqwest::get(format!("{app_url}/account/not-valid/history"))
+        .await
+        .expect("request failed");
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let payload: Value = response.json().await.expect("json parse failed");
+    assert_eq!(payload["error"]["code"], "INVALID_ADDRESS_LENGTH");
+    assert!(
+        payload["error"]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("Invalid Stellar address")
+    );
+}
+
+#[tokio::test]
+async fn account_history_limit_zero_returns_400() {
+    let horizon_mock = MockServer::start().await;
+    let address = valid_stellar_address();
+
+    let app_url = spawn_app(&horizon_mock.uri()).await;
+    let response = reqwest::get(format!("{app_url}/account/{address}/history?limit=0"))
+        .await
+        .expect("request failed");
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let payload: Value = response.json().await.expect("json parse failed");
+    assert_eq!(payload["error"]["code"], "BAD_REQUEST");
+}
+
+#[tokio::test]
+async fn account_history_limit_over_max_returns_400() {
+    let horizon_mock = MockServer::start().await;
+    let address = valid_stellar_address();
+
+    let app_url = spawn_app(&horizon_mock.uri()).await;
+    let response = reqwest::get(format!("{app_url}/account/{address}/history?limit=51"))
+        .await
+        .expect("request failed");
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn account_history_empty_response_has_more_false() {
+    let horizon_mock = MockServer::start().await;
+    let address = valid_stellar_address();
+
+    mock_account_transactions(&horizon_mock, &address, json!([]), None).await;
+
+    let app_url = spawn_app(&horizon_mock.uri()).await;
+    let response = reqwest::get(format!("{app_url}/account/{address}/history?limit=10"))
+        .await
+        .expect("request failed");
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let payload: Value = response.json().await.expect("json parse failed");
+    assert_eq!(payload["transactions"].as_array().unwrap().len(), 0);
+    assert_eq!(payload["has_more"], false);
+    assert!(payload["next_cursor"].is_null());
+}
+
+/// Regression test for reviewer feedback on PR #876:
+/// Horizon includes `_links.next` on essentially every page — even the true
+/// last page — so `has_more` must be derived from record count vs limit,
+/// NOT from the presence of next_cursor. This test mocks a final page with
+/// 2 records (fewer than the requested limit=10) but a non-null `next` link.
+#[tokio::test]
+async fn account_history_final_page_with_nonnull_next_link_returns_has_more_false() {
+    let horizon_mock = MockServer::start().await;
+    let address = valid_stellar_address();
+
+    // 2 records < limit=10 → end of collection, even though next link is present
+    mock_account_transactions_with_next(
+        &horizon_mock,
+        &address,
+        json!([
+            {
+                "hash": "tx_final_1",
+                "successful": true,
+                "created_at": "2024-01-02T00:00:00Z",
+                "operation_count": 1,
+                "memo_type": "none",
+                "ledger": 200,
+                "fee_charged": "100"
+            },
+            {
+                "hash": "tx_final_2",
+                "successful": true,
+                "created_at": "2024-01-01T00:00:00Z",
+                "operation_count": 1,
+                "memo_type": "none",
+                "ledger": 199,
+                "fee_charged": "100"
+            }
+        ]),
+        "STALE_CURSOR_TOKEN",
+    )
+    .await;
+
+    let app_url = spawn_app(&horizon_mock.uri()).await;
+    let response = reqwest::get(format!("{app_url}/account/{address}/history?limit=10"))
+        .await
+        .expect("request failed");
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let payload: Value = response.json().await.expect("json parse failed");
+    // 2 records < limit=10 → has_more must be false, regardless of next_cursor
+    assert_eq!(payload["transactions"].as_array().unwrap().len(), 2);
+    assert_eq!(payload["has_more"], false);
+    // next_cursor IS present (Horizon included it), but we ignore it for has_more
+    assert_eq!(payload["next_cursor"], "STALE_CURSOR_TOKEN");
 }

@@ -90,6 +90,10 @@ async fn main() {
             "/account/:address",
             get(routes::account::get_account_explanation),
         )
+        .route(
+            "/account/:address/history",
+            get(routes::account::get_account_transactions),
+        )
         .merge(SwaggerUi::new("/docs").url("/openapi.json", openapi))
         .with_state(horizon_client)
         .layer(cors)
