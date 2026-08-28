@@ -1,6 +1,7 @@
 {
   "name": "@stellar-explain/analytics",
   "version": "0.1.0",
+  "description": "Anonymous usage analytics pipeline for Stellar Explain — event emitter, sinks, and payload helpers",
   "private": true,
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
