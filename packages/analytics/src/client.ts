@@ -2,7 +2,7 @@ import { AnalyticsEvent, EventName } from "./types/events";
 import { EventQueue, FlushCallback } from "./queue";
 import { StellarAnalyticsEvent } from "./types";
 import { getConnectionType } from "./network";
-import { isOptedOutViaLocalStorage } from "./optout";
+import { isOptedOutViaDoNotTrack, isOptedOutViaLocalStorage } from "./optout";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -39,6 +39,13 @@ export interface AnalyticsClientConfig {
    * Defaults to `false` — Do Not Track is respected.
    */
   ignoreDnt?: boolean;
+
+  /**
+   * When `true`, emits `console.debug` diagnostics for internal state
+   * changes — e.g. tracking being disabled by a Do Not Track signal.
+   * Defaults to `false`.
+   */
+  debug?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -153,11 +160,24 @@ export class AnalyticsClient {
   /**
    * Resolves the client's opt-out state once, at construction time.
    *
-   * A `stellar-explain-analytics-optout` localStorage flag disables
-   * tracking silently.
+   * - A `stellar-explain-analytics-optout` localStorage flag disables
+   *   tracking silently.
+   * - A `navigator.doNotTrack === "1"` signal disables tracking and, when
+   *   `config.debug` is set, logs a message explaining why.
+   * - `config.ignoreDnt` skips the Do Not Track check (the localStorage
+   *   flag is still honored).
    */
   private _checkOptOut(): boolean {
-    return isOptedOutViaLocalStorage();
+    if (isOptedOutViaLocalStorage()) return true;
+
+    if (!this.config.ignoreDnt && isOptedOutViaDoNotTrack()) {
+      if (this.config.debug) {
+        console.debug("[analytics] tracking disabled — Do Not Track is enabled");
+      }
+      return true;
+    }
+
+    return false;
   }
 
   private _buildFlushCallback(): FlushCallback {

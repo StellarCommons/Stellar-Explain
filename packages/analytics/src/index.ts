@@ -7,7 +7,12 @@ export type { HttpSinkOptions, FetchImpl } from "./sinks";
 export { limitPayload } from "./limitPayload";
 export { getConnectionInfo, getConnectionType } from "./network";
 export type { ConnectionInfo } from "./network";
-export { OPT_OUT_STORAGE_KEY, isOptedOutViaLocalStorage } from "./optout";
+export {
+  OPT_OUT_STORAGE_KEY,
+  isOptedOut,
+  isOptedOutViaLocalStorage,
+  isOptedOutViaDoNotTrack,
+} from "./optout";
 
 // Typed event shapes (PageViewEvent, SearchEvent, etc.)
 export type {

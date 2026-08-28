@@ -1,7 +1,17 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { OPT_OUT_STORAGE_KEY, isOptedOutViaLocalStorage } from "../src/optout";
+import {
+  OPT_OUT_STORAGE_KEY,
+  isOptedOut,
+  isOptedOutViaLocalStorage,
+  isOptedOutViaDoNotTrack,
+} from "../src/optout";
 
+const originalNavigator = globalThis.navigator;
 const originalLocalStorage = (globalThis as { localStorage?: unknown }).localStorage;
+
+function setNavigator(value: unknown): void {
+  Object.defineProperty(globalThis, "navigator", { value, configurable: true });
+}
 
 function setLocalStorage(value: unknown): void {
   Object.defineProperty(globalThis, "localStorage", { value, configurable: true });
@@ -20,6 +30,7 @@ function fakeLocalStorage(store: Record<string, string> = {}) {
 }
 
 afterEach(() => {
+  setNavigator(originalNavigator);
   setLocalStorage(originalLocalStorage);
 });
 
@@ -51,5 +62,59 @@ describe("isOptedOutViaLocalStorage", () => {
       },
     });
     expect(isOptedOutViaLocalStorage()).toBe(false);
+  });
+});
+
+describe("isOptedOutViaDoNotTrack", () => {
+  it("returns false when navigator is unavailable (Node/SSR)", () => {
+    setNavigator(undefined);
+    expect(isOptedOutViaDoNotTrack()).toBe(false);
+  });
+
+  it("returns true when navigator.doNotTrack is '1'", () => {
+    setNavigator({ doNotTrack: "1" });
+    expect(isOptedOutViaDoNotTrack()).toBe(true);
+  });
+
+  it("returns false when navigator.doNotTrack is unset", () => {
+    setNavigator({});
+    expect(isOptedOutViaDoNotTrack()).toBe(false);
+  });
+
+  it("returns false when navigator.doNotTrack is '0'", () => {
+    setNavigator({ doNotTrack: "0" });
+    expect(isOptedOutViaDoNotTrack()).toBe(false);
+  });
+});
+
+describe("isOptedOut", () => {
+  it("is true when the localStorage flag is present", () => {
+    setNavigator({});
+    setLocalStorage(fakeLocalStorage({ [OPT_OUT_STORAGE_KEY]: "1" }));
+    expect(isOptedOut()).toBe(true);
+  });
+
+  it("is true when Do Not Track is enabled", () => {
+    setNavigator({ doNotTrack: "1" });
+    setLocalStorage(fakeLocalStorage());
+    expect(isOptedOut()).toBe(true);
+  });
+
+  it("is false when neither signal is present", () => {
+    setNavigator({});
+    setLocalStorage(fakeLocalStorage());
+    expect(isOptedOut()).toBe(false);
+  });
+
+  it("ignores Do Not Track when ignoreDnt is true", () => {
+    setNavigator({ doNotTrack: "1" });
+    setLocalStorage(fakeLocalStorage());
+    expect(isOptedOut(true)).toBe(false);
+  });
+
+  it("still honors the localStorage flag when ignoreDnt is true", () => {
+    setNavigator({ doNotTrack: "1" });
+    setLocalStorage(fakeLocalStorage({ [OPT_OUT_STORAGE_KEY]: "1" }));
+    expect(isOptedOut(true)).toBe(true);
   });
 });
