@@ -2,6 +2,7 @@ import { AnalyticsEvent, EventName } from "./types/events";
 import { EventQueue, FlushCallback } from "./queue";
 import { StellarAnalyticsEvent } from "./types";
 import { getConnectionType } from "./network";
+import { isOptedOutViaLocalStorage } from "./optout";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -70,10 +71,12 @@ export interface AnalyticsClientConfig {
 export class AnalyticsClient {
   private readonly config: AnalyticsClientConfig;
   private readonly queue: EventQueue;
+  private readonly optedOut: boolean;
 
   constructor(config: AnalyticsClientConfig = {}) {
     this.config = config;
     this.queue = new EventQueue(this._buildFlushCallback());
+    this.optedOut = this._checkOptOut();
   }
 
   // -------------------------------------------------------------------------
@@ -88,6 +91,8 @@ export class AnalyticsClient {
    *   `AnalyticsEvent` internally.
    */
   track(event: AnalyticsEvent | StellarAnalyticsEvent): void {
+    if (this.optedOut) return;
+
     const base = event as AnalyticsEvent;
 
     if (!EventName.includes(base.name as EventName)) {
@@ -143,6 +148,16 @@ export class AnalyticsClient {
         connectionType,
       },
     };
+  }
+
+  /**
+   * Resolves the client's opt-out state once, at construction time.
+   *
+   * A `stellar-explain-analytics-optout` localStorage flag disables
+   * tracking silently.
+   */
+  private _checkOptOut(): boolean {
+    return isOptedOutViaLocalStorage();
   }
 
   private _buildFlushCallback(): FlushCallback {
