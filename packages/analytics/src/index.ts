@@ -13,6 +13,7 @@ export {
   isOptedOutViaLocalStorage,
   isOptedOutViaDoNotTrack,
 } from "./optout";
+export { shouldSample } from "./sampling";
 
 // Typed event shapes (PageViewEvent, SearchEvent, etc.)
 export type {

@@ -3,6 +3,7 @@ import { EventQueue, FlushCallback } from "./queue";
 import { StellarAnalyticsEvent } from "./types";
 import { getConnectionType } from "./network";
 import { isOptedOutViaDoNotTrack, isOptedOutViaLocalStorage } from "./optout";
+import { shouldSample } from "./sampling";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -46,6 +47,14 @@ export interface AnalyticsClientConfig {
    * Defaults to `false`.
    */
   debug?: boolean;
+
+  /**
+   * Fraction of events to keep, in the range `[0, 1]`. Defaults to `1`
+   * (keep every event). Values below `1` randomly drop events per-call to
+   * `track()` — useful for controlling ingestion cost on high-traffic
+   * pages. Out-of-range values are clamped.
+   */
+  sampleRate?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -104,6 +113,10 @@ export class AnalyticsClient {
 
     if (!EventName.includes(base.name as EventName)) {
       console.warn(`[analytics] dropped unknown event "${base.name}"`);
+      return;
+    }
+
+    if (this.config.sampleRate !== undefined && !shouldSample(this.config.sampleRate)) {
       return;
     }
 
