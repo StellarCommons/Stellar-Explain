@@ -5,6 +5,8 @@ export type { EventHandler } from "./emitter";
 export { HttpSink, ConsoleSink } from "./sinks";
 export type { HttpSinkOptions, FetchImpl } from "./sinks";
 export { limitPayload } from "./limitPayload";
+export { getConnectionInfo, getConnectionType } from "./network";
+export type { ConnectionInfo } from "./network";
 
 // Typed event shapes (PageViewEvent, SearchEvent, etc.)
 export type {

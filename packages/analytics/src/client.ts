@@ -1,6 +1,7 @@
 import { AnalyticsEvent, EventName } from "./types/events";
 import { EventQueue, FlushCallback } from "./queue";
 import { StellarAnalyticsEvent } from "./types";
+import { getConnectionType } from "./network";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -94,7 +95,7 @@ export class AnalyticsClient {
       return;
     }
 
-    this.queue.enqueue(base);
+    this.queue.enqueue(this._attachConnectionType(base));
   }
 
   /**
@@ -123,6 +124,26 @@ export class AnalyticsClient {
   // -------------------------------------------------------------------------
   // Internal helpers
   // -------------------------------------------------------------------------
+
+  /**
+   * Attaches the current connection type (e.g. "4g", "wifi") to
+   * `event.properties.connectionType` when the Network Information API is
+   * available. Events are returned unchanged when it isn't (Node/SSR, or
+   * an unsupporting browser), so no `connectionType: undefined` key is ever
+   * added to the payload.
+   */
+  private _attachConnectionType(event: AnalyticsEvent): AnalyticsEvent {
+    const connectionType = getConnectionType();
+    if (connectionType === undefined) return event;
+
+    return {
+      ...event,
+      properties: {
+        ...event.properties,
+        connectionType,
+      },
+    };
+  }
 
   private _buildFlushCallback(): FlushCallback {
     // Explicit override takes priority
