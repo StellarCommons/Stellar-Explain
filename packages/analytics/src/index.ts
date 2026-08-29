@@ -14,6 +14,7 @@ export {
   isOptedOutViaDoNotTrack,
 } from "./optout";
 export { shouldSample } from "./sampling";
+export { EventDeduplicator, DEDUP_WINDOW_MS } from "./dedup";
 export { getFirstContentfulPaintMs } from "./performance";
 
 // Event builders (Analytics #21-#24)
