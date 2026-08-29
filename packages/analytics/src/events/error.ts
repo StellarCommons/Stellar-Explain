@@ -1,4 +1,4 @@
-import { ErrorEvent } from "../../types";
+import { ErrorEvent } from "../types";
 
 /**
  * Builds an `error_occurred` event recorded for an API error or frontend

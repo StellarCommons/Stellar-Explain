@@ -85,6 +85,7 @@ export interface ResultViewTrackProperties {
   type: "tx" | "account";
   /** Whether the result page rendered successfully */
   success: boolean;
+  [key: string]: unknown;
 }
 
 export interface ResultViewTrackEvent {

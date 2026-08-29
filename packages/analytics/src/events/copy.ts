@@ -1,4 +1,4 @@
-import { CopyEvent } from "../../types";
+import { CopyEvent } from "../types";
 
 export interface BuildCopyOptions {
   /** Truncated or anonymised preview of what was copied (no PII). */

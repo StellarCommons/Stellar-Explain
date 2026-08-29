@@ -1,4 +1,4 @@
-import { ResultViewTrackEvent } from "../../types";
+import { ResultViewTrackEvent } from "../types";
 
 /**
  * Builds a `result_view` event recorded when a result page finishes rendering.
