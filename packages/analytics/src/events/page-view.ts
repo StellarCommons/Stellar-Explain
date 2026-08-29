@@ -57,6 +57,4 @@ function getCleanReferrer(): string | undefined {
   } catch {
     return undefined;
   }
-    },
-  };
 }

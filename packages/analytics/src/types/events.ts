@@ -23,6 +23,8 @@ export const EventName = [
   "address_book_save",
   "history_open",
   "result_view",
+  "time_on_page",
+  "scroll_depth",
 ] as const;
 
 export type EventName = (typeof EventName)[number];
