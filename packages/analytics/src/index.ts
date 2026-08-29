@@ -86,3 +86,10 @@ export type { AnalyticsClientConfig } from "./client";
 // EventQueue — in-memory queue with 20-event / 30 s auto-flush
 export { EventQueue, QUEUE_MAX_SIZE, QUEUE_FLUSH_INTERVAL_MS } from "./queue";
 export type { FlushCallback } from "./queue";
+
+// Analytics #41 — event schema validation
+export { validateEvent, validateOrDrop } from "./validate";
+export type { ValidationResult } from "./validate";
+
+// Analytics #44 — custom endpoint support
+export { DEFAULT_ANALYTICS_ENDPOINT, resolveEndpoint } from "./config";
