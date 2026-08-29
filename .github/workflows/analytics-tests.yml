@@ -1,0 +1,11 @@
+name: Analytics Package Tests
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run vitest
+        run: |
+          npm ci
+          npm run test --workspace=packages/analytics
