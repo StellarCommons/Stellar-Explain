@@ -19,13 +19,11 @@ import { buildQRShareEvent } from "./events/qr-share";
 import { buildPersonalModeToggleEvent } from "./events/personal-mode";
 import { buildAddressBookSaveEvent } from "./events/address-book";
 import { buildHistoryOpenEvent } from "./events/history";
-import { buildSearchEvent } from "./events/search";
 import { buildResultViewEvent } from "./events/result-view";
 import { buildErrorEvent } from "./events/error";
 import { buildCopyEvent } from "./events/copy";
 import { getSessionId } from "./session";
 import { getUserId } from "./user";
-import { buildPageViewEvent } from "./events/page-view";
 
 import { validateOrDrop } from "./validate";
 import { resolveEndpoint } from "./config";
@@ -101,6 +99,8 @@ export interface AnalyticsClientConfig {
    * Set to `false` to call `trackScrollDepth(percent)` yourself instead.
    */
   trackScrollDepth?: boolean;
+
+  /**
    * When `true` (default), `track()` is called automatically whenever the
    * browser fires `popstate` or `hashchange` (i.e. the user navigates back/
    * forward or changes the hash). Set to `false` to call `trackPageView`
@@ -221,39 +221,7 @@ export class AnalyticsClient {
       return;
     }
 
-    this.queue.enqueue(this._attachEnvironment(base));
-  }
-
-  /**
-   * Queue a `page_view` event for the given route, including the referrer
-   * (query-safe) when available.
-   *
-   * When `path` is omitted the current `window.location.pathname` is used.
-   */
-  trackPageView(path?: string): void {
-    this.track(buildPageViewEvent(path ?? currentPath(), { title: documentTitle() }));
-    this.queue.enqueue(this._attachIdentity(this._attachConnectionType(base)));
-  }
-
-  /**
-   * Queue a `page_view` event for the current route.
-   *
-   * When `path` is omitted the current `window.location.pathname` is used.
-   * Call this from your router on every navigation, or rely on the automatic
-   * `autoTrackPageViews` binding when the app uses back/forward/hash routing.
-   */
-  trackPageView(path?: string): void {
-    this.track(buildPageViewEvent(path ?? currentPath(), { title: documentTitle() }));
-  }
-
-  /**
-   * Queue a `search` event recording a transaction or account lookup.
-   *
-   * @param type - The resource type that was looked up, e.g. "tx" or "account".
-   * @param identifier - The transaction hash or account address that was looked up.
-   */
-  trackSearch(type: string, identifier: string): void {
-    this.track(buildSearchEvent(type, identifier));
+    this.queue.enqueue(this._attachIdentity(this._attachEnvironment(base)));
   }
 
   /**
@@ -435,6 +403,7 @@ export class AnalyticsClient {
     }
     if (this.timeOnPageHandler) {
       window.removeEventListener("pagehide", this.timeOnPageHandler);
+    }
     if (this.onPageHide) window.removeEventListener("pagehide", this.onPageHide);
     if (this.onRouteChange) {
       window.removeEventListener("popstate", this.onRouteChange);
@@ -553,6 +522,7 @@ export class AnalyticsClient {
     }
   }
 
+  /**
    * Attaches the anonymous user ID and per-session ID to an event when they
    * could be resolved at construction time. An event-provided `sessionId`/
    * `userId` always wins, and events are returned unchanged when neither

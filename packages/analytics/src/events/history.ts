@@ -25,6 +25,9 @@ export function buildHistorySelectEvent(type: string): HistorySelectEvent {
     name: "history_select",
     timestamp: new Date(),
     properties: { type },
+  };
+}
+
 export interface HistoryOpenProperties {
   /** Page path where the history panel was opened, when known. */
   path?: string;

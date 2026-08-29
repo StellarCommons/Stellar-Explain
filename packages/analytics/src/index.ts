@@ -14,6 +14,7 @@ export {
   isOptedOutViaDoNotTrack,
 } from "./optout";
 export { shouldSample } from "./sampling";
+export { EventDeduplicator, DEDUP_WINDOW_MS } from "./dedup";
 export { getFirstContentfulPaintMs } from "./performance";
 
 // Event builders (Analytics #21-#24)
@@ -28,12 +29,8 @@ export { getDeviceType } from "./device";
 export type { DeviceType } from "./device";
 export { getBrowser } from "./browser";
 export { getOS } from "./os";
-export { buildPageViewEvent } from "./events/page-view";
-export type { BuildPageViewOptions } from "./events/page-view";
 export { getSessionId, newSessionId, SESSION_ID_STORAGE_KEY } from "./session";
 export { getUserId, newUserId, USER_ID_STORAGE_KEY } from "./user";
-export { buildPageViewEvent } from "./events/page-view";
-export type { BuildPageViewOptions } from "./events/page-view";
 
 // Event builders (Analytics #13-#16)
 export { buildQRShareEvent } from "./events/qr-share";
@@ -73,7 +70,6 @@ export type {
 } from "./types";
 
 // Event builders (Analytics #9-#12)
-export { buildSearchEvent } from "./events/search";
 export { buildResultViewEvent } from "./events/result-view";
 export { buildErrorEvent } from "./events/error";
 export { buildCopyEvent } from "./events/copy";

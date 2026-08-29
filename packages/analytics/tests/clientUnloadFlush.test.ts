@@ -126,9 +126,15 @@ describe("AnalyticsClient flush on page unload", () => {
     const sendBeacon = vi.fn();
     setNavigator({ sendBeacon });
 
+    // trackTimeOnPage also binds its own independent "pagehide" listener by
+    // default (see clientTimingAuto.test.ts) — disabled here since this
+    // test is only about the flushOnUnload listener, and the fake window
+    // above (matching the other tests in this file) only tracks one
+    // handler per event type.
     const client = new AnalyticsClient({
       endpoint: "https://api.example.com/events",
       flushOnUnload: false,
+      trackTimeOnPage: false,
     });
 
     expect(win.handlers["pagehide"]).toBeUndefined();
