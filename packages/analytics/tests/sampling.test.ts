@@ -1,8 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-
-function shouldSample(rate: number): boolean {
-  return Math.random() < rate;
-}
+import { shouldSample } from "../src/sampling";
 
 describe("event sampling", () => {
   it("drops roughly half of events at a 0.5 sample rate", () => {
@@ -27,6 +24,18 @@ describe("event sampling", () => {
   it("drops all events at a sample rate of 0", () => {
     vi.spyOn(Math, "random").mockReturnValue(0.001);
     expect(shouldSample(0)).toBe(false);
+    vi.restoreAllMocks();
+  });
+
+  it("clamps an out-of-range rate above 1 down to 1 (keep all)", () => {
+    vi.spyOn(Math, "random").mockReturnValue(0.999);
+    expect(shouldSample(1.5)).toBe(true);
+    vi.restoreAllMocks();
+  });
+
+  it("clamps an out-of-range negative rate up to 0 (drop all)", () => {
+    vi.spyOn(Math, "random").mockReturnValue(0.001);
+    expect(shouldSample(-1)).toBe(false);
     vi.restoreAllMocks();
   });
 });

@@ -5,6 +5,15 @@ export type { EventHandler } from "./emitter";
 export { HttpSink, ConsoleSink } from "./sinks";
 export type { HttpSinkOptions, FetchImpl } from "./sinks";
 export { limitPayload } from "./limitPayload";
+export { getConnectionInfo, getConnectionType } from "./network";
+export type { ConnectionInfo } from "./network";
+export {
+  OPT_OUT_STORAGE_KEY,
+  isOptedOut,
+  isOptedOutViaLocalStorage,
+  isOptedOutViaDoNotTrack,
+} from "./optout";
+export { shouldSample } from "./sampling";
 
 // Typed event shapes (PageViewEvent, SearchEvent, etc.)
 export type {

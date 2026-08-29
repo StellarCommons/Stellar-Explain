@@ -1,6 +1,9 @@
 import { AnalyticsEvent, EventName } from "./types/events";
 import { EventQueue, FlushCallback } from "./queue";
 import { StellarAnalyticsEvent } from "./types";
+import { getConnectionType } from "./network";
+import { isOptedOutViaDoNotTrack, isOptedOutViaLocalStorage } from "./optout";
+import { shouldSample } from "./sampling";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -37,6 +40,21 @@ export interface AnalyticsClientConfig {
    * Defaults to `false` — Do Not Track is respected.
    */
   ignoreDnt?: boolean;
+
+  /**
+   * When `true`, emits `console.debug` diagnostics for internal state
+   * changes — e.g. tracking being disabled by a Do Not Track signal.
+   * Defaults to `false`.
+   */
+  debug?: boolean;
+
+  /**
+   * Fraction of events to keep, in the range `[0, 1]`. Defaults to `1`
+   * (keep every event). Values below `1` randomly drop events per-call to
+   * `track()` — useful for controlling ingestion cost on high-traffic
+   * pages. Out-of-range values are clamped.
+   */
+  sampleRate?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -69,10 +87,12 @@ export interface AnalyticsClientConfig {
 export class AnalyticsClient {
   private readonly config: AnalyticsClientConfig;
   private readonly queue: EventQueue;
+  private readonly optedOut: boolean;
 
   constructor(config: AnalyticsClientConfig = {}) {
     this.config = config;
     this.queue = new EventQueue(this._buildFlushCallback());
+    this.optedOut = this._checkOptOut();
   }
 
   // -------------------------------------------------------------------------
@@ -87,6 +107,8 @@ export class AnalyticsClient {
    *   `AnalyticsEvent` internally.
    */
   track(event: AnalyticsEvent | StellarAnalyticsEvent): void {
+    if (this.optedOut) return;
+
     const base = event as AnalyticsEvent;
 
     if (!EventName.includes(base.name as EventName)) {
@@ -94,7 +116,11 @@ export class AnalyticsClient {
       return;
     }
 
-    this.queue.enqueue(base);
+    if (this.config.sampleRate !== undefined && !shouldSample(this.config.sampleRate)) {
+      return;
+    }
+
+    this.queue.enqueue(this._attachConnectionType(base));
   }
 
   /**
@@ -123,6 +149,49 @@ export class AnalyticsClient {
   // -------------------------------------------------------------------------
   // Internal helpers
   // -------------------------------------------------------------------------
+
+  /**
+   * Attaches the current connection type (e.g. "4g", "wifi") to
+   * `event.properties.connectionType` when the Network Information API is
+   * available. Events are returned unchanged when it isn't (Node/SSR, or
+   * an unsupporting browser), so no `connectionType: undefined` key is ever
+   * added to the payload.
+   */
+  private _attachConnectionType(event: AnalyticsEvent): AnalyticsEvent {
+    const connectionType = getConnectionType();
+    if (connectionType === undefined) return event;
+
+    return {
+      ...event,
+      properties: {
+        ...event.properties,
+        connectionType,
+      },
+    };
+  }
+
+  /**
+   * Resolves the client's opt-out state once, at construction time.
+   *
+   * - A `stellar-explain-analytics-optout` localStorage flag disables
+   *   tracking silently.
+   * - A `navigator.doNotTrack === "1"` signal disables tracking and, when
+   *   `config.debug` is set, logs a message explaining why.
+   * - `config.ignoreDnt` skips the Do Not Track check (the localStorage
+   *   flag is still honored).
+   */
+  private _checkOptOut(): boolean {
+    if (isOptedOutViaLocalStorage()) return true;
+
+    if (!this.config.ignoreDnt && isOptedOutViaDoNotTrack()) {
+      if (this.config.debug) {
+        console.debug("[analytics] tracking disabled — Do Not Track is enabled");
+      }
+      return true;
+    }
+
+    return false;
+  }
 
   private _buildFlushCallback(): FlushCallback {
     // Explicit override takes priority
