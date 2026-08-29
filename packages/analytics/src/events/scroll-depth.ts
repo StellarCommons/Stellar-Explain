@@ -1,6 +1,7 @@
 export interface ScrollDepthProperties {
   /** The scroll milestone reached on the result page, as a percentage. */
   percent: number;
+  [key: string]: unknown;
 }
 
 export interface ScrollDepthEvent {

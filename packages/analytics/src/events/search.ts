@@ -1,4 +1,4 @@
-import { SearchEvent } from "../../types";
+import { SearchEvent } from "../types";
 
 /**
  * Builds a `search` event recorded when a user performs a transaction or

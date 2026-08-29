@@ -1,4 +1,4 @@
-import { PageViewEvent } from "../../types";
+import { PageViewEvent } from "../types";
 import { getFirstContentfulPaintMs } from "../performance";
 
 export interface BuildPageViewOptions {

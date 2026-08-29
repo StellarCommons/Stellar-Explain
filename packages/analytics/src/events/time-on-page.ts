@@ -1,6 +1,7 @@
 export interface TimeOnPageProperties {
   /** Elapsed time in seconds spent on the page before navigating away. */
   seconds: number;
+  [key: string]: unknown;
 }
 
 export interface TimeOnPageEvent {
