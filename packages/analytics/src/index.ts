@@ -23,12 +23,21 @@ export type {
   SearchProperties,
   ResultViewEvent,
   ResultViewProperties,
+  ResultViewTrackEvent,
+  ResultViewTrackProperties,
   ErrorEvent,
   ErrorProperties,
   CopyEvent,
   CopyProperties,
   StellarAnalyticsEvent,
 } from "./types";
+
+// Event builders (Analytics #9-#12)
+export { buildSearchEvent } from "./events/search";
+export { buildResultViewEvent } from "./events/result-view";
+export { buildErrorEvent } from "./events/error";
+export { buildCopyEvent } from "./events/copy";
+export type { BuildCopyOptions } from "./events/copy";
 
 // AnalyticsClient — high-level batching client
 export { AnalyticsClient } from "./client";
