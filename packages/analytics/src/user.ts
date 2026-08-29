@@ -7,12 +7,19 @@
  * defensive and never throw.
  */
 
+import { isOptedOutViaLocalStorage } from "./optout";
+
 /** localStorage key holding the persistent anonymous user ID. */
 export const USER_ID_STORAGE_KEY = "stellar-explain-analytics-user-id";
 
 /**
  * Returns the persistent anonymous user ID, generating and storing a new one
  * on first use.
+ *
+ * When the user has opted out (via the localStorage opt-out flag), any
+ * existing ID is removed and `undefined` is returned instead of generating
+ * one — an opted-out user should not be left with a lingering identifier
+ * from before they opted out.
  *
  * Returns `undefined` when `localStorage` is unavailable (Node/SSR) or the
  * storage access throws, so the analytics pipeline never crashes.
@@ -21,6 +28,11 @@ export function getUserId(): string | undefined {
   if (typeof localStorage === "undefined") return undefined;
 
   try {
+    if (isOptedOutViaLocalStorage()) {
+      localStorage.removeItem(USER_ID_STORAGE_KEY);
+      return undefined;
+    }
+
     const existing = localStorage.getItem(USER_ID_STORAGE_KEY);
     if (existing) return existing;
 
