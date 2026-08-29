@@ -89,3 +89,7 @@ export type { ValidationResult } from "./validate";
 
 // Analytics #44 — custom endpoint support
 export { DEFAULT_ANALYTICS_ENDPOINT, resolveEndpoint } from "./config";
+
+// Analytics #47 — plugin system
+export { runBeforeTrack, runAfterTrack } from "./plugins";
+export type { AnalyticsPlugin } from "./plugins";
