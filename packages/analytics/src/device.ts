@@ -28,3 +28,20 @@ export function getDeviceType(): DeviceType | undefined {
   if (width < TABLET_BREAKPOINT_PX) return "tablet";
   return "desktop";
 }
+
+export type ColorScheme = "light" | "dark";
+
+/**
+ * Returns the user's preferred color scheme via the `prefers-color-scheme`
+ * media query, or `undefined` when it cannot be determined (Node/SSR, or a
+ * browser without `matchMedia` support).
+ */
+export function getColorScheme(): ColorScheme | undefined {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return undefined;
+  }
+
+  if (window.matchMedia("(prefers-color-scheme: dark)").matches) return "dark";
+  if (window.matchMedia("(prefers-color-scheme: light)").matches) return "light";
+  return undefined;
+}

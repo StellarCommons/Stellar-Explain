@@ -1,9 +1,16 @@
 import { PageViewEvent } from "../types";
 import { getFirstContentfulPaintMs } from "../performance";
+import { getColorScheme } from "../device";
 
 export interface BuildPageViewOptions {
   /** Optional document title attached to the event. */
   title?: string;
+  /**
+   * When `true`, attaches the user's `prefers-color-scheme` preference as
+   * `colorScheme`. Callers should only pass `true` for the first page view
+   * of a session — see `AnalyticsClient.trackPageView`.
+   */
+  includeColorScheme?: boolean;
 }
 
 /**
@@ -25,6 +32,7 @@ export function buildPageViewEvent(
 ): PageViewEvent {
   const fcp = getFirstContentfulPaintMs();
   const referrer = getCleanReferrer();
+  const colorScheme = options.includeColorScheme ? getColorScheme() : undefined;
 
   return {
     id: crypto.randomUUID(),
@@ -35,6 +43,7 @@ export function buildPageViewEvent(
       ...(options.title !== undefined ? { title: options.title } : {}),
       ...(fcp !== undefined ? { firstContentfulPaintMs: fcp } : {}),
       ...(referrer !== undefined ? { referrer } : {}),
+      ...(colorScheme !== undefined ? { colorScheme } : {}),
     },
   };
 }

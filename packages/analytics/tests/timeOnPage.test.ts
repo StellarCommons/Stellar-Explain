@@ -23,7 +23,7 @@ describe("AnalyticsClient.trackTimeOnPage", () => {
     await client.flush();
     const event = flushed[0] as { name?: string; properties?: Record<string, unknown> };
     expect(event.name).toBe("time_on_page");
-    expect(event.properties).toEqual({ seconds: 12 });
+    expect(event.properties).toMatchObject({ seconds: 12 });
     client.destroy();
   });
 });

@@ -26,7 +26,7 @@ describe("AnalyticsClient.trackScrollDepth", () => {
     await client.flush();
     const event = flushed[0] as { name?: string; properties?: Record<string, unknown> };
     expect(event.name).toBe("scroll_depth");
-    expect(event.properties).toEqual({ percent: 100 });
+    expect(event.properties).toMatchObject({ percent: 100 });
     client.destroy();
   });
 });

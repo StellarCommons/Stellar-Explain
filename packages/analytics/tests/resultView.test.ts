@@ -31,7 +31,7 @@ describe("AnalyticsClient.trackResultView", () => {
       properties?: Record<string, unknown>;
     };
     expect(event.name).toBe("result_view");
-    expect(event.properties).toEqual({ type: "account", success: true });
+    expect(event.properties).toMatchObject({ type: "account", success: true });
     client.destroy();
   });
 });

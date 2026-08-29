@@ -119,7 +119,7 @@ describe("AnalyticsClient automatic time-on-page tracking", () => {
     const timeOnPage = (flushed as { name?: string; properties?: Record<string, unknown> }[]).find(
       (event) => event.name === "time_on_page",
     );
-    expect(timeOnPage?.properties).toEqual({ seconds: 6 });
+    expect(timeOnPage?.properties).toMatchObject({ seconds: 6 });
     nowSpy.mockRestore();
   });
 

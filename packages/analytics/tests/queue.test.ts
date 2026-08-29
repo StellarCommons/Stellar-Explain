@@ -2,8 +2,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { EventQueue, QUEUE_MAX_SIZE, QUEUE_FLUSH_INTERVAL_MS } from "../src/queue";
 import { AnalyticsEvent } from "../src/types/events";
 
+// Distinct `properties` per event so the queue's built-in deduplication
+// (Analytics #39) doesn't collapse these into a single event — `id` alone
+// isn't part of the dedup key, matching real callers where every event gets
+// a fresh id regardless of whether its content repeats.
 function makeEvent(id: string): AnalyticsEvent {
-  return { id, name: "page_view", timestamp: new Date() };
+  return { id, name: "page_view", timestamp: new Date(), properties: { seq: id } };
 }
 
 beforeEach(() => {
