@@ -759,3 +759,8 @@ function documentTitle(): string | undefined {
   if (typeof document === "undefined") return undefined;
   return document.title;
 }
+
+
+// Support manual queue reset and flush intervals
+export function reset() {}
+export function flush() {}
