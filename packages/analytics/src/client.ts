@@ -4,6 +4,10 @@ import { StellarAnalyticsEvent } from "./types";
 import { getConnectionType } from "./network";
 import { isOptedOutViaDoNotTrack, isOptedOutViaLocalStorage } from "./optout";
 import { shouldSample } from "./sampling";
+import { buildHistorySelectEvent } from "./events/history";
+import { buildTabSwitchEvent } from "./events/tab-switch";
+import { buildBackButtonEvent } from "./events/navigation";
+import { buildRetryEvent } from "./events/retry";
 import { getDeviceType } from "./device";
 import { getBrowser } from "./browser";
 import { getOS } from "./os";
@@ -262,6 +266,48 @@ export class AnalyticsClient {
    */
   trackHistoryOpen(): void {
     this.track(buildHistoryOpenEvent());
+  }
+
+  /**
+   * Queue a `history_select` event recording a click on a history entry to
+   * reload a result.
+   *
+   * @param type - The kind of result being reloaded, e.g. "tx" or "account".
+   */
+  trackHistorySelect(type: string): void {
+    this.track(buildHistorySelectEvent(type));
+  }
+
+  /**
+   * Queue a `tab_switch` event recording a switch between the Transaction
+   * and Account tabs.
+   *
+   * @param from - The tab the user switched from.
+   * @param to - The tab the user switched to.
+   */
+  trackTabSwitch(from: string, to: string): void {
+    this.track(buildTabSwitchEvent(from, to));
+  }
+
+  /**
+   * Queue a `back_button` event recording a click on the back button of a
+   * result page.
+   *
+   * @param from - The page or state the user navigated back from.
+   */
+  trackBackButton(from: string): void {
+    this.track(buildBackButtonEvent(from));
+  }
+
+  /**
+   * Queue a `retry` event recording a click on the retry button of an error
+   * state.
+   *
+   * @param type - What is being retried.
+   * @param errorCode - The error code shown on the error state.
+   */
+  trackRetry(type: string, errorCode: string): void {
+    this.track(buildRetryEvent(type, errorCode));
   }
 
   /**
