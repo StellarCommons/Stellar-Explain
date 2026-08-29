@@ -25,6 +25,9 @@ import { buildCopyEvent } from "./events/copy";
 import { getSessionId } from "./session";
 import { getUserId } from "./user";
 
+import { validateOrDrop } from "./validate";
+import { resolveEndpoint } from "./config";
+
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
@@ -67,6 +70,13 @@ export interface AnalyticsClientConfig {
    * Defaults to `false`.
    */
   debug?: boolean;
+
+  /**
+   * When `true`, events are processed normally (validated, sampled, enriched)
+   * but never sent to the endpoint. Useful for testing and development.
+   * Defaults to `false`.
+   */
+  dryRun?: boolean;
 
   /**
    * Fraction of events to keep, in the range `[0, 1]`. Defaults to `1`
@@ -183,7 +193,11 @@ export class AnalyticsClient {
   track(event: AnalyticsEvent | StellarAnalyticsEvent): void {
     if (this.optedOut) return;
 
-    const base = event as AnalyticsEvent;
+    // Issue #930 — validate event schema before enqueuing; drop if invalid
+    const validated = validateOrDrop(event);
+    if (!validated) return;
+
+    const base = validated as AnalyticsEvent;
 
     if (!EventName.includes(base.name as EventName)) {
       console.warn(`[analytics] dropped unknown event "${base.name}"`);
@@ -191,6 +205,19 @@ export class AnalyticsClient {
     }
 
     if (this.config.sampleRate !== undefined && !shouldSample(this.config.sampleRate)) {
+      return;
+    }
+
+    // Issue #931 — debug mode: log every accepted event to the console
+    if (this.config.debug) {
+      console.debug("[analytics] tracking event:", base.name, base);
+    }
+
+    // Issue #932 — dry-run mode: process but never enqueue/send
+    if (this.config.dryRun) {
+      if (this.config.debug) {
+        console.debug("[analytics] dry-run: event not enqueued", base.name);
+      }
       return;
     }
 
@@ -607,9 +634,10 @@ export class AnalyticsClient {
       return this.config.onFlush;
     }
 
-    // HTTP sink
-    if (this.config.endpoint) {
-      const url = this.config.endpoint;
+    // HTTP sink — Issue #933: resolve effective endpoint (defaults to Stellar Explain stats endpoint)
+    const resolvedEndpoint = resolveEndpoint(this.config.endpoint);
+    if (resolvedEndpoint) {
+      const url = resolvedEndpoint;
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
         ...this.config.headers,
