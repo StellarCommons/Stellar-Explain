@@ -15,6 +15,16 @@ export {
 } from "./optout";
 export { shouldSample } from "./sampling";
 
+// Event builders (Analytics #13-#16)
+export { buildQRShareEvent } from "./events/qr-share";
+export type { QRShareEvent, QRShareProperties } from "./events/qr-share";
+export { buildPersonalModeToggleEvent } from "./events/personal-mode";
+export type { PersonalModeToggleEvent, PersonalModeToggleProperties } from "./events/personal-mode";
+export { buildAddressBookSaveEvent } from "./events/address-book";
+export type { AddressBookSaveEvent, AddressBookSaveProperties } from "./events/address-book";
+export { buildHistoryOpenEvent } from "./events/history";
+export type { HistoryOpenEvent, HistoryOpenProperties } from "./events/history";
+
 // Typed event shapes (PageViewEvent, SearchEvent, etc.)
 export type {
   PageViewEvent,

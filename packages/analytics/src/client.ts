@@ -4,6 +4,10 @@ import { StellarAnalyticsEvent } from "./types";
 import { getConnectionType } from "./network";
 import { isOptedOutViaDoNotTrack, isOptedOutViaLocalStorage } from "./optout";
 import { shouldSample } from "./sampling";
+import { buildQRShareEvent } from "./events/qr-share";
+import { buildPersonalModeToggleEvent } from "./events/personal-mode";
+import { buildAddressBookSaveEvent } from "./events/address-book";
+import { buildHistoryOpenEvent } from "./events/history";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -121,6 +125,41 @@ export class AnalyticsClient {
     }
 
     this.queue.enqueue(this._attachConnectionType(base));
+  }
+
+  /**
+   * Queue a `qr_share` event recording when the user opens the QR share modal.
+   *
+   * @param type - The kind of resource being shared via QR code.
+   */
+  trackQRShare(type: string): void {
+    this.track(buildQRShareEvent(type));
+  }
+
+  /**
+   * Queue a `personal_mode_toggle` event recording when the user enables or
+   * disables personal mode.
+   *
+   * @param enabled - Whether personal mode was switched on.
+   */
+  trackPersonalModeToggle(enabled: boolean): void {
+    this.track(buildPersonalModeToggleEvent(enabled));
+  }
+
+  /**
+   * Queue an `address_book_save` event recording when the user saves an
+   * address to the address book.
+   */
+  trackAddressBookSave(): void {
+    this.track(buildAddressBookSaveEvent());
+  }
+
+  /**
+   * Queue a `history_open` event recording when the user opens the history
+   * panel.
+   */
+  trackHistoryOpen(): void {
+    this.track(buildHistoryOpenEvent());
   }
 
   /**
