@@ -22,7 +22,7 @@ describe("AnalyticsClient.trackTabSwitch", () => {
     await client.flush();
     const event = flushed[0] as { name?: string; properties?: Record<string, unknown> };
     expect(event.name).toBe("tab_switch");
-    expect(event.properties).toEqual({ from: "account", to: "transaction" });
+    expect(event.properties).toMatchObject({ from: "account", to: "transaction" });
     client.destroy();
   });
 });

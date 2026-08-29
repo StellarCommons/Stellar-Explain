@@ -27,7 +27,7 @@ describe("AnalyticsClient.trackPersonalModeToggle", () => {
     await client.flush();
     const event = flushed[0] as { name?: string; properties?: Record<string, unknown> };
     expect(event.name).toBe("personal_mode_toggle");
-    expect(event.properties).toEqual({ enabled: true });
+    expect(event.properties).toMatchObject({ enabled: true });
     client.destroy();
   });
 });

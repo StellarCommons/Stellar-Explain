@@ -9,7 +9,12 @@ describe("AnalyticsClient sampling", () => {
   it("keeps every event when sampleRate is omitted (default)", () => {
     const client = new AnalyticsClient({ onFlush: vi.fn() });
     for (let i = 0; i < 10; i++) {
-      client.track({ id: String(i), name: "page_view", timestamp: new Date() });
+      client.track({
+        id: String(i),
+        name: "page_view",
+        timestamp: new Date(),
+        properties: { seq: i },
+      });
     }
     expect(client.queueSize()).toBe(10);
     client.destroy();

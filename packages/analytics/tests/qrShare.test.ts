@@ -24,7 +24,7 @@ describe("AnalyticsClient.trackQRShare", () => {
     await client.flush();
     const event = flushed[0] as { name?: string; properties?: Record<string, unknown> };
     expect(event.name).toBe("qr_share");
-    expect(event.properties).toEqual({ type: "tx" });
+    expect(event.properties).toMatchObject({ type: "tx" });
     client.destroy();
   });
 });

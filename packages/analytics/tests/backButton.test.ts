@@ -23,7 +23,7 @@ describe("AnalyticsClient.trackBackButton", () => {
     await client.flush();
     const event = flushed[0] as { name?: string; properties?: Record<string, unknown> };
     expect(event.name).toBe("back_button");
-    expect(event.properties).toEqual({ from: "result" });
+    expect(event.properties).toMatchObject({ from: "result" });
     client.destroy();
   });
 });

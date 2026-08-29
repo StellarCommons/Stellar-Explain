@@ -15,6 +15,7 @@ import { buildRetryEvent } from "./events/retry";
 import { getDeviceType } from "./device";
 import { getBrowser } from "./browser";
 import { getOS } from "./os";
+import { getLocale } from "./locale";
 import { buildQRShareEvent } from "./events/qr-share";
 import { buildPersonalModeToggleEvent } from "./events/personal-mode";
 import { buildAddressBookSaveEvent } from "./events/address-book";
@@ -166,6 +167,9 @@ export class AnalyticsClient {
   /** Timestamp (ms) of the last page view, used for time-on-page tracking. */
   private pageStartMs: number | null = null;
 
+  /** Whether a page view has already been tracked this session. */
+  private hasTrackedPageView = false;
+
   /** Scroll milestones already reported, to fire each one only once. */
   private readonly reportedScrollDepths: Set<number> = new Set();
 
@@ -208,8 +212,22 @@ export class AnalyticsClient {
   track(event: AnalyticsEvent | StellarAnalyticsEvent): void {
     if (this.optedOut) return;
 
+    // Issue #929 — every event gets a fresh timestamp automatically, set at
+    // the moment track() is actually called, rather than trusting whatever
+    // (possibly stale, possibly absent) timestamp the caller supplied. Kept
+    // as a Date instance rather than an ISO string so it still satisfies
+    // validateOrDrop's `instanceof Date` check and every other Date-typed
+    // consumer in the event pipeline — JSON.stringify already serializes a
+    // Date as an ISO 8601 string on the wire, so the batch payload sent to
+    // the endpoint already carries ISO-format timestamps without needing
+    // the field's in-memory type to change.
+    const stamped: AnalyticsEvent | StellarAnalyticsEvent = {
+      ...event,
+      timestamp: new Date(),
+    };
+
     // Issue #930 — validate event schema before enqueuing; drop if invalid
-    const validated = validateOrDrop(event);
+    const validated = validateOrDrop(stamped);
     if (!validated) return;
 
     const base = validated as AnalyticsEvent;
@@ -367,7 +385,13 @@ export class AnalyticsClient {
    */
   trackPageView(path?: string): void {
     this.pageStartMs = Date.now();
-    this.track(buildPageViewEvent(path ?? currentPath(), { title: documentTitle() }));
+    this.track(
+      buildPageViewEvent(path ?? currentPath(), {
+        title: documentTitle(),
+        includeColorScheme: !this.hasTrackedPageView,
+      }),
+    );
+    this.hasTrackedPageView = true;
   }
 
   /**
@@ -453,12 +477,14 @@ export class AnalyticsClient {
     const deviceType = getDeviceType();
     const browser = getBrowser();
     const os = getOS();
+    const locale = getLocale();
 
     if (
       connectionType === undefined &&
       deviceType === undefined &&
       browser === undefined &&
-      os === undefined
+      os === undefined &&
+      locale === undefined
     ) {
       return event;
     }
@@ -471,6 +497,7 @@ export class AnalyticsClient {
         ...(deviceType !== undefined ? { deviceType } : {}),
         ...(browser !== undefined ? { browser } : {}),
         ...(os !== undefined ? { os } : {}),
+        ...(locale !== undefined ? { locale } : {}),
       },
     };
   }

@@ -1,4 +1,5 @@
 import { AnalyticsEvent } from "./types/events";
+import { EventDeduplicator } from "./dedup";
 
 /** Maximum number of events held before an automatic flush is triggered. */
 export const QUEUE_MAX_SIZE = 20;
@@ -26,6 +27,7 @@ export class EventQueue {
   private items: AnalyticsEvent[] = [];
   private flushing = false;
   private timer: ReturnType<typeof setInterval> | null = null;
+  private readonly deduplicator = new EventDeduplicator();
 
   constructor(private readonly onFlush: FlushCallback) {
     this.timer = setInterval(() => {
@@ -36,8 +38,15 @@ export class EventQueue {
   /**
    * Add an event to the queue. If the queue has reached `QUEUE_MAX_SIZE`
    * a flush is triggered immediately (non-blocking).
+   *
+   * A repeat of the same event name+properties within the deduplication
+   * window (see `EventDeduplicator`) is silently dropped rather than
+   * enqueued — useful for double-fired listeners or accidental double
+   * clicks, which would otherwise inflate the event count.
    */
   enqueue(event: AnalyticsEvent): void {
+    if (!this.deduplicator.shouldKeep(event)) return;
+
     this.items.push(event);
     if (this.items.length >= QUEUE_MAX_SIZE) {
       void this.flush();

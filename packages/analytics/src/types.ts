@@ -19,6 +19,11 @@ export interface PageViewProperties {
   referrer?: string;
   /** First Contentful Paint timing in milliseconds, if recorded */
   firstContentfulPaintMs?: number;
+  /**
+   * The user's preferred color scheme ("light"/"dark"), attached only to
+   * the first page view of a session.
+   */
+  colorScheme?: "light" | "dark";
 }
 
 export interface PageViewEvent {

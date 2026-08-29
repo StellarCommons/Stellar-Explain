@@ -23,7 +23,7 @@ describe("AnalyticsClient.trackRetry", () => {
     await client.flush();
     const event = flushed[0] as { name?: string; properties?: Record<string, unknown> };
     expect(event.name).toBe("retry");
-    expect(event.properties).toEqual({ type: "search", errorCode: "TX_NOT_FOUND" });
+    expect(event.properties).toMatchObject({ type: "search", errorCode: "TX_NOT_FOUND" });
     client.destroy();
   });
 });
