@@ -12,6 +12,9 @@ export interface BuildPageViewOptions {
  * with any query parameters stripped, so tracking never leaks UTM or other
  * query-string identifiers. Referrer capture is skipped entirely when running
  * outside the browser or when no referrer is set.
+ * The event id and timestamp are generated here so callers (e.g.
+ * `AnalyticsClient.trackPageView`) only need to pass the path. Properties are
+ * intentionally minimal -- no PII and no query strings.
  */
 export function buildPageViewEvent(
   path: string,
@@ -49,4 +52,6 @@ function getCleanReferrer(): string | undefined {
   } catch {
     return undefined;
   }
+    },
+  };
 }
