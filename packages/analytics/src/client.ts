@@ -4,6 +4,10 @@ import { StellarAnalyticsEvent } from "./types";
 import { getConnectionType } from "./network";
 import { isOptedOutViaDoNotTrack, isOptedOutViaLocalStorage } from "./optout";
 import { shouldSample } from "./sampling";
+import { buildSearchEvent } from "./events/search";
+import { buildResultViewEvent } from "./events/result-view";
+import { buildErrorEvent } from "./events/error";
+import { buildCopyEvent } from "./events/copy";
 import { getSessionId } from "./session";
 import { getUserId } from "./user";
 import { buildPageViewEvent } from "./events/page-view";
@@ -164,6 +168,47 @@ export class AnalyticsClient {
    */
   trackPageView(path?: string): void {
     this.track(buildPageViewEvent(path ?? currentPath(), { title: documentTitle() }));
+  }
+
+  /**
+   * Queue a `search` event recording a transaction or account lookup.
+   *
+   * @param type - The resource type that was looked up, e.g. "tx" or "account".
+   * @param identifier - The transaction hash or account address that was looked up.
+   */
+  trackSearch(type: string, identifier: string): void {
+    this.track(buildSearchEvent(type, identifier));
+  }
+
+  /**
+   * Queue a `result_view` event recording that a result page finished
+   * rendering.
+   *
+   * @param type - "tx" or "account", the kind of result page rendered.
+   * @param success - Whether the result page rendered successfully.
+   */
+  trackResultView(type: "tx" | "account", success: boolean): void {
+    this.track(buildResultViewEvent(type, success));
+  }
+
+  /**
+   * Queue an `error_occurred` event recording an API error or frontend
+   * exception.
+   *
+   * @param code - Machine-readable error code, e.g. "TX_NOT_FOUND".
+   * @param message - Optional human-readable message (no PII).
+   */
+  trackError(code: string, message?: string): void {
+    this.track(buildErrorEvent(code, message));
+  }
+
+  /**
+   * Queue a copy event recording when a user copies a hash, address, or URL.
+   *
+   * @param field - What was copied, e.g. "tx_hash", "account_address", "url".
+   */
+  trackCopy(field: string): void {
+    this.track(buildCopyEvent(field));
   }
 
   /**

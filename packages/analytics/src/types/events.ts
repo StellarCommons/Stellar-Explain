@@ -14,6 +14,7 @@ export const EventName = [
   "tx.not_found",
   "error.api",
   "search.performed",
+  "result_view",
 ] as const;
 
 export type EventName = (typeof EventName)[number];
