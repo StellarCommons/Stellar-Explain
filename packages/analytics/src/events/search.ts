@@ -13,6 +13,8 @@ export function buildSearchEvent(
   identifier: string,
   responseTimeMs?: number,
 ): SearchEvent {
+ */
+export function buildSearchEvent(type: string, identifier: string): SearchEvent {
   return {
     id: crypto.randomUUID(),
     name: "search",
@@ -22,5 +24,6 @@ export function buildSearchEvent(
       identifier,
       ...(responseTimeMs !== undefined ? { responseTimeMs } : {}),
     },
+    properties: { type, identifier },
   };
 }

@@ -81,6 +81,27 @@ export interface ResultViewEvent {
 }
 
 // ---------------------------------------------------------------------------
+// ResultViewTrackEvent
+// ---------------------------------------------------------------------------
+
+export interface ResultViewTrackProperties {
+  /** "tx" | "account" — the kind of result page that was rendered */
+  type: "tx" | "account";
+  /** Whether the result page rendered successfully */
+  success: boolean;
+  [key: string]: unknown;
+}
+
+export interface ResultViewTrackEvent {
+  id: string;
+  name: "result_view";
+  timestamp: Date;
+  sessionId?: string;
+  userId?: string;
+  properties: ResultViewTrackProperties;
+}
+
+// ---------------------------------------------------------------------------
 // ErrorEvent
 // ---------------------------------------------------------------------------
 

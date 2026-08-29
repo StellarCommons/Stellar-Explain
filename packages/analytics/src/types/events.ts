@@ -14,8 +14,15 @@ export const EventName = [
   "tx.not_found",
   "error.api",
   "search.performed",
-  "time_on_page",
-  "scroll_depth",
+  "history_select",
+  "tab_switch",
+  "back_button",
+  "retry",
+  "qr_share",
+  "personal_mode_toggle",
+  "address_book_save",
+  "history_open",
+  "result_view",
 ] as const;
 
 export type EventName = (typeof EventName)[number];
