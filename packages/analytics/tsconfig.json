@@ -3,6 +3,8 @@
     "target": "ES2022",
     "module": "CommonJS",
     "jsx": "react-jsx",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
     "strict": true,
     "declaration": true,
     "outDir": "dist",

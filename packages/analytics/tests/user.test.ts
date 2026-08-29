@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { getUserId, newUserId, USER_ID_STORAGE_KEY } from "../src/user";
+import { OPT_OUT_STORAGE_KEY } from "../src/optout";
 
 const originalLocalStorage = (globalThis as { localStorage?: unknown }).localStorage;
 
@@ -12,6 +13,9 @@ function fakeLocalStorage(store: Record<string, string> = {}) {
     getItem: (key: string) => (key in store ? store[key] : null),
     setItem: (key: string, value: string) => {
       store[key] = value;
+    },
+    removeItem: (key: string) => {
+      delete store[key];
     },
   };
 }
@@ -50,6 +54,23 @@ describe("getUserId", () => {
         throw new Error("storage blocked");
       },
     });
+    expect(getUserId()).toBeUndefined();
+  });
+
+  it("clears an existing user ID and returns undefined when the user has opted out", () => {
+    const store: Record<string, string> = {
+      [USER_ID_STORAGE_KEY]: "user-42",
+      [OPT_OUT_STORAGE_KEY]: "1",
+    };
+    setLocalStorage(fakeLocalStorage(store));
+
+    expect(getUserId()).toBeUndefined();
+    expect(store[USER_ID_STORAGE_KEY]).toBeUndefined();
+  });
+
+  it("does not generate a new ID for an opted-out user with no prior ID", () => {
+    setLocalStorage(fakeLocalStorage({ [OPT_OUT_STORAGE_KEY]: "1" }));
+
     expect(getUserId()).toBeUndefined();
   });
 });
