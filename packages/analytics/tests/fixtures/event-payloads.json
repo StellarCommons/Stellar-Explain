@@ -1,0 +1,9 @@
+{
+  "click_event": {
+    "name": "click",
+    "properties": {
+      "elementId": "submit-btn",
+      "timestamp": 1234567890
+    }
+  }
+}
