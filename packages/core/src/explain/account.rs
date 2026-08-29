@@ -113,6 +113,7 @@ mod tests {
             asset_code: None,
             asset_issuer: None,
             balance: xlm.to_string(),
+            is_authorized: true,
         }];
         for i in 0..extra_assets {
             balances.push(Balance {
@@ -120,6 +121,7 @@ mod tests {
                 asset_code: Some(format!("ASSET{i}")),
                 asset_issuer: Some("GISSUER".to_string()),
                 balance: "10.0000000".to_string(),
+                is_authorized: true,
             });
         }
         Account {
@@ -135,6 +137,9 @@ mod tests {
                 auth_clawback_enabled: false,
             },
             home_domain: home_domain.map(|s| s.to_string()),
+            subentry_count: 0,
+            num_sponsoring: 0,
+            num_sponsored: 0,
         }
     }
 
@@ -214,6 +219,9 @@ mod tests {
                 auth_clawback_enabled: false,
             },
             home_domain: None,
+            subentry_count: 0,
+            num_sponsoring: 0,
+            num_sponsored: 0,
         };
         let explanation = explain_account(&account);
         assert_eq!(explanation.xlm_balance, "0");

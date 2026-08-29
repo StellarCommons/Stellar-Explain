@@ -99,19 +99,18 @@ pub fn explain_payment_with_fee(
 }
 
 fn format_asset(op: &PaymentOperation) -> String {
-    match op.asset_type.as_str() {
-        "native" => "XLM (native)".to_string(),
-        _ => {
-            if let Some(code) = &op.asset_code {
-                if let Some(issuer) = &op.asset_issuer {
-                    format!("{code} ({issuer})")
-                } else {
-                    code.clone()
-                }
-            } else {
-                "Unknown".to_string()
-            }
-        }
+    use crate::models::stellar::Asset;
+    match Asset::from_horizon_fields(
+        Some(op.asset_type.as_str()),
+        op.asset_code.as_deref(),
+        op.asset_issuer.as_deref(),
+    ) {
+        Some(asset) => asset.format(),
+        None => match (op.asset_code.as_deref(), op.asset_issuer.as_deref()) {
+            (Some(code), Some(issuer)) => format!("{code} ({issuer})"),
+            (Some(code), None) => code.to_string(),
+            _ => "Unknown".to_string(),
+        },
     }
 }
 

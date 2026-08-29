@@ -23,6 +23,10 @@ pub enum Operation {
     Clawback(ClawbackOperation),
     ClawbackClaimableBalance(ClawbackClaimableBalanceOperation),
     AccountMerge(AccountMergeOperation),
+    CreateClaimableBalance(CreateClaimableBalanceOperation),
+    ClaimClaimableBalance(ClaimClaimableBalanceOperation),
+    BeginSponsoringFutureReserves(BeginSponsoringFutureReservesOperation),
+    EndSponsoringFutureReserves(EndSponsoringFutureReservesOperation),
     Other(OtherOperation),
 }
 
@@ -155,6 +159,150 @@ pub struct AccountMergeOperation {
     pub destination: String,
 }
 
+/// A claimant's predicate — the condition under which a claimable balance can be claimed.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum ClaimPredicate {
+    /// Always satisfiable.
+    Unconditional,
+    /// Claimable only after this absolute time (ISO 8601).
+    AbsBefore(String),
+    /// Epoch seconds at which the claim becomes available (mirrors absBefore).
+    AbsBeforeEpoch(String),
+    /// Seconds after the ledger that created the balance.
+    RelBefore(String),
+    /// Logical AND of two sub-predicates.
+    And(Vec<ClaimPredicate>),
+    /// Logical OR of two sub-predicates.
+    Or(Vec<ClaimPredicate>),
+    /// Logical NOT of a sub-predicate.
+    Not(Box<ClaimPredicate>),
+    /// Unrecognized predicate shape — either malformed JSON or a future CAP-0033
+    /// variant not yet handled by this explainer. Carries the raw JSON for
+    /// debugging. Renderers should describe it as an opaque condition rather
+    /// than assuming the balance is freely claimable.
+    Unrecognized(String),
+}
+
+/// A claimant: the destination account and predicate for a claimable balance.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Claimant {
+    /// The account that may claim the balance.
+    pub destination: String,
+    /// The condition under which the destination may claim.
+    pub predicate: ClaimPredicate,
+}
+
+impl ClaimPredicate {
+    /// Build a `ClaimPredicate` from Horizon's nested JSON predicate shape.
+    ///
+    /// Horizon's `create_claimable_balance` response nests predicates as:
+    /// ```json
+    /// {
+    ///   "and": [
+    ///     { "relBefore": "12" },
+    ///     { "not": { "unconditional": true } }
+    ///   ]
+    /// }
+    /// ```
+    pub fn from_horizon_predicate(pred: serde_json::Value) -> Self {
+        if let Some(obj) = pred.as_object() {
+            if obj.get("unconditional") == Some(&serde_json::Value::Bool(true)) {
+                return ClaimPredicate::Unconditional;
+            }
+            if let Some(v) = obj.get("absBefore") {
+                return ClaimPredicate::AbsBefore(v.as_str().unwrap_or("").to_string());
+            }
+            if let Some(v) = obj.get("absBeforeEpoch") {
+                return ClaimPredicate::AbsBeforeEpoch(v.as_str().unwrap_or("").to_string());
+            }
+            if let Some(v) = obj.get("relBefore") {
+                return ClaimPredicate::RelBefore(v.as_str().unwrap_or("").to_string());
+            }
+            if let Some(arr) = obj.get("and").and_then(|a| a.as_array()) {
+                let predicates: Vec<ClaimPredicate> = arr
+                    .iter()
+                    .map(|p| ClaimPredicate::from_horizon_predicate(p.clone()))
+                    .collect();
+                return ClaimPredicate::And(predicates);
+            }
+            if let Some(arr) = obj.get("or").and_then(|a| a.as_array()) {
+                let predicates: Vec<ClaimPredicate> = arr
+                    .iter()
+                    .map(|p| ClaimPredicate::from_horizon_predicate(p.clone()))
+                    .collect();
+                return ClaimPredicate::Or(predicates);
+            }
+            if let Some(inner) = obj.get("not") {
+                return ClaimPredicate::Not(Box::new(ClaimPredicate::from_horizon_predicate(
+                    inner.clone(),
+                )));
+            }
+        }
+        ClaimPredicate::Unrecognized(pred.to_string())
+    }
+}
+
+/// Format a SEP-11 asset string ("native", "CODE:ISSUER") for display.
+///
+/// Converts to `"XLM (native)"` or `"CODE (ISSUER)"`.
+pub fn format_asset_string(asset: &str) -> String {
+    match asset {
+        "native" => "XLM (native)".to_string(),
+        s if s.contains(':') => {
+            let parts: Vec<&str> = s.splitn(2, ':').collect();
+            let code = parts[0];
+            let issuer = if parts.len() > 1 { parts[1] } else { "" };
+            format!("{code} ({issuer})")
+        }
+        other => other.to_string(),
+    }
+}
+
+/// A create_claimable_balance operation that escrows an asset until claimant predicates are met.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CreateClaimableBalanceOperation {
+    pub id: String,
+    pub source_account: Option<String>,
+    /// SEP-11 asset string: "native" for XLM, or "CODE:ISSUER" for credit assets.
+    pub asset: String,
+    /// The amount escrowed.
+    pub amount: String,
+    /// The list of accounts that may claim the balance and their conditions.
+    pub claimants: Vec<Claimant>,
+}
+
+/// A claim_claimable_balance operation that claims a previously created claimable balance.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ClaimClaimableBalanceOperation {
+    pub id: String,
+    pub source_account: Option<String>,
+    /// The balance ID of the claimable balance being claimed.
+    pub balance_id: String,
+    /// The account claiming the balance.
+    pub claimant: String,
+}
+
+/// A begin_sponsoring_future_reserves operation that initiates a sponsorship.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct BeginSponsoringFutureReservesOperation {
+    pub id: String,
+    /// The sponsoring account (the source account of this operation).
+    pub source_account: Option<String>,
+    /// The account whose future reserves will be sponsored.
+    pub sponsored_id: String,
+}
+
+/// An end_sponsoring_future_reserves operation that terminates a sponsorship.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EndSponsoringFutureReservesOperation {
+    pub id: String,
+    /// The sponsored account (the source account of this operation).
+    pub source_account: Option<String>,
+    /// The account that initiated the sponsorship.
+    pub begin_sponsor: String,
+}
+
 /// Placeholder for operation types we do not yet explain.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct OtherOperation {
@@ -182,11 +330,16 @@ impl Operation {
             Operation::Clawback(c) => &c.id,
             Operation::ClawbackClaimableBalance(c) => &c.id,
             Operation::AccountMerge(a) => &a.id,
+            Operation::CreateClaimableBalance(c) => &c.id,
+            Operation::ClaimClaimableBalance(c) => &c.id,
+            Operation::BeginSponsoringFutureReserves(b) => &b.id,
+            Operation::EndSponsoringFutureReserves(e) => &e.id,
             Operation::Other(o) => &o.id,
         }
     }
 }
 
+use crate::models::stellar::Asset;
 use crate::services::horizon::HorizonOperation;
 
 /// Format an asset from Horizon's separate code/issuer/type fields into
@@ -196,9 +349,9 @@ fn format_asset(
     asset_code: Option<&str>,
     asset_issuer: Option<&str>,
 ) -> String {
-    match asset_type {
-        Some("native") | None => "XLM (native)".to_string(),
-        _ => match (asset_code, asset_issuer) {
+    match Asset::from_horizon_fields(asset_type, asset_code, asset_issuer) {
+        Some(asset) => asset.format(),
+        None => match (asset_code, asset_issuer) {
             (Some(code), Some(issuer)) => format!("{code} ({issuer})"),
             (Some(code), None) => code.to_string(),
             _ => "Unknown".to_string(),
@@ -364,6 +517,48 @@ impl From<HorizonOperation> for Operation {
                     .unwrap_or_else(|| "Unknown".to_string()),
                 destination: op.into.unwrap_or_default(),
             }),
+            "create_claimable_balance" => {
+                // Horizon sends `asset` as a single SEP-11 string: "native" or "CODE:ISSUER".
+                let asset = op.asset.unwrap_or_else(|| "Unknown".to_string());
+                let claimants = op
+                    .claimants
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|c| Claimant {
+                        destination: c.destination,
+                        predicate: ClaimPredicate::from_horizon_predicate(c.predicate),
+                    })
+                    .collect();
+                Operation::CreateClaimableBalance(CreateClaimableBalanceOperation {
+                    id: op.id,
+                    source_account: op.source_account,
+                    asset,
+                    amount: op.amount.unwrap_or_else(|| "0".to_string()),
+                    claimants,
+                })
+            }
+            "claim_claimable_balance" => {
+                Operation::ClaimClaimableBalance(ClaimClaimableBalanceOperation {
+                    id: op.id,
+                    source_account: op.source_account,
+                    balance_id: op.balance_id.unwrap_or_default(),
+                    claimant: op.claimant.unwrap_or_default(),
+                })
+            }
+            "begin_sponsoring_future_reserves" => {
+                Operation::BeginSponsoringFutureReserves(BeginSponsoringFutureReservesOperation {
+                    id: op.id,
+                    source_account: op.source_account,
+                    sponsored_id: op.sponsored_id.unwrap_or_default(),
+                })
+            }
+            "end_sponsoring_future_reserves" => {
+                Operation::EndSponsoringFutureReserves(EndSponsoringFutureReservesOperation {
+                    id: op.id,
+                    source_account: op.source_account,
+                    begin_sponsor: op.begin_sponsor.unwrap_or_default(),
+                })
+            }
             _ => Operation::Other(OtherOperation {
                 id: op.id,
                 operation_type: op.operation_type,

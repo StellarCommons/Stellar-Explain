@@ -1,0 +1,25 @@
+{
+  "address": "GAAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQDZ7H",
+  "transactions": [
+    {
+      "transaction_hash": "tx_hash_001",
+      "successful": true,
+      "summary": "Successful transaction with 1 operation.",
+      "ledger_closed_at": "2024-06-15T10:30:00Z",
+      "ledger": 49823145,
+      "operation_count": 1,
+      "fee_explanation": "A fee of 0.0000100 XLM was charged. This is a standard network fee."
+    },
+    {
+      "transaction_hash": "tx_hash_002",
+      "successful": false,
+      "summary": "Failed transaction with 2 operations.",
+      "ledger_closed_at": "2024-06-14T08:15:00Z",
+      "ledger": 49823000,
+      "operation_count": 2,
+      "fee_explanation": "A fee of 0.0000100 XLM was charged. This is a standard network fee."
+    }
+  ],
+  "next_cursor": "157639564177408001",
+  "has_more": true
+}

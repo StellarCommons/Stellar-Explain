@@ -51,6 +51,10 @@ pub struct HorizonAccountTransaction {
     pub operation_count: u32,
     pub memo_type: Option<String>,
     pub memo: Option<String>,
+    /// Ledger sequence number this transaction was included in.
+    pub ledger: Option<u64>,
+    /// Fee charged in stroops (as a decimal string from Horizon).
+    pub fee_charged: Option<String>,
 }
 
 /// Raw Horizon account response shape.
@@ -67,6 +71,15 @@ struct HorizonAccount {
     /// Horizon sends "" when not set, never null or absent
     #[serde(default)]
     pub home_domain: String,
+    /// Number of subentries (offers, trustlines, signers, etc.)
+    #[serde(default)]
+    pub subentry_count: u32,
+    /// Number of entries sponsored by other accounts
+    #[serde(default)]
+    pub num_sponsoring: u32,
+    /// Number of entries this account sponsors for others
+    #[serde(default)]
+    pub num_sponsored: u32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -77,6 +90,9 @@ struct HorizonBalance {
     #[serde(default)]
     pub asset_issuer: Option<String>,
     pub balance: String,
+    /// Whether this trustline is authorised by the asset issuer.
+    #[serde(default)]
+    pub is_authorized: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -107,6 +123,7 @@ impl HorizonAccount {
                 asset_code: b.asset_code,
                 asset_issuer: b.asset_issuer,
                 balance: b.balance,
+                is_authorized: b.is_authorized,
             })
             .collect();
 
@@ -130,6 +147,9 @@ impl HorizonAccount {
             } else {
                 Some(self.home_domain)
             },
+            subentry_count: self.subentry_count,
+            num_sponsoring: self.num_sponsoring,
+            num_sponsored: self.num_sponsored,
         }
     }
 }
@@ -245,6 +265,20 @@ impl HorizonClient {
         let p90_fee = raw.fee_charged.p90.parse::<u64>().unwrap_or(base_fee);
 
         Some(FeeStats::new(base_fee, min_fee, max_fee, mode_fee, p90_fee))
+    }
+
+    /// Fetch the base reserve in stroops from the most recent ledger.
+    /// Returns `None` if the request fails — callers degrade gracefully,
+    /// consistent with `fetch_fee_stats`'s pattern.
+    pub async fn fetch_ledger_base_reserve(&self) -> Option<u64> {
+        let url = format!("{}/ledgers?order=desc&limit=1", self.base_url);
+        let res = self.client.get(url).send().await.ok()?;
+        if res.status().as_u16() != 200 {
+            return None;
+        }
+        let wrapper: HorizonLedgersResponse = res.json().await.ok()?;
+        let ledger = wrapper._embedded.records.first()?;
+        ledger.base_reserve_in_stroops.parse::<u64>().ok()
     }
 
     /// Check whether Horizon is reachable by hitting the root endpoint.
@@ -401,6 +435,22 @@ pub struct HorizonOperation {
     pub balance_id: Option<String>,
     // Account merge fields
     pub into: Option<String>,
+    // Create claimable balance fields
+    pub asset: Option<String>,
+    pub claimants: Option<Vec<HorizonClaimant>>,
+    // Claim claimable balance fields
+    pub claimant: Option<String>,
+    // Sponsorship fields
+    pub sponsored_id: Option<String>,
+    pub begin_sponsor: Option<String>,
+}
+
+/// A claimant within a `create_claimable_balance` Horizon response.
+#[derive(Debug, Deserialize, Clone)]
+pub struct HorizonClaimant {
+    pub destination: String,
+    /// Nested predicate object — handled as generic JSON since structure is recursive.
+    pub predicate: serde_json::Value,
 }
 
 #[derive(Debug, Deserialize)]
@@ -425,6 +475,21 @@ struct HorizonFeeDistribution {
     max: String,
     mode: String,
     p90: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct HorizonLedgersResponse {
+    _embedded: HorizonEmbeddedLedgers,
+}
+
+#[derive(Debug, Deserialize)]
+struct HorizonEmbeddedLedgers {
+    records: Vec<HorizonLedger>,
+}
+
+#[derive(Debug, Deserialize)]
+struct HorizonLedger {
+    base_reserve_in_stroops: String,
 }
 
 #[derive(Debug, Deserialize)]

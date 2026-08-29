@@ -1,0 +1,68 @@
+{
+  "transaction_hash": "bbbbb222cccc3333dddd4444eeee5555ffff6666aaaa7777bbbb8888cccc9999dddd",
+  "successful": true,
+  "summary": "This successful transaction contains 2 payments and 1 other operation were skipped. This transaction was confirmed on 2024-06-20 at 09:00 UTC (ledger #51234567).",
+  "operations": [
+    {
+      "index": 0,
+      "type": "payment",
+      "summary": "Sent 25.0000000 USDC to GRECIPAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.",
+      "details": {
+        "from": "GSENDERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "to": "GRECIPAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "amount": "25.0000000",
+        "asset": "USDC (GAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA)"
+      }
+    },
+    {
+      "index": 1,
+      "type": "payment",
+      "summary": "Sent 100.0000000 XLM to GDESTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.",
+      "details": {
+        "from": "GSENDERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "to": "GDESTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "amount": "100.0000000",
+        "asset": "XLM (native)"
+      }
+    },
+    {
+      "index": 2,
+      "type": "manage_sell_offer",
+      "summary": "GUNKNOWNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA placed a sell offer.",
+      "details": {
+        "account": "GUNKNOWNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "selling_asset": "XLM (native)",
+        "buying_asset": "USDC (GAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA)",
+        "amount": "500.0000000",
+        "price": "0.1200000",
+        "offer_id": null,
+        "action": "created"
+      }
+    }
+  ],
+  "payment_explanations": [
+    {
+      "summary": "Sent 25.0000000 USDC to GRECIPAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.",
+      "from": "GSENDERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "to": "GRECIPAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "amount": "25.0000000",
+      "asset": "USDC (GAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA)",
+      "fee_note": null
+    },
+    {
+      "summary": "Sent 100.0000000 XLM to GDESTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.",
+      "from": "GSENDERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "to": "GDESTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "amount": "100.0000000",
+      "asset": "XLM (native)",
+      "fee_note": null
+    }
+  ],
+  "skipped_operations": 1,
+  "memo_explanation": "Identifies this as Invoice #2026 for accounting purposes.",
+  "fee_explanation": "A fee of 0.0000300 XLM was charged. This is a standard network fee.",
+  "ledger_closed_at": "2024-06-20T09:00:00Z",
+  "ledger": 51234567,
+  "failure_reason": null,
+  "operation_failures": []
+}

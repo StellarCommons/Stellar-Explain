@@ -77,7 +77,9 @@ mod tests {
                             "created_at": "2024-01-01T00:00:00Z",
                             "source_account": "GABC",
                             "operation_count": 1,
-                            "memo_type": "none"
+                            "memo_type": "none",
+                            "ledger": 12345,
+                            "fee_charged": "100"
                         }
                     ]
                 }

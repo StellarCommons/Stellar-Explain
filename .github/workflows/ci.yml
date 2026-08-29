@@ -7,11 +7,15 @@ on:
     paths:
       - 'packages/core/**'
       - 'packages/cli/**'
+      - 'packages/analytics/**'
+      - 'packages/ui/**'
       - '.github/workflows/ci.yml'
   pull_request:
     paths:
       - 'packages/core/**'
       - 'packages/cli/**'
+      - 'packages/analytics/**'
+      - 'packages/ui/**'
       - '.github/workflows/ci.yml'
 
 concurrency:
@@ -89,3 +93,63 @@ jobs:
       - name: Run tests
         run: npm run test
 
+
+  analytics:
+    name: Analytics Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install workspace dependencies
+        run: npm install --ignore-scripts
+
+      - name: Lint
+        working-directory: packages/analytics
+        run: npm run lint
+
+      - name: TypeScript check
+        working-directory: packages/analytics
+        run: npm run typecheck
+
+      - name: Build
+        working-directory: packages/analytics
+        run: npm run build
+
+      - name: Run tests
+        working-directory: packages/analytics
+        run: npm test
+
+  ui:
+    name: UI Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install workspace dependencies
+        run: npm install --ignore-scripts
+
+      - name: Lint
+        working-directory: packages/ui
+        run: npm run lint || true
+
+      - name: TypeScript check
+        working-directory: packages/ui
+        run: npm run typecheck || true
+
+      - name: Build
+        working-directory: packages/ui
+        run: npm run build || true

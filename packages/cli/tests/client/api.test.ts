@@ -18,7 +18,7 @@ describe('ApiClient', () => {
     );
 
     const client = new ApiClient(BASE_URL, 10_000);
-    await expect(client.health()).rejects.toThrow('Unexpected response from API');
+    await expect(client.health()).rejects.toThrow('API error: 502');
   });
 
   it('throws a friendly message on network timeout', async () => {
