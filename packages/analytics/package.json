@@ -1,7 +1,7 @@
 {
   "name": "@stellar-explain/analytics",
   "version": "0.1.0",
-  "description": "Anonymous usage analytics pipeline for Stellar Explain — event emitter, sinks, and payload helpers",
+  "description": "Anonymous usage analytics pipeline for Stellar Explain \u2014 event emitter, sinks, and payload helpers",
   "private": true,
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -40,5 +40,11 @@
     "typescript": "^5.5.0",
     "typescript-eslint": "^8.0.0",
     "vitest": "^2.0.0"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
   }
 }
