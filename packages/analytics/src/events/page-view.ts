@@ -1,4 +1,4 @@
-import { PageViewEvent } from "../../types";
+import { PageViewEvent } from "../types";
 
 export interface BuildPageViewOptions {
   /** Optional document title attached to the event. */
