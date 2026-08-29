@@ -1,38 +1,35 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
+import { EventName } from "../src/types/events";
+import { buildRetryEvent } from "../src/events/retry";
+import { AnalyticsClient } from "../src/client";
 
-async function withRetry<T>(fn: () => Promise<T>, attempts: number, baseDelayMs: number): Promise<T> {
-  let lastError: unknown;
-  for (let attempt = 0; attempt < attempts; attempt++) {
-    try {
-      return await fn();
-    } catch (err) {
-      lastError = err;
-      if (attempt < attempts - 1) {
-        await new Promise((resolve) => setTimeout(resolve, baseDelayMs * 2 ** attempt));
-      }
-    }
-  }
-  throw lastError;
-}
+describe("buildRetryEvent", () => {
+  it("builds a retry event with the retried type and error code", () => {
+    const event = buildRetryEvent("tx", "API_TIMEOUT");
 
-describe("withRetry", () => {
-  it("retries the correct number of times with exponential delays", async () => {
-    vi.useFakeTimers();
-    const fn = vi.fn().mockRejectedValue(new Error("fail"));
-
-    const promise = withRetry(fn, 3, 100).catch((err) => err);
-    await vi.advanceTimersByTimeAsync(100);
-    await vi.advanceTimersByTimeAsync(200);
-    const error = await promise;
-
-    expect(fn).toHaveBeenCalledTimes(3);
-    expect(error).toBeInstanceOf(Error);
-    vi.useRealTimers();
+    expect(event.name).toBe("retry");
+    expect(event.properties).toEqual({ type: "tx", errorCode: "API_TIMEOUT" });
+    expect(event.timestamp).toBeInstanceOf(Date);
   });
+});
 
-  it("returns the result immediately when the first attempt succeeds", async () => {
-    const fn = vi.fn().mockResolvedValue("ok");
-    await expect(withRetry(fn, 3, 100)).resolves.toBe("ok");
-    expect(fn).toHaveBeenCalledTimes(1);
+describe("AnalyticsClient.trackRetry", () => {
+  it("queues a retry event for delivery", async () => {
+    const flushed: unknown[] = [];
+    const client = new AnalyticsClient({ onFlush: (batch) => void flushed.push(...batch) });
+
+    client.trackRetry("search", "TX_NOT_FOUND");
+
+    await client.flush();
+    const event = flushed[0] as { name?: string; properties?: Record<string, unknown> };
+    expect(event.name).toBe("retry");
+    expect(event.properties).toEqual({ type: "search", errorCode: "TX_NOT_FOUND" });
+    client.destroy();
+  });
+});
+
+describe("EventName registry", () => {
+  it("registers the retry event name", () => {
+    expect(EventName).toContain("retry");
   });
 });

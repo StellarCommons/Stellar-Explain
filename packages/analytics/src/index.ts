@@ -15,6 +15,16 @@ export {
 } from "./optout";
 export { shouldSample } from "./sampling";
 
+// Event builders (Analytics #17-#20)
+export { buildHistorySelectEvent } from "./events/history";
+export type { HistorySelectEvent, HistorySelectProperties } from "./events/history";
+export { buildTabSwitchEvent } from "./events/tab-switch";
+export type { TabSwitchEvent, TabSwitchProperties } from "./events/tab-switch";
+export { buildBackButtonEvent } from "./events/navigation";
+export type { BackButtonEvent, BackButtonProperties } from "./events/navigation";
+export { buildRetryEvent } from "./events/retry";
+export type { RetryEvent, RetryProperties } from "./events/retry";
+
 // Typed event shapes (PageViewEvent, SearchEvent, etc.)
 export type {
   PageViewEvent,
