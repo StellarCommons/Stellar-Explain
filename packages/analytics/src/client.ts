@@ -27,6 +27,7 @@ import { getUserId } from "./user";
 
 import { validateOrDrop } from "./validate";
 import { resolveEndpoint } from "./config";
+import { AnalyticsPlugin, runBeforeTrack, runAfterTrack } from "./plugins";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -114,6 +115,20 @@ export interface AnalyticsClientConfig {
    * falling back to a synchronous POST when `sendBeacon` is unavailable.
    */
   flushOnUnload?: boolean;
+
+  /**
+   * Key-value pairs merged into every event's `properties`, e.g. build
+   * version or feature-flag state. An event's own properties take
+   * precedence when a key collides.
+   */
+  globalProperties?: Record<string, unknown>;
+
+  /**
+   * Plugins that observe or transform events as they pass through
+   * `track()`. Run in array order; a plugin whose hook throws is skipped
+   * (with a console warning) rather than blocking the others.
+   */
+  plugins?: AnalyticsPlugin[];
 }
 
 // ---------------------------------------------------------------------------
@@ -204,24 +219,35 @@ export class AnalyticsClient {
       return;
     }
 
+    // Issue #936 — plugins: let each beforeTrack hook observe/transform the
+    // event ahead of sampling and enrichment.
+    const plugins = this.config.plugins ?? [];
+    const beforePlugins = runBeforeTrack(plugins, base);
+
     if (this.config.sampleRate !== undefined && !shouldSample(this.config.sampleRate)) {
       return;
     }
 
     // Issue #931 — debug mode: log every accepted event to the console
     if (this.config.debug) {
-      console.debug("[analytics] tracking event:", base.name, base);
+      console.debug("[analytics] tracking event:", beforePlugins.name, beforePlugins);
     }
 
     // Issue #932 — dry-run mode: process but never enqueue/send
     if (this.config.dryRun) {
       if (this.config.debug) {
-        console.debug("[analytics] dry-run: event not enqueued", base.name);
+        console.debug("[analytics] dry-run: event not enqueued", beforePlugins.name);
       }
       return;
     }
 
-    this.queue.enqueue(this._attachIdentity(this._attachEnvironment(base)));
+    const enriched = this._attachIdentity(
+      this._attachEnvironment(this._attachGlobalProperties(beforePlugins)),
+    );
+    this.queue.enqueue(enriched);
+
+    // Issue #936 — plugins: afterTrack observes the final, enriched event.
+    if (plugins.length > 0) runAfterTrack(plugins, enriched);
   }
 
   /**
@@ -542,6 +568,26 @@ export class AnalyticsClient {
   }
 
   /**
+   * Merges `config.globalProperties` into the event's `properties`. The
+   * event's own properties win on key collisions, so a call-site value is
+   * never silently overridden by a global default.
+   */
+  private _attachGlobalProperties(event: AnalyticsEvent): AnalyticsEvent {
+    const globalProperties = this.config.globalProperties;
+    if (!globalProperties || Object.keys(globalProperties).length === 0) {
+      return event;
+    }
+
+    return {
+      ...event,
+      properties: {
+        ...globalProperties,
+        ...event.properties,
+      },
+    };
+  }
+
+  /**
    * Registers a `pagehide` listener that drains any still-queued events via
    * `navigator.sendBeacon` (with a synchronous POST fallback) so nothing is
    * lost when the user leaves the page. Returns `undefined` when the browser
@@ -579,11 +625,16 @@ export class AnalyticsClient {
     }
 
     // sendBeacon unavailable — best-effort synchronous POST so the browser
-    // doesn't drop the request while tearing down the page.
+    // doesn't drop the request while tearing down the page. Unlike
+    // sendBeacon (which can only carry a Content-Type via the Blob), XHR
+    // can set arbitrary headers, so config.headers (e.g. an auth token) is
+    // applied here too rather than just Content-Type.
     try {
       const request = new XMLHttpRequest();
       request.open("POST", endpoint, false);
-      request.setRequestHeader("Content-Type", headers["Content-Type"]);
+      for (const [key, value] of Object.entries(headers)) {
+        request.setRequestHeader(key, value);
+      }
       request.send(payload);
     } catch (err) {
       console.error("[analytics] unload flush failed:", err);
