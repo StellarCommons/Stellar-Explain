@@ -8,6 +8,9 @@ import { buildSearchEvent } from "./events/search";
 import { buildResultViewEvent } from "./events/result-view";
 import { buildErrorEvent } from "./events/error";
 import { buildCopyEvent } from "./events/copy";
+import { getSessionId } from "./session";
+import { getUserId } from "./user";
+import { buildPageViewEvent } from "./events/page-view";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -59,6 +62,21 @@ export interface AnalyticsClientConfig {
    * pages. Out-of-range values are clamped.
    */
   sampleRate?: number;
+
+  /**
+   * When `true` (default), `track()` is called automatically whenever the
+   * browser fires `popstate` or `hashchange` (i.e. the user navigates back/
+   * forward or changes the hash). Set to `false` to call `trackPageView`
+   * from your own router instead.
+   */
+  autoTrackPageViews?: boolean;
+
+  /**
+   * When `true` (default) and an `endpoint` is configured, any events still
+   * queued when the page unloads are flushed via `navigator.sendBeacon`,
+   * falling back to a synchronous POST when `sendBeacon` is unavailable.
+   */
+  flushOnUnload?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -93,10 +111,24 @@ export class AnalyticsClient {
   private readonly queue: EventQueue;
   private readonly optedOut: boolean;
 
+  /** Persistent anonymous user ID resolved once at construction time. */
+  private readonly userId: string | undefined;
+
+  /** Per-session ID resolved once at construction time. */
+  private readonly sessionId: string | undefined;
+
+  private readonly onPageHide: (() => void) | undefined;
+  private readonly onRouteChange: (() => void) | undefined;
+
   constructor(config: AnalyticsClientConfig = {}) {
     this.config = config;
     this.queue = new EventQueue(this._buildFlushCallback());
     this.optedOut = this._checkOptOut();
+    this.userId = getUserId();
+    this.sessionId = getSessionId();
+
+    this.onPageHide = this._bindUnloadFlush();
+    this.onRouteChange = this._bindPageViewTracking();
   }
 
   // -------------------------------------------------------------------------
@@ -124,7 +156,18 @@ export class AnalyticsClient {
       return;
     }
 
-    this.queue.enqueue(this._attachConnectionType(base));
+    this.queue.enqueue(this._attachIdentity(this._attachConnectionType(base)));
+  }
+
+  /**
+   * Queue a `page_view` event for the current route.
+   *
+   * When `path` is omitted the current `window.location.pathname` is used.
+   * Call this from your router on every navigation, or rely on the automatic
+   * `autoTrackPageViews` binding when the app uses back/forward/hash routing.
+   */
+  trackPageView(path?: string): void {
+    this.track(buildPageViewEvent(path ?? currentPath(), { title: documentTitle() }));
   }
 
   /**
@@ -189,6 +232,13 @@ export class AnalyticsClient {
    */
   destroy(): void {
     this.queue.destroy();
+    if (typeof window === "undefined") return;
+
+    if (this.onPageHide) window.removeEventListener("pagehide", this.onPageHide);
+    if (this.onRouteChange) {
+      window.removeEventListener("popstate", this.onRouteChange);
+      window.removeEventListener("hashchange", this.onRouteChange);
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -213,6 +263,89 @@ export class AnalyticsClient {
         connectionType,
       },
     };
+  }
+
+  /**
+   * Attaches the anonymous user ID and per-session ID to an event when they
+   * could be resolved at construction time. An event-provided `sessionId`/
+   * `userId` always wins, and events are returned unchanged when neither
+   * identity could be resolved (Node/SSR, or storage unavailable).
+   */
+  private _attachIdentity(event: AnalyticsEvent): AnalyticsEvent {
+    const next: AnalyticsEvent = { ...event };
+
+    if (next.sessionId === undefined && this.sessionId !== undefined) {
+      next.sessionId = this.sessionId;
+    }
+    if (next.userId === undefined && this.userId !== undefined) {
+      next.userId = this.userId;
+    }
+
+    return next;
+  }
+
+  /**
+   * Registers a `pagehide` listener that drains any still-queued events via
+   * `navigator.sendBeacon` (with a synchronous POST fallback) so nothing is
+   * lost when the user leaves the page. Returns `undefined` when the browser
+   * plumbing or an endpoint is unavailable.
+   */
+  private _bindUnloadFlush(): (() => void) | undefined {
+    if (this.config.flushOnUnload === false) return undefined;
+    if (!this.config.endpoint) return undefined;
+    if (typeof window === "undefined") return undefined;
+
+    const handler = (): void => this._flushOnUnload();
+    window.addEventListener("pagehide", handler);
+    return handler;
+  }
+
+  private _flushOnUnload(): void {
+    const endpoint = this.config.endpoint;
+    if (!endpoint) return;
+
+    const pending = this.queue.takePending();
+    if (pending.length === 0) return;
+
+    const payload = JSON.stringify(pending);
+    const headers = {
+      "Content-Type": "application/json",
+      ...this.config.headers,
+    };
+
+    if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
+      navigator.sendBeacon(
+        endpoint,
+        new Blob([payload], { type: headers["Content-Type"] }),
+      );
+      return;
+    }
+
+    // sendBeacon unavailable — best-effort synchronous POST so the browser
+    // doesn't drop the request while tearing down the page.
+    try {
+      const request = new XMLHttpRequest();
+      request.open("POST", endpoint, false);
+      request.setRequestHeader("Content-Type", headers["Content-Type"]);
+      request.send(payload);
+    } catch (err) {
+      console.error("[analytics] unload flush failed:", err);
+    }
+  }
+
+  /**
+   * Registers `popstate`/`hashchange` listeners that track a page view on
+   * route changes, honoring the `autoTrackPageViews` flag. Returns
+   * `undefined` when not in a browser environment.
+   */
+  private _bindPageViewTracking(): (() => void) | undefined {
+    if (this.config.autoTrackPageViews === false) return undefined;
+    if (typeof window === "undefined") return undefined;
+
+    const handler = (): void => this.trackPageView();
+    window.addEventListener("popstate", handler);
+    window.addEventListener("hashchange", handler);
+    return handler;
   }
 
   /**
@@ -275,4 +408,18 @@ export class AnalyticsClient {
       }
     };
   }
+}
+
+/** Returns the current URL path, defaulting to "/" outside the browser. */
+function currentPath(): string {
+  if (typeof window === "undefined" || typeof window.location === "undefined") {
+    return "/";
+  }
+  return window.location.pathname;
+}
+
+/** Returns the document title, or `undefined` outside the browser. */
+function documentTitle(): string | undefined {
+  if (typeof document === "undefined") return undefined;
+  return document.title;
 }

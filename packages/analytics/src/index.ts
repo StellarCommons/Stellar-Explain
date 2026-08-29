@@ -14,6 +14,10 @@ export {
   isOptedOutViaDoNotTrack,
 } from "./optout";
 export { shouldSample } from "./sampling";
+export { getSessionId, newSessionId, SESSION_ID_STORAGE_KEY } from "./session";
+export { getUserId, newUserId, USER_ID_STORAGE_KEY } from "./user";
+export { buildPageViewEvent } from "./events/page-view";
+export type { BuildPageViewOptions } from "./events/page-view";
 
 // Typed event shapes (PageViewEvent, SearchEvent, etc.)
 export type {
