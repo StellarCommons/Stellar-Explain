@@ -1,6 +1,7 @@
 export interface QRShareProperties {
   /** What the QR code represents, e.g. "address", "tx", "url". */
   type: string;
+  [key: string]: unknown;
 }
 
 export interface QRShareEvent {

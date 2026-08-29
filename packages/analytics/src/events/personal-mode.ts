@@ -1,6 +1,7 @@
 export interface PersonalModeToggleProperties {
   /** Whether personal mode was enabled (`true`) or disabled (`false`). */
   enabled: boolean;
+  [key: string]: unknown;
 }
 
 export interface PersonalModeToggleEvent {

@@ -1,6 +1,7 @@
 export interface HistoryOpenProperties {
   /** Page path where the history panel was opened, when known. */
   path?: string;
+  [key: string]: unknown;
 }
 
 export interface HistoryOpenEvent {

@@ -1,6 +1,7 @@
 export interface AddressBookSaveProperties {
   /** Page path where the address was saved, when known. */
   path?: string;
+  [key: string]: unknown;
 }
 
 export interface AddressBookSaveEvent {
