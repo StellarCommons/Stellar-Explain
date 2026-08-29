@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { getDeviceType } from "../src/device";
+import { getDeviceType, MOBILE_BREAKPOINT_PX, TABLET_BREAKPOINT_PX } from "../src/device";
 
 const originalWindow = (globalThis as { window?: unknown }).window;
 
@@ -12,23 +12,28 @@ afterEach(() => {
 });
 
 describe("getDeviceType", () => {
-  it("returns undefined outside a browser", () => {
+  it("returns undefined when window is unavailable", () => {
     setWindow(undefined);
     expect(getDeviceType()).toBeUndefined();
   });
 
-  it("detects mobile below 768px", () => {
-    setWindow({ innerWidth: 375 });
+  it("returns 'mobile' for a mobile viewport width", () => {
+    setWindow({ innerWidth: MOBILE_BREAKPOINT_PX - 1 });
     expect(getDeviceType()).toBe("mobile");
   });
 
-  it("detects tablet between 768px and 1023px", () => {
-    setWindow({ innerWidth: 768 });
+  it("returns 'tablet' for a tablet viewport width", () => {
+    setWindow({ innerWidth: MOBILE_BREAKPOINT_PX + 1 });
     expect(getDeviceType()).toBe("tablet");
   });
 
-  it("detects desktop at 1024px and above", () => {
-    setWindow({ innerWidth: 1024 });
+  it("returns 'desktop' for a desktop viewport width", () => {
+    setWindow({ innerWidth: TABLET_BREAKPOINT_PX + 1 });
     expect(getDeviceType()).toBe("desktop");
+  });
+
+  it("returns undefined when innerWidth is not a number", () => {
+    setWindow({ innerWidth: "wide" });
+    expect(getDeviceType()).toBeUndefined();
   });
 });
