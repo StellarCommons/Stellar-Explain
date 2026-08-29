@@ -33,12 +33,16 @@ export interface PageViewEvent {
 // ---------------------------------------------------------------------------
 
 export interface SearchProperties {
-  /** The raw query string the user typed */
-  query: string;
+  /** The type of resource that was looked up, e.g. "tx" or "account" */
+  type: string;
+  /** The transaction hash or account address that was looked up */
+  identifier: string;
   /** Number of results returned, if known */
   resultCount?: number;
   /** Where the search originated, e.g. "header", "landing" */
   source?: string;
+  /** The raw query string the user typed, when applicable */
+  query?: string;
 }
 
 export interface SearchEvent {
@@ -70,6 +74,27 @@ export interface ResultViewEvent {
   sessionId?: string;
   userId?: string;
   properties: ResultViewProperties;
+}
+
+// ---------------------------------------------------------------------------
+// ResultViewTrackEvent
+// ---------------------------------------------------------------------------
+
+export interface ResultViewTrackProperties {
+  /** "tx" | "account" — the kind of result page that was rendered */
+  type: "tx" | "account";
+  /** Whether the result page rendered successfully */
+  success: boolean;
+  [key: string]: unknown;
+}
+
+export interface ResultViewTrackEvent {
+  id: string;
+  name: "result_view";
+  timestamp: Date;
+  sessionId?: string;
+  userId?: string;
+  properties: ResultViewTrackProperties;
 }
 
 // ---------------------------------------------------------------------------

@@ -14,6 +14,26 @@ export {
   isOptedOutViaDoNotTrack,
 } from "./optout";
 export { shouldSample } from "./sampling";
+export { getDeviceType } from "./device";
+export type { DeviceType } from "./device";
+export { getBrowser } from "./browser";
+export { getOS } from "./os";
+export { buildPageViewEvent } from "./events/page-view";
+export type { BuildPageViewOptions } from "./events/page-view";
+export { getSessionId, newSessionId, SESSION_ID_STORAGE_KEY } from "./session";
+export { getUserId, newUserId, USER_ID_STORAGE_KEY } from "./user";
+export { buildPageViewEvent } from "./events/page-view";
+export type { BuildPageViewOptions } from "./events/page-view";
+
+// Event builders (Analytics #13-#16)
+export { buildQRShareEvent } from "./events/qr-share";
+export type { QRShareEvent, QRShareProperties } from "./events/qr-share";
+export { buildPersonalModeToggleEvent } from "./events/personal-mode";
+export type { PersonalModeToggleEvent, PersonalModeToggleProperties } from "./events/personal-mode";
+export { buildAddressBookSaveEvent } from "./events/address-book";
+export type { AddressBookSaveEvent, AddressBookSaveProperties } from "./events/address-book";
+export { buildHistoryOpenEvent } from "./events/history";
+export type { HistoryOpenEvent, HistoryOpenProperties } from "./events/history";
 
 // Event builders (Analytics #17-#20)
 export { buildHistorySelectEvent } from "./events/history";
@@ -33,12 +53,21 @@ export type {
   SearchProperties,
   ResultViewEvent,
   ResultViewProperties,
+  ResultViewTrackEvent,
+  ResultViewTrackProperties,
   ErrorEvent,
   ErrorProperties,
   CopyEvent,
   CopyProperties,
   StellarAnalyticsEvent,
 } from "./types";
+
+// Event builders (Analytics #9-#12)
+export { buildSearchEvent } from "./events/search";
+export { buildResultViewEvent } from "./events/result-view";
+export { buildErrorEvent } from "./events/error";
+export { buildCopyEvent } from "./events/copy";
+export type { BuildCopyOptions } from "./events/copy";
 
 // AnalyticsClient — high-level batching client
 export { AnalyticsClient } from "./client";

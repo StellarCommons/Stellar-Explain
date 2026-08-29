@@ -66,6 +66,17 @@ export class EventQueue {
     }
   }
 
+  /**
+   * Synchronously remove and return every queued event without invoking the
+   * flush callback.
+   *
+   * Used for best-effort delivery during page unload, where async work is
+   * not guaranteed to complete before the page is torn down.
+   */
+  takePending(): AnalyticsEvent[] {
+    return this.items.splice(0, this.items.length);
+  }
+
   /** Number of events currently held in the queue. */
   size(): number {
     return this.items.length;
