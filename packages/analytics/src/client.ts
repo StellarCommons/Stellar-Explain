@@ -4,6 +4,10 @@ import { StellarAnalyticsEvent } from "./types";
 import { getConnectionType } from "./network";
 import { isOptedOutViaDoNotTrack, isOptedOutViaLocalStorage } from "./optout";
 import { shouldSample } from "./sampling";
+import { buildTimeOnPageEvent } from "./events/time-on-page";
+import { buildScrollDepthEvent, SCROLL_DEPTH_MILESTONES } from "./events/scroll-depth";
+import { buildPageViewEvent } from "./events/page-view";
+import { buildSearchEvent } from "./events/search";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -55,6 +59,20 @@ export interface AnalyticsClientConfig {
    * pages. Out-of-range values are clamped.
    */
   sampleRate?: number;
+
+  /**
+   * When `true` (default), the client records time spent on the page and
+   * emits a `time_on_page` event when the page is unloaded. Set to `false`
+   * to call `trackTimeOnPage(seconds)` from your own app code instead.
+   */
+  trackTimeOnPage?: boolean;
+
+  /**
+   * When `true` (default), the client watches scroll position and emits
+   * `scroll_depth` events at 25%, 50%, 75%, and 100% scroll.
+   * Set to `false` to call `trackScrollDepth(percent)` yourself instead.
+   */
+  trackScrollDepth?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -89,10 +107,22 @@ export class AnalyticsClient {
   private readonly queue: EventQueue;
   private readonly optedOut: boolean;
 
+  /** Timestamp (ms) of the last page view, used for time-on-page tracking. */
+  private pageStartMs: number | null = null;
+
+  /** Scroll milestones already reported, to fire each one only once. */
+  private readonly reportedScrollDepths: Set<number> = new Set();
+
+  private readonly scrollHandler: (() => void) | undefined;
+  private readonly timeOnPageHandler: (() => void) | undefined;
+
   constructor(config: AnalyticsClientConfig = {}) {
     this.config = config;
     this.queue = new EventQueue(this._buildFlushCallback());
     this.optedOut = this._checkOptOut();
+
+    this.scrollHandler = this._bindScrollDepthTracking();
+    this.timeOnPageHandler = this._bindTimeOnPageTracking();
   }
 
   // -------------------------------------------------------------------------
@@ -124,6 +154,49 @@ export class AnalyticsClient {
   }
 
   /**
+   * Queue a `page_view` event for the given route, including First
+   * Contentful Paint timing when available.
+   *
+   * When `path` is omitted the current `window.location.pathname` is used.
+   * Marks the start of the time-on-page interval.
+   */
+  trackPageView(path?: string): void {
+    this.pageStartMs = Date.now();
+    this.track(buildPageViewEvent(path ?? currentPath(), { title: documentTitle() }));
+  }
+
+  /**
+   * Queue a `search` event recording a transaction or account lookup.
+   *
+   * @param type - The resource type that was looked up, e.g. "tx" or "account".
+   * @param identifier - The transaction hash or account address that was looked up.
+   * @param responseTimeMs - Optional duration of the corresponding API call.
+   */
+  trackSearch(type: string, identifier: string, responseTimeMs?: number): void {
+    this.track(buildSearchEvent(type, identifier, responseTimeMs));
+  }
+
+  /**
+   * Queue a `time_on_page` event recording how long the user spent on the
+   * page, in seconds.
+   *
+   * @param seconds - The elapsed time on the page, in seconds.
+   */
+  trackTimeOnPage(seconds: number): void {
+    this.track(buildTimeOnPageEvent(seconds));
+  }
+
+  /**
+   * Queue a `scroll_depth` event recording that the user reached the given
+   * scroll milestone on a result page.
+   *
+   * @param percent - One of 25, 50, 75, or 100 (percent of page scrolled).
+   */
+  trackScrollDepth(percent: number): void {
+    this.track(buildScrollDepthEvent(percent));
+  }
+
+  /**
    * Immediately flush all queued events without waiting for the next
    * automatic flush.
    */
@@ -144,6 +217,14 @@ export class AnalyticsClient {
    */
   destroy(): void {
     this.queue.destroy();
+    if (typeof window === "undefined") return;
+
+    if (this.scrollHandler) {
+      window.removeEventListener("scroll", this.scrollHandler);
+    }
+    if (this.timeOnPageHandler) {
+      window.removeEventListener("pagehide", this.timeOnPageHandler);
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -168,6 +249,79 @@ export class AnalyticsClient {
         connectionType,
       },
     };
+  }
+
+  /**
+   * Registers a scroll listener that emits `scroll_depth` milestones as the
+   * user scrolls a result page. Returns `undefined` when the tracking flag is
+   * off, an endpoint-free test environment is detected, or scroll tracking is
+   * not supported.
+   */
+  private _bindScrollDepthTracking(): (() => void) | undefined {
+    if (this.config.trackScrollDepth === false) return undefined;
+    if (typeof window === "undefined" || typeof document === "undefined") {
+      return undefined;
+    }
+
+    let ticking = false;
+    const handler = (): void => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        this._recordScrollMilestones();
+        ticking = false;
+      });
+    };
+
+    window.addEventListener("scroll", handler, { passive: true });
+    return handler;
+  }
+
+  /**
+   * Computes the current scroll depth and fires one `scroll_depth` event for
+   * each milestone (25/50/75/100%) reached for the first time.
+   */
+  private _recordScrollMilestones(): void {
+    if (typeof document === "undefined" || typeof window === "undefined") return;
+
+    const documentHeight =
+      document.documentElement.scrollHeight - window.innerHeight;
+    if (documentHeight <= 0) return;
+
+    const progress = Math.min(1, window.scrollY / documentHeight);
+    const percent = Math.round(progress * 100);
+
+    for (const milestone of SCROLL_DEPTH_MILESTONES) {
+      if (percent >= milestone && !this.reportedScrollDepths.has(milestone)) {
+        this.reportedScrollDepths.add(milestone);
+        this.trackScrollDepth(milestone);
+      }
+    }
+  }
+
+  /**
+   * Registers a `pagehide` listener that records the time spent on the page
+   * since the last `trackPageView` call. Returns `undefined` when tracking is
+   * disabled or not in a browser environment.
+   */
+  private _bindTimeOnPageTracking(): (() => void) | undefined {
+    if (this.config.trackTimeOnPage === false) return undefined;
+    if (typeof window === "undefined") return undefined;
+
+    const handler = (): void => this._recordTimeOnPage();
+    window.addEventListener("pagehide", handler);
+    return handler;
+  }
+
+  private _recordTimeOnPage(): void {
+    if (this.pageStartMs === null) return;
+
+    const seconds = Math.round((Date.now() - this.pageStartMs) / 1000);
+    this.pageStartMs = null;
+
+    if (seconds > 0) {
+      this.trackTimeOnPage(seconds);
+    }
   }
 
   /**
@@ -230,4 +384,18 @@ export class AnalyticsClient {
       }
     };
   }
+}
+
+/** Returns the current URL path, defaulting to "/" outside the browser. */
+function currentPath(): string {
+  if (typeof window === "undefined" || typeof window.location === "undefined") {
+    return "/";
+  }
+  return window.location.pathname;
+}
+
+/** Returns the document title, or `undefined` outside the browser. */
+function documentTitle(): string | undefined {
+  if (typeof document === "undefined") return undefined;
+  return document.title;
 }

@@ -17,6 +17,8 @@ export interface PageViewProperties {
   title?: string;
   /** Referring URL, if available */
   referrer?: string;
+  /** First Contentful Paint timing in milliseconds, if recorded */
+  firstContentfulPaintMs?: number;
 }
 
 export interface PageViewEvent {
@@ -33,12 +35,18 @@ export interface PageViewEvent {
 // ---------------------------------------------------------------------------
 
 export interface SearchProperties {
-  /** The raw query string the user typed */
-  query: string;
+  /** The type of resource that was looked up, e.g. "tx" or "account" */
+  type: string;
+  /** The transaction hash or account address that was looked up */
+  identifier: string;
   /** Number of results returned, if known */
   resultCount?: number;
   /** Where the search originated, e.g. "header", "landing" */
   source?: string;
+  /** The raw query string the user typed, when applicable */
+  query?: string;
+  /** API call duration in milliseconds */
+  responseTimeMs?: number;
 }
 
 export interface SearchEvent {
