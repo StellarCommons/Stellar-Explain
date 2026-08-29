@@ -3,6 +3,7 @@ export interface RetryProperties {
   type: string;
   /** The machine-readable error code that triggered the retry UI. */
   errorCode: string;
+  [key: string]: unknown;
 }
 
 export interface RetryEvent {

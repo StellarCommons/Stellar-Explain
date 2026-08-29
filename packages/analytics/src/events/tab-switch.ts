@@ -3,6 +3,7 @@ export interface TabSwitchProperties {
   from: string;
   /** The tab the user switched to. */
   to: string;
+  [key: string]: unknown;
 }
 
 export interface TabSwitchEvent {

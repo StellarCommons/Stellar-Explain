@@ -1,6 +1,7 @@
 export interface HistorySelectProperties {
   /** What was selected from the history panel, e.g. "tx" or "account". */
   type: string;
+  [key: string]: unknown;
 }
 
 export interface HistorySelectEvent {

@@ -1,6 +1,7 @@
 export interface BackButtonProperties {
   /** Where the user came back from, e.g. "result" or "account". */
   from: string;
+  [key: string]: unknown;
 }
 
 export interface BackButtonEvent {
