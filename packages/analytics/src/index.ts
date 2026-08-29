@@ -14,6 +14,12 @@ export {
   isOptedOutViaDoNotTrack,
 } from "./optout";
 export { shouldSample } from "./sampling";
+export { getDeviceType } from "./device";
+export type { DeviceType } from "./device";
+export { getBrowser } from "./browser";
+export { getOS } from "./os";
+export { buildPageViewEvent } from "./events/page-view";
+export type { BuildPageViewOptions } from "./events/page-view";
 
 // Typed event shapes (PageViewEvent, SearchEvent, etc.)
 export type {

@@ -4,6 +4,10 @@ import { StellarAnalyticsEvent } from "./types";
 import { getConnectionType } from "./network";
 import { isOptedOutViaDoNotTrack, isOptedOutViaLocalStorage } from "./optout";
 import { shouldSample } from "./sampling";
+import { getDeviceType } from "./device";
+import { getBrowser } from "./browser";
+import { getOS } from "./os";
+import { buildPageViewEvent } from "./events/page-view";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -120,7 +124,17 @@ export class AnalyticsClient {
       return;
     }
 
-    this.queue.enqueue(this._attachConnectionType(base));
+    this.queue.enqueue(this._attachEnvironment(base));
+  }
+
+  /**
+   * Queue a `page_view` event for the given route, including the referrer
+   * (query-safe) when available.
+   *
+   * When `path` is omitted the current `window.location.pathname` is used.
+   */
+  trackPageView(path?: string): void {
+    this.track(buildPageViewEvent(path ?? currentPath(), { title: documentTitle() }));
   }
 
   /**
@@ -151,21 +165,35 @@ export class AnalyticsClient {
   // -------------------------------------------------------------------------
 
   /**
-   * Attaches the current connection type (e.g. "4g", "wifi") to
-   * `event.properties.connectionType` when the Network Information API is
-   * available. Events are returned unchanged when it isn't (Node/SSR, or
-   * an unsupporting browser), so no `connectionType: undefined` key is ever
-   * added to the payload.
+   * Attaches environment context to an event: connection type, device type,
+   * browser, and OS. Each is only included when its detection API is
+   * available, so unsupported environments (Node/SSR, or an unsupporting
+   * browser) never produce `undefined` keys in the payload, and events are
+   * returned unchanged when nothing could be detected.
    */
-  private _attachConnectionType(event: AnalyticsEvent): AnalyticsEvent {
+  private _attachEnvironment(event: AnalyticsEvent): AnalyticsEvent {
     const connectionType = getConnectionType();
-    if (connectionType === undefined) return event;
+    const deviceType = getDeviceType();
+    const browser = getBrowser();
+    const os = getOS();
+
+    if (
+      connectionType === undefined &&
+      deviceType === undefined &&
+      browser === undefined &&
+      os === undefined
+    ) {
+      return event;
+    }
 
     return {
       ...event,
       properties: {
         ...event.properties,
-        connectionType,
+        ...(connectionType !== undefined ? { connectionType } : {}),
+        ...(deviceType !== undefined ? { deviceType } : {}),
+        ...(browser !== undefined ? { browser } : {}),
+        ...(os !== undefined ? { os } : {}),
       },
     };
   }
@@ -230,4 +258,18 @@ export class AnalyticsClient {
       }
     };
   }
+}
+
+/** Returns the current URL path, defaulting to "/" outside the browser. */
+function currentPath(): string {
+  if (typeof window === "undefined" || typeof window.location === "undefined") {
+    return "/";
+  }
+  return window.location.pathname;
+}
+
+/** Returns the document title, or `undefined` outside the browser. */
+function documentTitle(): string | undefined {
+  if (typeof document === "undefined") return undefined;
+  return document.title;
 }
