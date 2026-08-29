@@ -194,7 +194,7 @@ export class AnalyticsClient {
       return;
     }
 
-    this.queue.enqueue(this._attachEnvironment(base));
+    this.queue.enqueue(this._attachIdentity(this._attachEnvironment(base)));
   }
 
   /**
