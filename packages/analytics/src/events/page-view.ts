@@ -1,4 +1,5 @@
 import { PageViewEvent } from "../types";
+import { getFirstContentfulPaintMs } from "../performance";
 
 export interface BuildPageViewOptions {
   /** Optional document title attached to the event. */
@@ -8,6 +9,8 @@ export interface BuildPageViewOptions {
 /**
  * Builds a fully-formed `page_view` event for the given URL `path`.
  *
+ * When available, First Contentful Paint timing (from the Web Performance
+ * API) is attached to the event as `firstContentfulPaintMs`.
  * The current `document.referrer` is attached to the event as `referrer`
  * with any query parameters stripped, so tracking never leaks UTM or other
  * query-string identifiers. Referrer capture is skipped entirely when running
@@ -20,6 +23,7 @@ export function buildPageViewEvent(
   path: string,
   options: BuildPageViewOptions = {},
 ): PageViewEvent {
+  const fcp = getFirstContentfulPaintMs();
   const referrer = getCleanReferrer();
 
   return {
@@ -29,6 +33,7 @@ export function buildPageViewEvent(
     properties: {
       path,
       ...(options.title !== undefined ? { title: options.title } : {}),
+      ...(fcp !== undefined ? { firstContentfulPaintMs: fcp } : {}),
       ...(referrer !== undefined ? { referrer } : {}),
     },
   };

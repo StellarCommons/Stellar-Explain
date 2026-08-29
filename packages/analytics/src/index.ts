@@ -14,6 +14,16 @@ export {
   isOptedOutViaDoNotTrack,
 } from "./optout";
 export { shouldSample } from "./sampling";
+export { getFirstContentfulPaintMs } from "./performance";
+
+// Event builders (Analytics #21-#24)
+export { buildTimeOnPageEvent } from "./events/time-on-page";
+export type { TimeOnPageEvent, TimeOnPageProperties } from "./events/time-on-page";
+export { buildScrollDepthEvent, SCROLL_DEPTH_MILESTONES } from "./events/scroll-depth";
+export type { ScrollDepthEvent, ScrollDepthProperties } from "./events/scroll-depth";
+export { buildPageViewEvent } from "./events/page-view";
+export type { BuildPageViewOptions } from "./events/page-view";
+export { buildSearchEvent } from "./events/search";
 export { getDeviceType } from "./device";
 export type { DeviceType } from "./device";
 export { getBrowser } from "./browser";

@@ -17,6 +17,8 @@ export interface PageViewProperties {
   title?: string;
   /** Referring URL, if available */
   referrer?: string;
+  /** First Contentful Paint timing in milliseconds, if recorded */
+  firstContentfulPaintMs?: number;
 }
 
 export interface PageViewEvent {
@@ -43,6 +45,8 @@ export interface SearchProperties {
   source?: string;
   /** The raw query string the user typed, when applicable */
   query?: string;
+  /** API call duration in milliseconds */
+  responseTimeMs?: number;
 }
 
 export interface SearchEvent {
