@@ -12,7 +12,7 @@ import { buildHistorySelectEvent } from "./events/history";
 import { buildTabSwitchEvent } from "./events/tab-switch";
 import { buildBackButtonEvent } from "./events/navigation";
 import { buildRetryEvent } from "./events/retry";
-import { getDeviceType } from "./device";
+import { getDeviceType, getScreenResolution } from "./device";
 import { getBrowser } from "./browser";
 import { getOS } from "./os";
 import { getLocale } from "./locale";
@@ -467,10 +467,11 @@ export class AnalyticsClient {
 
   /**
    * Attaches environment context to an event: connection type, device type,
-   * browser, and OS. Each is only included when its detection API is
-   * available, so unsupported environments (Node/SSR, or an unsupporting
-   * browser) never produce `undefined` keys in the payload, and events are
-   * returned unchanged when nothing could be detected.
+   * browser, OS, locale, and screen resolution. Each is only included when
+   * its detection API is available, so unsupported environments (Node/SSR,
+   * or an unsupporting browser) never produce `undefined` keys in the
+   * payload, and events are returned unchanged when nothing could be
+   * detected.
    */
   private _attachEnvironment(event: AnalyticsEvent): AnalyticsEvent {
     const connectionType = getConnectionType();
@@ -478,13 +479,15 @@ export class AnalyticsClient {
     const browser = getBrowser();
     const os = getOS();
     const locale = getLocale();
+    const screenResolution = getScreenResolution();
 
     if (
       connectionType === undefined &&
       deviceType === undefined &&
       browser === undefined &&
       os === undefined &&
-      locale === undefined
+      locale === undefined &&
+      screenResolution === undefined
     ) {
       return event;
     }
@@ -498,6 +501,7 @@ export class AnalyticsClient {
         ...(browser !== undefined ? { browser } : {}),
         ...(os !== undefined ? { os } : {}),
         ...(locale !== undefined ? { locale } : {}),
+        ...(screenResolution !== undefined ? { screenResolution } : {}),
       },
     };
   }

@@ -41,7 +41,30 @@ export function getColorScheme(): ColorScheme | undefined {
     return undefined;
   }
 
-  if (window.matchMedia("(prefers-color-scheme: dark)").matches) return "dark";
+   if (window.matchMedia("(prefers-color-scheme: dark)").matches) return "dark";
   if (window.matchMedia("(prefers-color-scheme: light)").matches) return "light";
   return undefined;
+}
+
+export interface ScreenResolution {
+  width: number;
+  height: number;
+}
+
+/**
+ * Returns the device's full screen resolution (`window.screen.width` x
+ * `window.screen.height`), or `undefined` when it cannot be read (Node/SSR,
+ * no `window.screen`, or either dimension is not a number).
+ */
+export function getScreenResolution(): ScreenResolution | undefined {
+  if (
+    typeof window === "undefined" ||
+    typeof window.screen === "undefined" ||
+    typeof window.screen.width !== "number" ||
+    typeof window.screen.height !== "number"
+  ) {
+    return undefined;
+  }
+
+  return { width: window.screen.width, height: window.screen.height };
 }
