@@ -7,6 +7,7 @@
  */
 
 import { AnalyticsEvent } from "./types/events";
+import { Logger, defaultLogger } from "./lib/logger";
 
 export interface AnalyticsPlugin {
   /** Optional name, used only in warning logs when a hook throws. */
@@ -34,6 +35,7 @@ export interface AnalyticsPlugin {
 export function runBeforeTrack(
   plugins: readonly AnalyticsPlugin[],
   event: AnalyticsEvent,
+  logger: Logger = defaultLogger,
 ): AnalyticsEvent {
   let current = event;
   for (const plugin of plugins) {
@@ -42,7 +44,9 @@ export function runBeforeTrack(
       const result = plugin.beforeTrack(current);
       if (result !== undefined) current = result;
     } catch (err) {
-      console.warn(`[analytics] plugin "${plugin.name ?? "unnamed"}" beforeTrack threw:`, err);
+      logger.warn(`[analytics] plugin "${plugin.name ?? "unnamed"}" beforeTrack threw`, {
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
   return current;
@@ -50,15 +54,21 @@ export function runBeforeTrack(
 
 /**
  * Runs each plugin's `afterTrack` in order. A plugin that throws is skipped
- * with a console warning; other plugins still run.
+ * with a warning; other plugins still run.
  */
-export function runAfterTrack(plugins: readonly AnalyticsPlugin[], event: AnalyticsEvent): void {
+export function runAfterTrack(
+  plugins: readonly AnalyticsPlugin[],
+  event: AnalyticsEvent,
+  logger: Logger = defaultLogger,
+): void {
   for (const plugin of plugins) {
     if (!plugin.afterTrack) continue;
     try {
       plugin.afterTrack(event);
     } catch (err) {
-      console.warn(`[analytics] plugin "${plugin.name ?? "unnamed"}" afterTrack threw:`, err);
+      logger.warn(`[analytics] plugin "${plugin.name ?? "unnamed"}" afterTrack threw`, {
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 }

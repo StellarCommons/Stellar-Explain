@@ -6,6 +6,7 @@
  */
 
 import { AnalyticsEvent, EventName } from "./types/events";
+import { Logger, defaultLogger } from "./lib/logger";
 
 export interface ValidationResult {
   valid: boolean;
@@ -70,10 +71,15 @@ export function validateEvent(event: unknown): ValidationResult {
  * Validate *event* and return it typed as {@link AnalyticsEvent} if valid,
  * or `null` if it fails validation (after logging a warning).
  */
-export function validateOrDrop(event: unknown): AnalyticsEvent | null {
+export function validateOrDrop(
+  event: unknown,
+  logger: Logger = defaultLogger,
+): AnalyticsEvent | null {
   const result = validateEvent(event);
   if (!result.valid) {
-    console.warn(`[analytics] dropped invalid event: ${result.reason}`, event);
+    logger.warn(`[analytics] dropped invalid event: ${result.reason}`, {
+      event,
+    });
     return null;
   }
   return event as AnalyticsEvent;

@@ -1,5 +1,6 @@
 import { AnalyticsEvent, EventName } from "./types/events";
 import { EventQueue, FlushCallback } from "./queue";
+import { Logger, defaultLogger } from "./lib/logger";
 import { StellarAnalyticsEvent } from "./types";
 import { getConnectionType } from "./network";
 import { isOptedOutViaDoNotTrack, isOptedOutViaLocalStorage } from "./optout";
@@ -130,6 +131,13 @@ export interface AnalyticsClientConfig {
    * (with a console warning) rather than blocking the others.
    */
   plugins?: AnalyticsPlugin[];
+
+  /**
+   * Structured logger used for every diagnostic previously sent to
+   * `console.warn`/`console.error` (issue #98). Defaults to the package's
+   * shared `defaultLogger`; override for testing or custom log routing.
+   */
+  logger?: Logger;
 }
 
 // ---------------------------------------------------------------------------
@@ -161,6 +169,7 @@ export interface AnalyticsClientConfig {
  */
 export class AnalyticsClient {
   private readonly config: AnalyticsClientConfig;
+  private readonly logger: Logger;
   private readonly queue: EventQueue;
   private readonly optedOut: boolean;
 
@@ -186,7 +195,8 @@ export class AnalyticsClient {
 
   constructor(config: AnalyticsClientConfig = {}) {
     this.config = config;
-    this.queue = new EventQueue(this._buildFlushCallback());
+    this.logger = config.logger ?? defaultLogger;
+    this.queue = new EventQueue(this._buildFlushCallback(), { logger: this.logger });
     this.optedOut = this._checkOptOut();
 
     this.scrollHandler = this._bindScrollDepthTracking();
@@ -227,20 +237,22 @@ export class AnalyticsClient {
     };
 
     // Issue #930 — validate event schema before enqueuing; drop if invalid
-    const validated = validateOrDrop(stamped);
+    const validated = validateOrDrop(stamped, this.logger);
     if (!validated) return;
 
     const base = validated as AnalyticsEvent;
 
     if (!EventName.includes(base.name as EventName)) {
-      console.warn(`[analytics] dropped unknown event "${base.name}"`);
+      this.logger.warn(`[analytics] dropped unknown event "${base.name}"`, {
+        eventName: base.name,
+      });
       return;
     }
 
     // Issue #936 — plugins: let each beforeTrack hook observe/transform the
     // event ahead of sampling and enrichment.
     const plugins = this.config.plugins ?? [];
-    const beforePlugins = runBeforeTrack(plugins, base);
+    const beforePlugins = runBeforeTrack(plugins, base, this.logger);
 
     if (this.config.sampleRate !== undefined && !shouldSample(this.config.sampleRate)) {
       return;
@@ -265,7 +277,7 @@ export class AnalyticsClient {
     this.queue.enqueue(enriched);
 
     // Issue #936 — plugins: afterTrack observes the final, enriched event.
-    if (plugins.length > 0) runAfterTrack(plugins, enriched);
+    if (plugins.length > 0) runAfterTrack(plugins, enriched, this.logger);
   }
 
   /**
@@ -668,7 +680,9 @@ export class AnalyticsClient {
       }
       request.send(payload);
     } catch (err) {
-      console.error("[analytics] unload flush failed:", err);
+      this.logger.error("[analytics] unload flush failed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 
