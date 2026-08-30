@@ -24,7 +24,8 @@ import { buildResultViewEvent } from "./events/result-view";
 import { buildErrorEvent } from "./events/error";
 import { buildCopyEvent } from "./events/copy";
 import { getSessionId } from "./session";
-import { getUserId } from "./user";
+import { getUserId, attachUserProperties } from "./user";
+import { GroupContext, attachGroupContext } from "./group";
 
 import { validateOrDrop } from "./validate";
 import { resolveEndpoint } from "./config";
@@ -184,6 +185,12 @@ export class AnalyticsClient {
   private readonly onPageHide: (() => void) | undefined;
   private readonly onRouteChange: (() => void) | undefined;
 
+  /** Properties set via `identify()`, merged into every subsequent event. In-memory only. */
+  private userTraits: Record<string, unknown> | undefined;
+
+  /** Organisation/workspace context set via `group()`, attached to every subsequent event. */
+  private groupContext: GroupContext | undefined;
+
   constructor(config: AnalyticsClientConfig = {}) {
     this.config = config;
     this.queue = new EventQueue(this._buildFlushCallback());
@@ -260,12 +267,42 @@ export class AnalyticsClient {
     }
 
     const enriched = this._attachIdentity(
-      this._attachEnvironment(this._attachGlobalProperties(beforePlugins)),
+      attachGroupContext(
+        this._attachEnvironment(
+          attachUserProperties(
+            this._attachGlobalProperties(beforePlugins),
+            this.userTraits,
+          ),
+        ),
+        this.groupContext,
+      ),
     );
     this.queue.enqueue(enriched);
 
     // Issue #936 — plugins: afterTrack observes the final, enriched event.
     if (plugins.length > 0) runAfterTrack(plugins, enriched);
+  }
+
+  /**
+   * Merges `properties` into every subsequent event's `properties` (issue
+   * #85). Cumulative — calling `identify()` again adds to/overwrites
+   * previously identified traits rather than replacing them wholesale, so
+   * callers can enrich what's known about the user over time. In-memory
+   * only: nothing is persisted, and a page reload starts fresh.
+   */
+  identify(properties: Record<string, unknown>): void {
+    this.userTraits = { ...this.userTraits, ...properties };
+  }
+
+  /**
+   * Attaches organisation/workspace-level context to every subsequent event
+   * (issue #86): `groupId` on the event itself, plus `properties` merged
+   * into the event's properties. Replaces any previously set group context
+   * wholesale — a client tracks membership in one group at a time, unlike
+   * `identify()`'s cumulative user traits.
+   */
+  group(groupId: string, properties?: Record<string, unknown>): void {
+    this.groupContext = { groupId, properties };
   }
 
   /**
