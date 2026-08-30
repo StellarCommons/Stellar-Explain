@@ -1,7 +1,12 @@
-import { EventEmitter, ConsoleSink } from "@stellar-explain/analytics";
+import { EventEmitter, NoopEmitter, ConsoleSink } from "@stellar-explain/analytics";
 import type { EventName } from "@stellar-explain/analytics";
 
-const emitter = new EventEmitter();
+// Issue #96: this module is imported by server components too (Next.js
+// SSR/static generation), where there is no browser to eventually flush a
+// real queue to. `typeof window !== "undefined"` is the only reliable way
+// to tell the two apart, since `NODE_ENV` doesn't distinguish them.
+const emitter: EventEmitter | NoopEmitter =
+  typeof window !== "undefined" ? new EventEmitter() : new NoopEmitter();
 const sink = new ConsoleSink();
 
 emitter.on("account.explained", (event) => sink.send(event));
