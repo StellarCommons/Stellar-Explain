@@ -1,5 +1,6 @@
 use axum::{
     Json,
+    body::Bytes,
     extract::{Extension, Query},
     http::StatusCode,
 };
@@ -247,14 +248,50 @@ pub async fn get_analytics_summary(
 // Ingest endpoint (clock skew check)
 // ---------------------------------------------------------------------------
 
-/// `POST /analytics/ingest`
+/// Maximum accepted ingest request body, in bytes (issue #99).
+const MAX_INGEST_BODY_BYTES: usize = 512 * 1024;
+
+/// Maximum number of events accepted in a single batch ingest request
+/// (a JSON array body), issue #99.
+const MAX_INGEST_BATCH_SIZE: usize = 100;
+
+/// `POST /analytics/events`
 ///
-/// Receives an analytics event and validates it. Events with timestamps more
-/// than 60 minutes in the future are rejected with a 400 status.
-pub async fn ingest_event(
-    Json(event): Json<serde_json::Value>,
-) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+/// Receives an analytics event (a single JSON object) or a batch of events
+/// (a JSON array) and validates it. A body over `MAX_INGEST_BODY_BYTES` or
+/// an array batch over `MAX_INGEST_BATCH_SIZE` entries is rejected with 413
+/// before the body is even parsed as JSON — abuse protection has to reject
+/// on raw size, not on the cost of decoding first. Events with timestamps
+/// more than 60 minutes in the future are rejected with a 400 status.
+pub async fn ingest_event(body: Bytes) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    if body.len() > MAX_INGEST_BODY_BYTES {
+        return Err((
+            StatusCode::PAYLOAD_TOO_LARGE,
+            format!(
+                "request body of {} bytes exceeds the {}-byte limit",
+                body.len(),
+                MAX_INGEST_BODY_BYTES
+            ),
+        ));
+    }
+
+    let event: serde_json::Value = serde_json::from_slice(&body)
+        .map_err(|err| (StatusCode::BAD_REQUEST, format!("invalid JSON body: {err}")))?;
+
+    if let serde_json::Value::Array(items) = &event
+        && items.len() > MAX_INGEST_BATCH_SIZE
+    {
+        return Err((
+            StatusCode::PAYLOAD_TOO_LARGE,
+            format!(
+                "batch of {} events exceeds the {}-event limit",
+                items.len(),
+                MAX_INGEST_BATCH_SIZE
+            ),
+        ));
+    }
 
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -415,5 +452,93 @@ mod tests {
         let a = query_event_store("2024-01-14T00:00:00Z", "2024-01-15T00:00:00Z");
         let b = query_event_store("2024-01-14T00:00:00Z", "2024-01-15T00:00:00Z");
         assert_eq!(a, b);
+    }
+
+    // -----------------------------------------------------------------
+    // Ingest size validation (issue #99)
+    // -----------------------------------------------------------------
+
+    fn valid_event_json() -> String {
+        serde_json::json!({"name": "page_view", "timestamp": 0}).to_string()
+    }
+
+    #[tokio::test]
+    async fn test_ingest_accepts_a_normal_single_event() {
+        let body = Bytes::from(valid_event_json());
+        let result = ingest_event(body).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_ingest_accepts_a_batch_at_exactly_the_limit() {
+        let events: Vec<serde_json::Value> = (0..MAX_INGEST_BATCH_SIZE)
+            .map(|_| serde_json::json!({"name": "page_view", "timestamp": 0}))
+            .collect();
+        let body = Bytes::from(serde_json::to_vec(&events).unwrap());
+        let result = ingest_event(body).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_ingest_rejects_a_batch_over_the_event_limit() {
+        let events: Vec<serde_json::Value> = (0..=MAX_INGEST_BATCH_SIZE)
+            .map(|_| serde_json::json!({"name": "page_view", "timestamp": 0}))
+            .collect();
+        let body = Bytes::from(serde_json::to_vec(&events).unwrap());
+        let result = ingest_event(body).await;
+        let (status, message) = result.expect_err("batch over the limit should be rejected");
+        assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+        assert!(message.contains("101"), "message should mention the batch size: {message}");
+        assert!(
+            message.contains(&MAX_INGEST_BATCH_SIZE.to_string()),
+            "message should mention the limit: {message}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_ingest_rejects_a_body_over_the_byte_limit() {
+        // A body that parses as valid JSON (so the byte check, not a parse
+        // error, is what's actually being exercised) but exceeds the cap.
+        let padding = "x".repeat(MAX_INGEST_BODY_BYTES + 1);
+        let body = Bytes::from(format!("\"{padding}\""));
+        let result = ingest_event(body).await;
+        let (status, message) = result.expect_err("oversized body should be rejected");
+        assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+        assert!(
+            message.contains(&MAX_INGEST_BODY_BYTES.to_string()),
+            "message should mention the byte limit: {message}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_ingest_accepts_a_body_at_exactly_the_byte_limit() {
+        // "x".repeat(n) wrapped in quotes costs n + 2 bytes as JSON, so pad
+        // to land exactly on the limit.
+        let padding = "x".repeat(MAX_INGEST_BODY_BYTES - 2);
+        let body = Bytes::from(format!("\"{padding}\""));
+        assert_eq!(body.len(), MAX_INGEST_BODY_BYTES);
+        // Not a valid event shape (a bare string, not an object) — the byte
+        // check happens first and this should NOT be rejected as 413; it's
+        // fine for it to fail later for a different reason (or succeed,
+        // since ingest_event doesn't actually validate event shape today).
+        let result = ingest_event(body).await;
+        if let Err((status, _)) = result {
+            assert_ne!(
+                status,
+                StatusCode::PAYLOAD_TOO_LARGE,
+                "a body exactly at the limit must not be rejected as too large"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_ingest_rejects_oversized_body_before_parsing_invalid_json() {
+        // Oversized AND not valid JSON — must fail with 413 (size), not 400
+        // (parse error), proving the size check runs before JSON parsing.
+        let body = Bytes::from("x".repeat(MAX_INGEST_BODY_BYTES + 1));
+        let (status, _) = ingest_event(body)
+            .await
+            .expect_err("oversized invalid-JSON body should still be rejected");
+        assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
     }
 }
