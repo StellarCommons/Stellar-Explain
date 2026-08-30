@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { getDeviceType, getColorScheme, MOBILE_BREAKPOINT_PX, TABLET_BREAKPOINT_PX } from "../src/device";
+import { getDeviceType, getColorScheme, getScreenResolution, MOBILE_BREAKPOINT_PX, TABLET_BREAKPOINT_PX } from "../src/device";
 
 const originalWindow = (globalThis as { window?: unknown }).window;
 
@@ -66,5 +66,32 @@ describe("getColorScheme (Analytics #34)", () => {
   it("returns undefined when neither query matches", () => {
     setWindow({ matchMedia: fakeMatchMedia(undefined) });
     expect(getColorScheme()).toBeUndefined();
+  });
+});
+
+describe("getScreenResolution", () => {
+  it("returns undefined when window is unavailable", () => {
+    setWindow(undefined);
+    expect(getScreenResolution()).toBeUndefined();
+  });
+
+  it("returns undefined when window.screen is unavailable", () => {
+    setWindow({});
+    expect(getScreenResolution()).toBeUndefined();
+  });
+
+  it("returns width and height from window.screen.width/height", () => {
+    setWindow({ screen: { width: 1920, height: 1080 } });
+    expect(getScreenResolution()).toEqual({ width: 1920, height: 1080 });
+  });
+
+  it("returns undefined when screen.width is not a number", () => {
+    setWindow({ screen: { width: "wide", height: 1080 } });
+    expect(getScreenResolution()).toBeUndefined();
+  });
+
+  it("returns undefined when screen.height is not a number", () => {
+    setWindow({ screen: { width: 1920, height: "tall" } });
+    expect(getScreenResolution()).toBeUndefined();
   });
 });
