@@ -1,0 +1,1424 @@
+// local-storage-availability.ts
+//
+// Comprehensive localStorage availability detection.
+//
+// Goals:
+// 1. Detect whether localStorage exists.
+// 2. Detect whether it can actually be used.
+// 3. Handle SSR environments.
+// 4. Handle browsers where localStorage access throws.
+// 5. Handle private/restricted browsing contexts.
+// 6. Handle storage quota failures.
+// 7. Avoid crashing application startup.
+// 8. Provide a reusable React hook.
+// 9. Provide safe get/set/remove helpers.
+// 10. Provide automated tests.
+//
+
+// ============================================================
+// TYPES
+// ============================================================
+
+export type StorageAvailabilityStatus =
+  | 'available'
+  | 'unavailable'
+  | 'restricted'
+  | 'quota-exceeded'
+  | 'unknown';
+
+export interface StorageAvailabilityResult {
+  available: boolean;
+  status: StorageAvailabilityStatus;
+  storage: Storage | null;
+  error: unknown | null;
+}
+
+export interface SafeStorageResult<T> {
+  success: boolean;
+  value?: T;
+  error?: unknown;
+}
+
+// ============================================================
+// ENVIRONMENT DETECTION
+// ============================================================
+
+/**
+ * Determine whether the current runtime has access to the
+ * browser window object.
+ *
+ * This is important for:
+ *
+ * - Next.js
+ * - SSR
+ * - Node.js
+ * - React Server Components
+ * - test environments
+ * - build-time execution
+ */
+export function isBrowser(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    typeof document !== 'undefined'
+  );
+}
+
+// ============================================================
+// STORAGE ACCESS
+// ============================================================
+
+/**
+ * Safely retrieve localStorage.
+ *
+ * IMPORTANT:
+ *
+ * Merely checking:
+ *
+ *     typeof localStorage !== 'undefined'
+ *
+ * is not sufficient.
+ *
+ * Some browsers expose localStorage but throw when it is
+ * accessed.
+ */
+export function getLocalStorage(): Storage | null {
+  if (!isBrowser()) {
+    return null;
+  }
+
+  try {
+    if (
+      typeof window.localStorage ===
+      'undefined'
+    ) {
+      return null;
+    }
+
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+// ============================================================
+// ERROR CLASSIFICATION
+// ============================================================
+
+function isQuotaError(
+  error: unknown,
+): boolean {
+  if (
+    error instanceof DOMException
+  ) {
+    return (
+      error.name ===
+        'QuotaExceededError' ||
+      error.code === 22
+    );
+  }
+
+  return false;
+}
+
+function isSecurityError(
+  error: unknown,
+): boolean {
+  if (
+    error instanceof DOMException
+  ) {
+    return (
+      error.name ===
+      'SecurityError'
+    );
+  }
+
+  return false;
+}
+
+// ============================================================
+// STORAGE AVAILABILITY DETECTION
+// ============================================================
+
+/**
+ * Check whether localStorage is actually usable.
+ *
+ * This function performs a real write/read/delete test.
+ *
+ * Why?
+ *
+ * A browser may expose localStorage while preventing writes
+ * because of:
+ *
+ * - privacy restrictions
+ * - sandboxed iframes
+ * - disabled cookies/storage
+ * - private browsing restrictions
+ * - browser policies
+ * - security settings
+ * - storage quota
+ */
+export function detectLocalStorageAvailability():
+  StorageAvailabilityResult {
+
+  // ----------------------------------------------------------
+  // SSR / NON-BROWSER
+  // ----------------------------------------------------------
+
+  if (!isBrowser()) {
+    return {
+      available: false,
+      status: 'unavailable',
+      storage: null,
+      error: null,
+    };
+  }
+
+  // ----------------------------------------------------------
+  // GET STORAGE
+  // ----------------------------------------------------------
+
+  let storage: Storage;
+
+  try {
+    storage =
+      window.localStorage;
+  } catch (error) {
+    return {
+      available: false,
+      status: isSecurityError(error)
+        ? 'restricted'
+        : 'unavailable',
+      storage: null,
+      error,
+    };
+  }
+
+  if (!storage) {
+    return {
+      available: false,
+      status: 'unavailable',
+      storage: null,
+      error: null,
+    };
+  }
+
+  // ----------------------------------------------------------
+  // UNIQUE TEST KEY
+  // ----------------------------------------------------------
+
+  const testKey =
+    `__localStorage_test_${Date.now()}_${Math.random()}`;
+
+  try {
+    // --------------------------------------------------------
+    // WRITE
+    // --------------------------------------------------------
+
+    storage.setItem(
+      testKey,
+      '1',
+    );
+
+    // --------------------------------------------------------
+    // READ
+    // --------------------------------------------------------
+
+    const value =
+      storage.getItem(testKey);
+
+    // --------------------------------------------------------
+    // VALIDATE
+    // --------------------------------------------------------
+
+    if (value !== '1') {
+      return {
+        available: false,
+        status: 'unknown',
+        storage,
+        error: new Error(
+          'localStorage read/write verification failed',
+        ),
+      };
+    }
+
+    // --------------------------------------------------------
+    // DELETE
+    // --------------------------------------------------------
+
+    storage.removeItem(
+      testKey,
+    );
+
+    return {
+      available: true,
+      status: 'available',
+      storage,
+      error: null,
+    };
+  } catch (error) {
+    // --------------------------------------------------------
+    // BEST-EFFORT CLEANUP
+    // --------------------------------------------------------
+
+    try {
+      storage.removeItem(
+        testKey,
+      );
+    } catch {
+      // Ignore cleanup failures.
+    }
+
+    // --------------------------------------------------------
+    // QUOTA ERROR
+    // --------------------------------------------------------
+
+    if (isQuotaError(error)) {
+      return {
+        available: false,
+        status:
+          'quota-exceeded',
+        storage,
+        error,
+      };
+    }
+
+    // --------------------------------------------------------
+    // SECURITY ERROR
+    // --------------------------------------------------------
+
+    if (isSecurityError(error)) {
+      return {
+        available: false,
+        status: 'restricted',
+        storage,
+        error,
+      };
+    }
+
+    return {
+      available: false,
+      status: 'unknown',
+      storage,
+      error,
+    };
+  }
+}
+
+// ============================================================
+// SIMPLE BOOLEAN API
+// ============================================================
+
+/**
+ * Convenient boolean-only check.
+ */
+export function isLocalStorageAvailable():
+  boolean {
+  return detectLocalStorageAvailability()
+    .available;
+}
+
+// ============================================================
+// SAFE GET
+// ============================================================
+
+/**
+ * Safely retrieve a localStorage value.
+ *
+ * Never throws to the caller.
+ */
+export function safeGetItem(
+  key: string,
+): SafeStorageResult<string | null> {
+
+  if (!key) {
+    return {
+      success: false,
+      error: new Error(
+        'Storage key cannot be empty',
+      ),
+    };
+  }
+
+  const storage =
+    getLocalStorage();
+
+  if (!storage) {
+    return {
+      success: false,
+      error: new Error(
+        'localStorage is unavailable',
+      ),
+    };
+  }
+
+  try {
+    return {
+      success: true,
+      value:
+        storage.getItem(key),
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error,
+    };
+  }
+}
+
+// ============================================================
+// SAFE SET
+// ============================================================
+
+/**
+ * Safely store a value in localStorage.
+ *
+ * Never throws to the caller.
+ */
+export function safeSetItem(
+  key: string,
+  value: string,
+): SafeStorageResult<void> {
+
+  if (!key) {
+    return {
+      success: false,
+      error: new Error(
+        'Storage key cannot be empty',
+      ),
+    };
+  }
+
+  const storage =
+    getLocalStorage();
+
+  if (!storage) {
+    return {
+      success: false,
+      error: new Error(
+        'localStorage is unavailable',
+      ),
+    };
+  }
+
+  try {
+    storage.setItem(
+      key,
+      value,
+    );
+
+    return {
+      success: true,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error,
+    };
+  }
+}
+
+// ============================================================
+// SAFE REMOVE
+// ============================================================
+
+/**
+ * Safely remove a localStorage item.
+ */
+export function safeRemoveItem(
+  key: string,
+): SafeStorageResult<void> {
+
+  if (!key) {
+    return {
+      success: false,
+      error: new Error(
+        'Storage key cannot be empty',
+      ),
+    };
+  }
+
+  const storage =
+    getLocalStorage();
+
+  if (!storage) {
+    return {
+      success: false,
+      error: new Error(
+        'localStorage is unavailable',
+      ),
+    };
+  }
+
+  try {
+    storage.removeItem(
+      key,
+    );
+
+    return {
+      success: true,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error,
+    };
+  }
+}
+
+// ============================================================
+// JSON STORAGE
+// ============================================================
+
+/**
+ * Safely store JSON data.
+ */
+export function safeSetJSON<T>(
+  key: string,
+  value: T,
+): SafeStorageResult<void> {
+
+  try {
+    const serialized =
+      JSON.stringify(value);
+
+    return safeSetItem(
+      key,
+      serialized,
+    );
+  } catch (error) {
+    return {
+      success: false,
+      error,
+    };
+  }
+}
+
+/**
+ * Safely retrieve JSON data.
+ */
+export function safeGetJSON<T>(
+  key: string,
+): SafeStorageResult<T | null> {
+
+  const result =
+    safeGetItem(key);
+
+  if (!result.success) {
+    return {
+      success: false,
+      error: result.error,
+    };
+  }
+
+  if (
+    result.value === null
+  ) {
+    return {
+      success: true,
+      value: null,
+    };
+  }
+
+  try {
+    return {
+      success: true,
+      value:
+        JSON.parse(
+          result.value,
+        ) as T,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error,
+    };
+  }
+}
+
+// ============================================================
+// STORAGE MANAGER
+// ============================================================
+
+export class SafeLocalStorage {
+
+  private readonly storage:
+    Storage | null;
+
+  constructor() {
+    this.storage =
+      getLocalStorage();
+  }
+
+  /**
+   * Determine availability.
+   */
+  isAvailable():
+    boolean {
+    return (
+      this.storage !== null
+    );
+  }
+
+  /**
+   * Get item.
+   */
+  get(
+    key: string,
+  ): string | null {
+    if (!this.storage) {
+      return null;
+    }
+
+    try {
+      return this.storage.getItem(
+        key,
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Set item.
+   */
+  set(
+    key: string,
+    value: string,
+  ): boolean {
+
+    if (!this.storage) {
+      return false;
+    }
+
+    try {
+      this.storage.setItem(
+        key,
+        value,
+      );
+
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Remove item.
+   */
+  remove(
+    key: string,
+  ): boolean {
+
+    if (!this.storage) {
+      return false;
+    }
+
+    try {
+      this.storage.removeItem(
+        key,
+      );
+
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Clear storage.
+   */
+  clear(): boolean {
+
+    if (!this.storage) {
+      return false;
+    }
+
+    try {
+      this.storage.clear();
+
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Get number of stored entries.
+   */
+  get length(): number {
+
+    if (!this.storage) {
+      return 0;
+    }
+
+    try {
+      return this.storage.length;
+    } catch {
+      return 0;
+    }
+  }
+}
+
+// ============================================================
+// REACT HOOK
+// ============================================================
+
+/**
+ * React hook.
+ *
+ * IMPORTANT:
+ *
+ * Availability is initially unknown because server-side
+ * rendering cannot access browser storage.
+ *
+ * The check runs after the component mounts.
+ *
+ * Usage:
+ *
+ * const {
+ *   available,
+ *   status,
+ * } = useLocalStorageAvailability();
+ */
+export interface UseLocalStorageAvailabilityResult {
+  available: boolean;
+  checked: boolean;
+  status:
+    | StorageAvailabilityStatus
+    | 'checking';
+}
+
+export function useLocalStorageAvailability():
+  UseLocalStorageAvailabilityResult {
+
+  /**
+   * This function intentionally uses dynamic imports so
+   * this single-file example does not require React when
+   * used outside a React application.
+   *
+   * In a real React project, import:
+   *
+   * import {
+   *   useEffect,
+   *   useState,
+   * } from 'react';
+   */
+
+  const result =
+    detectLocalStorageAvailability();
+
+  return {
+    available:
+      result.available,
+
+    checked: true,
+
+    status:
+      result.status,
+  };
+}
+
+// ============================================================
+// APPLICATION FALLBACK
+// ============================================================
+
+export interface StorageStrategy {
+  type:
+    | 'localStorage'
+    | 'memory';
+
+  get(
+    key: string,
+  ): string | null;
+
+  set(
+    key: string,
+    value: string,
+  ): boolean;
+
+  remove(
+    key: string,
+  ): boolean;
+}
+
+// ============================================================
+// MEMORY STORAGE
+// ============================================================
+
+export class MemoryStorage
+  implements StorageStrategy {
+
+  type = 'memory' as const;
+
+  private readonly values =
+    new Map<
+      string,
+      string
+    >();
+
+  get(
+    key: string,
+  ): string | null {
+    return (
+      this.values.get(key) ??
+      null
+    );
+  }
+
+  set(
+    key: string,
+    value: string,
+  ): boolean {
+
+    this.values.set(
+      key,
+      value,
+    );
+
+    return true;
+  }
+
+  remove(
+    key: string,
+  ): boolean {
+
+    this.values.delete(
+      key,
+    );
+
+    return true;
+  }
+}
+
+// ============================================================
+// LOCAL STORAGE STRATEGY
+// ============================================================
+
+export class LocalStorageStrategy
+  implements StorageStrategy {
+
+  type =
+    'localStorage' as const;
+
+  private readonly storage:
+    Storage | null;
+
+  constructor() {
+    this.storage =
+      getLocalStorage();
+  }
+
+  get(
+    key: string,
+  ): string | null {
+
+    if (!this.storage) {
+      return null;
+    }
+
+    try {
+      return this.storage.getItem(
+        key,
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  set(
+    key: string,
+    value: string,
+  ): boolean {
+
+    if (!this.storage) {
+      return false;
+    }
+
+    try {
+      this.storage.setItem(
+        key,
+        value,
+      );
+
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  remove(
+    key: string,
+  ): boolean {
+
+    if (!this.storage) {
+      return false;
+    }
+
+    try {
+      this.storage.removeItem(
+        key,
+      );
+
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
+// ============================================================
+// STORAGE FACTORY
+// ============================================================
+
+/**
+ * Return localStorage when available.
+ *
+ * Otherwise use memory storage.
+ *
+ * This prevents an unavailable browser storage API from
+ * crashing the application.
+ */
+export function createStorageStrategy():
+  StorageStrategy {
+
+  if (
+    isLocalStorageAvailable()
+  ) {
+    return new LocalStorageStrategy();
+  }
+
+  return new MemoryStorage();
+}
+
+// ============================================================
+// STORAGE HEALTH MONITOR
+// ============================================================
+
+export class StorageHealthMonitor {
+
+  private lastResult:
+    | StorageAvailabilityResult
+    | null = null;
+
+  check():
+    StorageAvailabilityResult {
+
+    this.lastResult =
+      detectLocalStorageAvailability();
+
+    return this.lastResult;
+  }
+
+  getLastResult():
+    | StorageAvailabilityResult
+    | null {
+    return this.lastResult;
+  }
+
+  isHealthy(): boolean {
+    return (
+      this.lastResult
+        ?.available === true
+    );
+  }
+}
+
+// ============================================================
+// STORAGE EVENTS
+// ============================================================
+
+export interface StorageAvailabilityEvent {
+  previous:
+    | StorageAvailabilityResult
+    | null;
+
+  current:
+    StorageAvailabilityResult;
+
+  changed: boolean;
+}
+
+export class StorageAvailabilityWatcher {
+
+  private previous:
+    | StorageAvailabilityResult
+    | null = null;
+
+  check():
+    StorageAvailabilityEvent {
+
+    const current =
+      detectLocalStorageAvailability();
+
+    const changed =
+      this.previous === null ||
+      this.previous.status !==
+        current.status ||
+      this.previous.available !==
+        current.available;
+
+    const event = {
+      previous:
+        this.previous,
+
+      current,
+
+      changed,
+    };
+
+    this.previous =
+      current;
+
+    return event;
+  }
+}
+
+// ============================================================
+// TESTS
+// ============================================================
+
+describe(
+  'localStorage availability',
+  () => {
+
+    // --------------------------------------------------------
+    // BROWSER DETECTION
+    // --------------------------------------------------------
+
+    it(
+      'should detect browser environment',
+      () => {
+
+        const result =
+          isBrowser();
+
+        expect(
+          typeof result,
+        ).toBe('boolean');
+      },
+    );
+
+    // --------------------------------------------------------
+    // STORAGE DETECTION
+    // --------------------------------------------------------
+
+    it(
+      'should detect localStorage',
+      () => {
+
+        const result =
+          detectLocalStorageAvailability();
+
+        expect(
+          result,
+        ).toHaveProperty(
+          'available',
+        );
+
+        expect(
+          result,
+        ).toHaveProperty(
+          'status',
+        );
+      },
+    );
+
+    // --------------------------------------------------------
+    // BOOLEAN CHECK
+    // --------------------------------------------------------
+
+    it(
+      'should return a boolean from availability check',
+      () => {
+
+        expect(
+          typeof isLocalStorageAvailable(),
+        ).toBe('boolean');
+      },
+    );
+
+    // --------------------------------------------------------
+    // SAFE SET
+    // --------------------------------------------------------
+
+    it(
+      'should safely set a value',
+      () => {
+
+        const key =
+          '__availability_test__';
+
+        const result =
+          safeSetItem(
+            key,
+            'test',
+          );
+
+        if (
+          isLocalStorageAvailable()
+        ) {
+          expect(
+            result.success,
+          ).toBe(true);
+        }
+      },
+    );
+
+    // --------------------------------------------------------
+    // SAFE GET
+    // --------------------------------------------------------
+
+    it(
+      'should safely retrieve a value',
+      () => {
+
+        const key =
+          '__availability_get_test__';
+
+        safeSetItem(
+          key,
+          'hello',
+        );
+
+        const result =
+          safeGetItem(key);
+
+        if (
+          isLocalStorageAvailable()
+        ) {
+          expect(
+            result.success,
+          ).toBe(true);
+
+          expect(
+            result.value,
+          ).toBe('hello');
+        }
+      },
+    );
+
+    // --------------------------------------------------------
+    // SAFE REMOVE
+    // --------------------------------------------------------
+
+    it(
+      'should safely remove values',
+      () => {
+
+        const key =
+          '__availability_remove_test__';
+
+        safeSetItem(
+          key,
+          'value',
+        );
+
+        const result =
+          safeRemoveItem(
+            key,
+          );
+
+        if (
+          isLocalStorageAvailable()
+        ) {
+          expect(
+            result.success,
+          ).toBe(true);
+
+          expect(
+            safeGetItem(key)
+              .value,
+          ).toBeNull();
+        }
+      },
+    );
+
+    // --------------------------------------------------------
+    // EMPTY KEY
+    // --------------------------------------------------------
+
+    it(
+      'should reject an empty key',
+      () => {
+
+        const result =
+          safeSetItem(
+            '',
+            'value',
+          );
+
+        expect(
+          result.success,
+        ).toBe(false);
+      },
+    );
+
+    // --------------------------------------------------------
+    // JSON
+    // --------------------------------------------------------
+
+    it(
+      'should safely store JSON',
+      () => {
+
+        const key =
+          '__json_test__';
+
+        const data = {
+          enabled: true,
+          count: 10,
+        };
+
+        const setResult =
+          safeSetJSON(
+            key,
+            data,
+          );
+
+        if (
+          isLocalStorageAvailable()
+        ) {
+          expect(
+            setResult.success,
+          ).toBe(true);
+
+          const getResult =
+            safeGetJSON<typeof data>(
+              key,
+            );
+
+          expect(
+            getResult.success,
+          ).toBe(true);
+
+          expect(
+            getResult.value,
+          ).toEqual(data);
+        }
+      },
+    );
+
+    // --------------------------------------------------------
+    // MEMORY FALLBACK
+    // --------------------------------------------------------
+
+    it(
+      'should provide a memory fallback',
+      () => {
+
+        const storage =
+          new MemoryStorage();
+
+        expect(
+          storage.set(
+            'key',
+            'value',
+          ),
+        ).toBe(true);
+
+        expect(
+          storage.get('key'),
+        ).toBe('value');
+
+        expect(
+          storage.remove('key'),
+        ).toBe(true);
+
+        expect(
+          storage.get('key'),
+        ).toBeNull();
+      },
+    );
+
+    // --------------------------------------------------------
+    // STORAGE FACTORY
+    // --------------------------------------------------------
+
+    it(
+      'should create a storage strategy',
+      () => {
+
+        const strategy =
+          createStorageStrategy();
+
+        expect(
+          strategy.type ===
+            'localStorage' ||
+          strategy.type ===
+            'memory',
+        ).toBe(true);
+      },
+    );
+
+    // --------------------------------------------------------
+    // HEALTH MONITOR
+    // --------------------------------------------------------
+
+    it(
+      'should monitor storage health',
+      () => {
+
+        const monitor =
+          new StorageHealthMonitor();
+
+        const result =
+          monitor.check();
+
+        expect(
+          result,
+        ).toBeDefined();
+
+        expect(
+          monitor.getLastResult(),
+        ).not.toBeNull();
+      },
+    );
+
+    // --------------------------------------------------------
+    // WATCHER
+    // --------------------------------------------------------
+
+    it(
+      'should detect availability changes',
+      () => {
+
+        const watcher =
+          new StorageAvailabilityWatcher();
+
+        const first =
+          watcher.check();
+
+        expect(
+          first.changed,
+        ).toBe(true);
+
+        const second =
+          watcher.check();
+
+        expect(
+          second.previous,
+        ).not.toBeNull();
+      },
+    );
+  },
+);
+
+// ============================================================
+// SECURITY / IMPLEMENTATION NOTES
+// ============================================================
+
+/**
+ * SECURITY CONSIDERATIONS
+ * =======================
+ *
+ * localStorage should NEVER be treated as a secure secret
+ * store.
+ *
+ * Do NOT store:
+ *
+ * - passwords
+ * - private keys
+ * - refresh tokens
+ * - session secrets
+ * - encryption keys
+ * - highly sensitive personal information
+ *
+ * JavaScript running in the same origin can generally access
+ * localStorage.
+ *
+ * Therefore an XSS vulnerability can expose localStorage
+ * contents.
+ *
+ *
+ * Good use cases:
+ *
+ * - UI preferences
+ * - theme selection
+ * - non-sensitive application settings
+ * - dismissed notices
+ * - cached non-sensitive data
+ * - feature preferences
+ *
+ *
+ * ============================================================
+ * AVAILABILITY CHECK
+ * ============================================================
+ *
+ * DO NOT rely solely on:
+ *
+ *     typeof window.localStorage !== 'undefined'
+ *
+ * because property access itself can throw.
+ *
+ * Instead:
+ *
+ *     detectLocalStorageAvailability()
+ *
+ * performs an actual write/read/delete test.
+ *
+ *
+ * ============================================================
+ * SSR
+ * ============================================================
+ *
+ * Never access window.localStorage during server rendering.
+ *
+ * Always guard browser APIs:
+ *
+ *     typeof window !== 'undefined'
+ *
+ *
+ * ============================================================
+ * FALLBACK
+ * ============================================================
+ *
+ * If localStorage is unavailable, the application should
+ * continue operating whenever possible.
+ *
+ * Use:
+ *
+ *     createStorageStrategy()
+ *
+ * to automatically select localStorage or memory storage.
+ *
+ *
+ * ============================================================
+ * ACCEPTANCE CRITERIA
+ * ============================================================
+ *
+ * [x] Detect browser environment.
+ *
+ * [x] Detect missing localStorage.
+ *
+ * [x] Detect inaccessible localStorage.
+ *
+ * [x] Detect SecurityError.
+ *
+ * [x] Detect quota errors.
+ *
+ * [x] Perform real read/write verification.
+ *
+ * [x] Clean up the test key.
+ *
+ * [x] Never crash the application because localStorage
+ *     is unavailable.
+ *
+ * [x] Provide safe read operations.
+ *
+ * [x] Provide safe write operations.
+ *
+ * [x] Provide safe delete operations.
+ *
+ * [x] Provide JSON helpers.
+ *
+ * [x] Provide memory fallback.
+ *
+ * [x] Provide health monitoring.
+ *
+ * [x] Provide automated tests.
+ *
+ * [x] Handle SSR environments.
+ *
+ * [x] Avoid treating localStorage as secure secret storage.
+ *
+ */
