@@ -27,6 +27,10 @@ import { buildCopyEvent } from "./events/copy";
 import { buildExperimentAssignEvent } from "./events/experiment";
 import { buildExternalLinkClickEvent, isExternalLink } from "./events/external-link";
 import { buildHeatmapClickEvent, normaliseClick } from "./events/heatmap";
+import { buildDeadClickEvent, isInteractiveElement, findInteractiveAncestor, getSelector } from "./events/dead-click";
+import { buildVisibilityChangeEvent } from "./events/visibility";
+import { buildWindowFocusEvent, buildWindowBlurEvent } from "./events/focus";
+import { startVitalsTracking } from "./vitals";
 import { getSessionId } from "./session";
 import { getUserId, attachUserProperties } from "./user";
 import { GroupContext, attachGroupContext } from "./group";
@@ -131,6 +135,34 @@ export interface AnalyticsClientConfig {
   trackHeatmapClicks?: boolean;
 
   /**
+   * When `true` (default), the client registers a global click listener
+   * that detects clicks on non-interactive elements (no href, onClick, or
+   * role) and tracks them as `dead_click` events. Set to `false` to disable.
+   */
+  trackDeadClicks?: boolean;
+
+  /**
+   * When `true` (default), the client listens to the Page Visibility API
+   * (visibilitychange) and tracks when the user hides and shows the tab
+   * as `visibility_change` events. Set to `false` to disable.
+   */
+  trackVisibility?: boolean;
+
+  /**
+   * When `true` (default), the client tracks Core Web Vitals (LCP, INP, CLS,
+   * TTFB, FCP) using the web-vitals library and sends them as `web_vital`
+   * events. Set to `false` to disable.
+   */
+  trackVitals?: boolean;
+
+  /**
+   * When `true` (default), the client tracks window focus and blur events
+   * to detect when users switch away from and return to the app, emitting
+   * `window_focus` and `window_blur` events. Set to `false` to disable.
+   */
+  trackFocusBlur?: boolean;
+
+  /**
    * When `true` (default) and an `endpoint` is configured, any events still
    * queued when the page unloads are flushed via `navigator.sendBeacon`,
    * falling back to a synchronous POST when `sendBeacon` is unavailable.
@@ -204,7 +236,17 @@ export class AnalyticsClient {
   private readonly scrollHandler: (() => void) | undefined;
   private readonly timeOnPageHandler: (() => void) | undefined;
   private readonly externalLinkHandler: ((e: MouseEvent) => void) | undefined;
-  private readonly heatmapHandler: ((e: MouseEvent) => void) | undefined;
+  private readonly  heatmapHandler: ((e: MouseEvent) => void) | undefined;
+  private readonly deadClickHandler: ((e: MouseEvent) => void) | undefined;
+  private readonly visibilityHandler: (() => void) | undefined;
+  private readonly focusHandler: (() => void) | undefined;
+  private readonly blurHandler: (() => void) | undefined;
+  /** Timestamp (ms) when the window was last blurred. */
+  private blurStartMs: number | null = null;
+  /** Timestamp (ms) when the document was last hidden. */
+  private hiddenStartMs: number | null = null;
+  /** Cleanup function for web-vitals listeners. */
+  private readonly stopVitalsTracking: (() => void) | undefined;
   /** Persistent anonymous user ID resolved once at construction time. */
   private readonly userId: string | undefined;
 
@@ -230,6 +272,11 @@ export class AnalyticsClient {
     this.timeOnPageHandler = this._bindTimeOnPageTracking();
     this.externalLinkHandler = this._bindExternalLinkTracking();
     this.heatmapHandler = this._bindHeatmapTracking();
+    this.deadClickHandler = this._bindDeadClickTracking();
+    this.visibilityHandler = this._bindVisibilityTracking();
+    this.focusHandler = this._bindFocusTracking();
+    this.blurHandler = this._bindBlurTracking();
+    this.stopVitalsTracking = this._bindVitalsTracking();
     this.userId = getUserId();
     this.sessionId = getSessionId();
 
@@ -405,6 +452,44 @@ export class AnalyticsClient {
   }
 
   /**
+   * Queue a `dead_click` event recording a click on a non-interactive element.
+   *
+   * @param tag      - HTML tag name of the clicked element.
+   * @param selector - Optional CSS selector.
+   * @param path     - Page path.
+   * @param inInteractiveAncestor - Whether the element is inside an interactive ancestor.
+   */
+  trackDeadClick(
+    tag: string,
+    selector: string | undefined,
+    path: string,
+    inInteractiveAncestor: boolean,
+  ): void {
+    this.track(buildDeadClickEvent(tag, selector, path, inInteractiveAncestor));
+  }
+
+  /**
+   * Queue a `visibility_change` event.
+   */
+  trackVisibilityChange(state: "hidden" | "visible", hiddenDurationMs?: number): void {
+    this.track(buildVisibilityChangeEvent(state, hiddenDurationMs));
+  }
+
+  /**
+   * Queue a `window_focus` event.
+   */
+  trackWindowFocus(): void {
+    this.track(buildWindowFocusEvent());
+  }
+
+  /**
+   * Queue a `window_blur` event.
+   */
+  trackWindowBlur(): void {
+    this.track(buildWindowBlurEvent());
+  }
+
+  /**
    * Queue a `qr_share` event recording when the user opens the QR share modal.
    *
    * @param type - The kind of resource being shared via QR code.
@@ -569,6 +654,21 @@ export class AnalyticsClient {
     }
     if (this.heatmapHandler) {
       window.removeEventListener("click", this.heatmapHandler);
+    }
+    if (this.deadClickHandler) {
+      window.removeEventListener("click", this.deadClickHandler);
+    }
+    if (this.visibilityHandler) {
+      document.removeEventListener("visibilitychange", this.visibilityHandler);
+    }
+    if (this.focusHandler) {
+      window.removeEventListener("focus", this.focusHandler);
+    }
+    if (this.blurHandler) {
+      window.removeEventListener("blur", this.blurHandler);
+    }
+    if (this.stopVitalsTracking) {
+      this.stopVitalsTracking();
     }
   }
 
@@ -844,6 +944,108 @@ export class AnalyticsClient {
 
     window.addEventListener("click", handler);
     return handler;
+  }
+
+  /**
+   * Registers a global click listener that detects clicks on non-interactive
+   * elements and tracks them as `dead_click` events.
+   */
+  private _bindDeadClickTracking(): ((e: MouseEvent) => void) | undefined {
+    if (this.config.trackDeadClicks === false) return undefined;
+    if (typeof window === "undefined" || typeof document === "undefined") {
+      return undefined;
+    }
+
+    const handler = (e: MouseEvent): void => {
+      const target = e.target as Element | null;
+      if (!target || target === document.body || target === document.documentElement) {
+        return;
+      }
+
+      // Import helpers from dead-click module
+      const isInteractive = isInteractiveElement(target);
+      if (isInteractive) return;
+
+      const interactiveAncestor = findInteractiveAncestor(target);
+      if (interactiveAncestor) return;
+
+      const selector = getSelector(target);
+      this.trackDeadClick(
+        target.tagName.toLowerCase(),
+        selector,
+        currentPath(),
+        false,
+      );
+    };
+
+    window.addEventListener("click", handler);
+    return handler;
+  }
+
+  /**
+   * Registers a visibilitychange listener that tracks when the user
+   * hides and shows the browser tab.
+   */
+  private _bindVisibilityTracking(): (() => void) | undefined {
+    if (this.config.trackVisibility === false) return undefined;
+    if (typeof document === "undefined") return undefined;
+
+    const handler = (): void => {
+      if (document.hidden) {
+        this.hiddenStartMs = Date.now();
+        this.trackVisibilityChange("hidden");
+      } else {
+        const hiddenDurationMs = this.hiddenStartMs !== null
+          ? Date.now() - this.hiddenStartMs
+          : undefined;
+        this.hiddenStartMs = null;
+        this.trackVisibilityChange("visible", hiddenDurationMs);
+      }
+    };
+
+    document.addEventListener("visibilitychange", handler);
+    return handler;
+  }
+
+  /**
+   * Registers a focus listener on the window.
+   */
+  private _bindFocusTracking(): (() => void) | undefined {
+    if (this.config.trackFocusBlur === false) return undefined;
+    if (typeof window === "undefined") return undefined;
+
+    const handler = (): void => {
+      this.trackWindowFocus();
+    };
+
+    window.addEventListener("focus", handler);
+    return handler;
+  }
+
+  /**
+   * Registers a blur listener on the window.
+   */
+  private _bindBlurTracking(): (() => void) | undefined {
+    if (this.config.trackFocusBlur === false) return undefined;
+    if (typeof window === "undefined") return undefined;
+
+    const handler = (): void => {
+      this.blurStartMs = Date.now();
+      this.trackWindowBlur();
+    };
+
+    window.addEventListener("blur", handler);
+    return handler;
+  }
+
+  /**
+   * Initializes web-vitals tracking and returns a cleanup function.
+   */
+  private _bindVitalsTracking(): (() => void) | undefined {
+    if (this.config.trackVitals === false) return undefined;
+    if (typeof window === "undefined") return undefined;
+
+    return startVitalsTracking((event) => this.track(event));
   }
 
   /**
