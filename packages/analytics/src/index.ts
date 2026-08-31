@@ -1,7 +1,13 @@
 // Core event interface and EventName enum (from types/ directory)
 export { AnalyticsEvent, EventName } from "./types/events";
-export { EventEmitter } from "./emitter";
-export type { EventHandler } from "./emitter";
+export { EventEmitter, NoopEmitter } from "./emitter";
+export type { EventHandler, EventEmitterMetrics, EventEmitterOptions } from "./emitter";
+
+// Analytics #95, #97, #98 — structured logging, circuit breaker
+export { ConsoleLogger, defaultLogger } from "./lib/logger";
+export type { Logger, LogLevel, LogRecord, ConsoleLoggerOptions } from "./lib/logger";
+export { CircuitBreaker } from "./lib/circuitBreaker";
+export type { CircuitState, CircuitBreakerOptions } from "./lib/circuitBreaker";
 export { HttpSink, ConsoleSink } from "./sinks";
 export type { HttpSinkOptions, FetchImpl } from "./sinks";
 export { limitPayload } from "./limitPayload";
@@ -85,7 +91,7 @@ export type { AnalyticsClientConfig } from "./client";
 
 // EventQueue — in-memory queue with 20-event / 30 s auto-flush
 export { EventQueue, QUEUE_MAX_SIZE, QUEUE_FLUSH_INTERVAL_MS } from "./queue";
-export type { FlushCallback } from "./queue";
+export type { FlushCallback, EventQueueOptions } from "./queue";
 
 // Analytics #41 — event schema validation
 export { validateEvent, validateOrDrop } from "./validate";

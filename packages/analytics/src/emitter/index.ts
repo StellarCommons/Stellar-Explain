@@ -1,2 +1,3 @@
 export { EventEmitter } from "./EventEmitter";
-export type { EventHandler } from "./EventEmitter";
+export type { EventHandler, EventEmitterMetrics, EventEmitterOptions } from "./EventEmitter";
+export { NoopEmitter } from "./NoopEmitter";

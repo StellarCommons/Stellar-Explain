@@ -9,6 +9,11 @@ export interface AnalyticsContextValue {
 const AnalyticsContext = createContext<AnalyticsContextValue | null>(null);
 
 function defaultTrack(name: string, properties?: Record<string, unknown>): void {
+  // Issue #96: never track during SSR — there is no browser here to
+  // eventually receive the analytics call, so route it to a no-op instead
+  // of logging a message that will never correspond to a real client event.
+  if (typeof window === "undefined") return;
+
   // eslint-disable-next-line no-console
   console.debug("[analytics]", {
     name,
