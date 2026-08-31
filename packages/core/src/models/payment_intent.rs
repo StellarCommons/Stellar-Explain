@@ -89,24 +89,23 @@ impl PaymentIntent {
             return Err(ValidationError::ZeroAmount);
         }
 
-        if let Asset::Credit { ref code, .. } = asset {
-            if code.is_empty()
+        if let Asset::Credit { ref code, .. } = asset
+            && (code.is_empty()
                 || code.len() > 12
-                || !code.chars().all(|c| c.is_ascii_alphanumeric())
-            {
-                return Err(ValidationError::InvalidAsset(format!(
-                    "Asset code must be 1-12 alphanumeric characters, got '{code}'"
-                )));
-            }
+                || !code.chars().all(|c| c.is_ascii_alphanumeric()))
+        {
+            return Err(ValidationError::InvalidAsset(format!(
+                "Asset code must be 1-12 alphanumeric characters, got '{code}'"
+            )));
         }
 
-        if let Some(Memo::Text(ref text)) = memo {
-            if text.len() > 28 {
-                return Err(ValidationError::InvalidMemo(format!(
-                    "Text memo must be at most 28 bytes, got {}",
-                    text.len()
-                )));
-            }
+        if let Some(Memo::Text(ref text)) = memo
+            && text.len() > 28
+        {
+            return Err(ValidationError::InvalidMemo(format!(
+                "Text memo must be at most 28 bytes, got {}",
+                text.len()
+            )));
         }
 
         Ok(Self {
