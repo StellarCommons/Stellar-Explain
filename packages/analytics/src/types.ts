@@ -151,6 +151,72 @@ export interface CopyEvent {
 }
 
 // ---------------------------------------------------------------------------
+// ClickEvent
+// ---------------------------------------------------------------------------
+
+export interface ClickProperties {
+  /** The human-readable label of the clicked element. */
+  label: string;
+  /** Optional HTML tag name of the clicked element. */
+  element?: string;
+  /** Optional page path where the click occurred. */
+  path?: string;
+}
+
+export interface ClickEvent {
+  id: string;
+  name: "click";
+  timestamp: Date;
+  sessionId?: string;
+  userId?: string;
+  properties: ClickProperties;
+}
+
+// ---------------------------------------------------------------------------
+// FormSubmitEvent
+// ---------------------------------------------------------------------------
+
+export interface FormSubmitProperties {
+  /** The name or identifier of the submitted form. */
+  formName: string;
+  /** Optional page path where the submission occurred. */
+  path?: string;
+}
+
+export interface FormSubmitEvent {
+  id: string;
+  name: "form_submit";
+  timestamp: Date;
+  sessionId?: string;
+  userId?: string;
+  properties: FormSubmitProperties;
+}
+
+// ---------------------------------------------------------------------------
+// FunnelStepEvent
+// ---------------------------------------------------------------------------
+
+export interface FunnelStepProperties {
+  /** The name of the conversion funnel. */
+  funnelName: string;
+  /** The numeric step index within the funnel (0-based). */
+  step: number;
+  /** The human-readable name of the funnel step. */
+  stepName: string;
+  /** Optional page path where the step occurred. */
+  path?: string;
+}
+
+export interface FunnelStepEvent {
+  id: string;
+  name: "funnel_step";
+  timestamp: Date;
+  sessionId?: string;
+  userId?: string;
+  properties: FunnelStepProperties;
+}
+
+// ---------------------------------------------------------------------------
 // Union
 // ---------------------------------------------------------------------------
 
@@ -160,4 +226,7 @@ export type StellarAnalyticsEvent =
   | SearchEvent
   | ResultViewEvent
   | ErrorEvent
-  | CopyEvent;
+  | CopyEvent
+  | ClickEvent
+  | FormSubmitEvent
+  | FunnelStepEvent;

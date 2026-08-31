@@ -30,6 +30,10 @@ import { buildHeatmapClickEvent, normaliseClick } from "./events/heatmap";
 import { buildDeadClickEvent, isInteractiveElement, findInteractiveAncestor, getSelector } from "./events/dead-click";
 import { buildVisibilityChangeEvent } from "./events/visibility";
 import { buildWindowFocusEvent, buildWindowBlurEvent } from "./events/focus";
+import { buildClickEvent } from "./events/click";
+import { buildFormSubmitEvent } from "./events/form";
+import { buildFunnelStepEvent } from "./events/funnel";
+import { EventMiddleware, runMiddleware } from "./middleware";
 import { startVitalsTracking } from "./vitals";
 import { getSessionId } from "./session";
 import { getUserId, attachUserProperties } from "./user";
@@ -253,6 +257,9 @@ export class AnalyticsClient {
   /** Per-session ID resolved once at construction time. */
   private readonly sessionId: string | undefined;
 
+  /** Registered event middleware, run on every event before enqueue. */
+  private readonly middlewares: EventMiddleware[] = [];
+
   private readonly onPageHide: (() => void) | undefined;
   private readonly onRouteChange: (() => void) | undefined;
 
@@ -325,9 +332,14 @@ export class AnalyticsClient {
       return;
     }
 
+    // Run event middleware — can transform or drop events.
+    const afterMiddleware = runMiddleware(this.middlewares, base);
+    if (!afterMiddleware) return;
+
     // Issue #936 — plugins: let each beforeTrack hook observe/transform the
     // event ahead of sampling and enrichment.
     const plugins = this.config.plugins ?? [];
+    const beforePlugins = runBeforeTrack(plugins, afterMiddleware);
     const beforePlugins = runBeforeTrack(plugins, base, this.logger);
 
     if (this.config.sampleRate !== undefined && !shouldSample(this.config.sampleRate)) {
@@ -487,6 +499,48 @@ export class AnalyticsClient {
    */
   trackWindowBlur(): void {
     this.track(buildWindowBlurEvent());
+  }
+
+  /**
+   * Queue a `click` event recording a click on a button or link.
+   *
+   * @param label - The human-readable label of the clicked element.
+   * @param element - Optional HTML tag name of the clicked element.
+   * @param path  - Optional page path where the click occurred.
+   */
+  trackClick(label: string, element?: string, path?: string): void {
+    this.track(buildClickEvent(label, { element, path }));
+  }
+
+  /**
+   * Queue a `form_submit` event recording a form submission.
+   *
+   * @param formName - The name or identifier of the submitted form.
+   */
+  trackFormSubmit(formName: string): void {
+    this.track(buildFormSubmitEvent(formName, currentPath()));
+  }
+
+  /**
+   * Queue a `funnel_step` event recording progression through a conversion funnel.
+   *
+   * @param funnelName - The name of the conversion funnel.
+   * @param step       - The numeric step index (0-based).
+   * @param stepName   - The human-readable name of the step.
+   */
+  trackFunnelStep(funnelName: string, step: number, stepName: string): void {
+    this.track(buildFunnelStepEvent(funnelName, step, stepName, currentPath()));
+  }
+
+  /**
+   * Register an event middleware function that is called on every event
+   * before it is enqueued. Middleware can transform or drop events.
+   *
+   * @param middleware - A function that receives an event and returns a
+   *                    transformed event, or `undefined` to drop it.
+   */
+  use(middleware: EventMiddleware): void {
+    this.middlewares.push(middleware);
   }
 
   /**
