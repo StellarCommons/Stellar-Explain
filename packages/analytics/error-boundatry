@@ -1,0 +1,1294 @@
+import {
+  ArgumentsHost,
+  Catch,
+  Controller,
+  ExceptionFilter,
+  Get,
+  HttpException,
+  HttpStatus,
+  Injectable,
+  Logger,
+  Module,
+  NestFactory,
+} from '@nestjs/common';
+
+import {
+  Request,
+  Response,
+} from 'express';
+
+// ============================================================
+// ERROR RESPONSE
+// ============================================================
+
+export interface ErrorResponse {
+
+  success: false;
+
+  statusCode: number;
+
+  error: string;
+
+  message: string;
+
+  path: string;
+
+  timestamp: string;
+
+  requestId?: string;
+
+  /*
+   * Stack traces and internal exception details are NEVER
+   * returned to clients in production.
+   */
+}
+
+// ============================================================
+// ERROR CONTEXT
+// ============================================================
+
+export interface ErrorContext {
+
+  requestId?: string;
+
+  method: string;
+
+  path: string;
+
+  ip?: string;
+
+  userId?: string;
+
+  timestamp: Date;
+}
+
+// ============================================================
+// ERROR LOGGER
+// ============================================================
+
+@Injectable()
+export class ApplicationErrorLogger {
+
+  private readonly logger =
+    new Logger(
+      'ApplicationErrors',
+    );
+
+  // ==========================================================
+  // LOG ERROR
+  // ==========================================================
+
+  log(
+    exception: unknown,
+    context: ErrorContext,
+  ): void {
+
+    const error =
+      this.normalizeError(
+        exception,
+      );
+
+    /*
+     * Keep structured information in the log.
+     *
+     * Never expose this entire object to the HTTP client.
+     */
+
+    this.logger.error(
+      JSON.stringify({
+        type:
+          error.name,
+
+        message:
+          error.message,
+
+        stack:
+          error.stack,
+
+        requestId:
+          context.requestId,
+
+        method:
+          context.method,
+
+        path:
+          context.path,
+
+        ip:
+          context.ip,
+
+        userId:
+          context.userId,
+
+        timestamp:
+          context.timestamp
+            .toISOString(),
+      }),
+    );
+  }
+
+  // ==========================================================
+  // NORMALIZE UNKNOWN ERROR
+  // ==========================================================
+
+  private normalizeError(
+    exception: unknown,
+  ): Error {
+
+    if (
+      exception instanceof Error
+    ) {
+      return exception;
+    }
+
+    if (
+      typeof exception ===
+      'string'
+    ) {
+
+      return new Error(
+        exception,
+      );
+    }
+
+    try {
+
+      return new Error(
+        JSON.stringify(
+          exception,
+        ),
+      );
+
+    } catch {
+
+      return new Error(
+        'Unknown exception',
+      );
+    }
+  }
+}
+
+// ============================================================
+// GLOBAL EXCEPTION FILTER
+// ============================================================
+
+@Catch()
+export class GlobalExceptionFilter
+  implements ExceptionFilter {
+
+  private readonly logger =
+    new Logger(
+      'GlobalExceptionFilter',
+    );
+
+  constructor(
+    private readonly errorLogger:
+      ApplicationErrorLogger,
+  ) {}
+
+  // ==========================================================
+  // CATCH ALL EXCEPTIONS
+  // ==========================================================
+
+  catch(
+    exception: unknown,
+    host: ArgumentsHost,
+  ): void {
+
+    const context =
+      host.switchToHttp();
+
+    const request =
+      context.getRequest<Request>();
+
+    const response =
+      context.getResponse<Response>();
+
+    // --------------------------------------------------------
+    // REQUEST INFORMATION
+    // --------------------------------------------------------
+
+    const requestId =
+      this.getRequestId(
+        request,
+      );
+
+    const userId =
+      this.getUserId(
+        request,
+      );
+
+    const errorContext:
+      ErrorContext = {
+
+      requestId,
+
+      method:
+        request.method,
+
+      path:
+        request.originalUrl ||
+        request.url,
+
+      ip:
+        request.ip,
+
+      userId,
+
+      timestamp:
+        new Date(),
+    };
+
+    // --------------------------------------------------------
+    // LOG THE ORIGINAL ERROR
+    // --------------------------------------------------------
+
+    this.errorLogger.log(
+      exception,
+      errorContext,
+    );
+
+    // --------------------------------------------------------
+    // DETERMINE STATUS
+    // --------------------------------------------------------
+
+    const statusCode =
+      this.getStatusCode(
+        exception,
+      );
+
+    // --------------------------------------------------------
+    // DETERMINE SAFE MESSAGE
+    // --------------------------------------------------------
+
+    const message =
+      this.getSafeMessage(
+        exception,
+        statusCode,
+      );
+
+    // --------------------------------------------------------
+    // BUILD RESPONSE
+    // --------------------------------------------------------
+
+    const errorResponse:
+      ErrorResponse = {
+
+      success:
+        false,
+
+      statusCode,
+
+      error:
+        this.getErrorName(
+          exception,
+          statusCode,
+        ),
+
+      message,
+
+      path:
+        errorContext.path,
+
+      timestamp:
+        errorContext.timestamp
+          .toISOString(),
+
+      requestId,
+    };
+
+    // --------------------------------------------------------
+    // SEND RESPONSE
+    // --------------------------------------------------------
+
+    if (
+      response.headersSent
+    ) {
+
+      /*
+       * The response may already have started.
+       *
+       * At this point we cannot safely replace the response.
+       * Destroying the connection allows the client to retry
+       * where appropriate.
+       */
+
+      response.end();
+
+      return;
+    }
+
+    response
+      .status(statusCode)
+      .json(errorResponse);
+  }
+
+  // ==========================================================
+  // STATUS CODE
+  // ==========================================================
+
+  private getStatusCode(
+    exception: unknown,
+  ): number {
+
+    if (
+      exception instanceof
+      HttpException
+    ) {
+
+      return exception
+        .getStatus();
+    }
+
+    /*
+     * Any exception not explicitly converted into an
+     * HttpException is considered an internal server error.
+     */
+
+    return HttpStatus.INTERNAL_SERVER_ERROR;
+  }
+
+  // ==========================================================
+  // SAFE ERROR MESSAGE
+  // ==========================================================
+
+  private getSafeMessage(
+    exception: unknown,
+    statusCode: number,
+  ): string {
+
+    /*
+     * Never return internal exception messages for 500 errors
+     * in production.
+     */
+
+    if (
+      statusCode >= 500
+    ) {
+
+      return 'Internal server error';
+    }
+
+    if (
+      exception instanceof
+      HttpException
+    ) {
+
+      const response =
+        exception.getResponse();
+
+      if (
+        typeof response ===
+        'string'
+      ) {
+
+        return response;
+      }
+
+      if (
+        typeof response ===
+          'object' &&
+        response !== null
+      ) {
+
+        const message =
+          (
+            response as any
+          ).message;
+
+        if (
+          Array.isArray(
+            message,
+          )
+        ) {
+
+          return message.join(
+            ', ',
+          );
+        }
+
+        if (
+          typeof message ===
+          'string'
+        ) {
+
+          return message;
+        }
+      }
+    }
+
+    return 'Request failed';
+  }
+
+  // ==========================================================
+  // ERROR NAME
+  // ==========================================================
+
+  private getErrorName(
+    exception: unknown,
+    statusCode: number,
+  ): string {
+
+    if (
+      exception instanceof
+      HttpException
+    ) {
+
+      const response =
+        exception.getResponse();
+
+      if (
+        typeof response ===
+        'object' &&
+        response !== null
+      ) {
+
+        const error =
+          (response as any).error;
+
+        if (
+          typeof error ===
+          'string'
+        ) {
+
+          return error;
+        }
+      }
+    }
+
+    if (
+      statusCode >= 500
+    ) {
+
+      return 'Internal Server Error';
+    }
+
+    return 'Request Error';
+  }
+
+  // ==========================================================
+  // REQUEST ID
+  // ==========================================================
+
+  private getRequestId(
+    request: Request,
+  ): string | undefined {
+
+    const value =
+      request.headers[
+        'x-request-id'
+      ];
+
+    if (
+      typeof value ===
+      'string' &&
+      value.length > 0
+    ) {
+
+      return value;
+    }
+
+    return undefined;
+  }
+
+  // ==========================================================
+  // USER ID
+  // ==========================================================
+
+  private getUserId(
+    request: Request,
+  ): string | undefined {
+
+    const user =
+      (request as any).user;
+
+    if (
+      user &&
+      typeof user.id ===
+      'string'
+    ) {
+
+      return user.id;
+    }
+
+    return undefined;
+  }
+}
+
+// ============================================================
+// REQUEST ID MIDDLEWARE
+// ============================================================
+
+@Injectable()
+export class RequestIdMiddleware {
+
+  use(
+    request: Request,
+    response: Response,
+    next: () => void,
+  ): void {
+
+    let requestId =
+      request.headers[
+        'x-request-id'
+      ];
+
+    /*
+     * Only accept a simple request ID.
+     *
+     * Do not allow arbitrary large values into logs.
+     */
+
+    if (
+      Array.isArray(
+        requestId,
+      )
+    ) {
+
+      requestId =
+        requestId[0];
+    }
+
+    if (
+      typeof requestId !==
+      'string' ||
+      requestId.length === 0 ||
+      requestId.length > 128
+    ) {
+
+      requestId =
+        this.generateRequestId();
+    }
+
+    response.setHeader(
+      'X-Request-ID',
+      requestId,
+    );
+
+    /*
+     * Store the ID on the request so the global exception
+     * filter can retrieve it.
+     */
+
+    (request as any)
+      .requestId = requestId;
+
+    next();
+  }
+
+  // ==========================================================
+  // GENERATE REQUEST ID
+  // ==========================================================
+
+  private generateRequestId(): string {
+
+    return [
+      'req',
+      Date.now(),
+      Math.random()
+        .toString(36)
+        .slice(2),
+    ].join('-');
+  }
+}
+
+// ============================================================
+// HEALTH CONTROLLER
+// ============================================================
+
+@Controller()
+export class AppController {
+
+  @Get('health')
+  health() {
+
+    return {
+      success:
+        true,
+
+      status:
+        'ok',
+    };
+  }
+
+  // ==========================================================
+  // TEST UNCAUGHT ERROR
+  // ==========================================================
+
+  @Get('test/unhandled-error')
+  triggerUnhandledError() {
+
+    /*
+     * This intentionally throws an exception that is NOT an
+     * HttpException.
+     *
+     * The global error boundary must catch it.
+     */
+
+    throw new Error(
+      'This is an intentional test exception',
+    );
+  }
+
+  // ==========================================================
+  // TEST HTTP ERROR
+  // ==========================================================
+
+  @Get('test/http-error')
+  triggerHttpError() {
+
+    throw new HttpException(
+      'Example request error',
+      HttpStatus.BAD_REQUEST,
+    );
+  }
+
+  // ==========================================================
+  // TEST UNKNOWN ERROR
+  // ==========================================================
+
+  @Get('test/unknown-error')
+  triggerUnknownError() {
+
+    throw {
+      internalCode:
+        'DATABASE_CONNECTION_FAILED',
+
+      secret:
+        'this must never reach the client',
+    };
+  }
+}
+
+// ============================================================
+// MODULE
+// ============================================================
+
+@Module({
+  controllers: [
+    AppController,
+  ],
+
+  providers: [
+    ApplicationErrorLogger,
+    GlobalExceptionFilter,
+    RequestIdMiddleware,
+  ],
+})
+export class AppModule {}
+
+// ============================================================
+// MAIN.TS
+// ============================================================
+
+/*
+ *
+ * main.ts
+ *
+ *
+ * import {
+ *   NestFactory,
+ * } from '@nestjs/core';
+ *
+ *
+ * async function bootstrap() {
+ *
+ *   const app =
+ *     await NestFactory.create(
+ *       AppModule,
+ *     );
+ *
+ *   // -------------------------------------------------------
+ *   // REQUEST ID
+ *   // -------------------------------------------------------
+ *
+ *   app.use(
+ *     (
+ *       req,
+ *       res,
+ *       next,
+ *     ) => {
+ *
+ *       const middleware =
+ *         new RequestIdMiddleware();
+ *
+ *       middleware.use(
+ *         req,
+ *         res,
+ *         next,
+ *       );
+ *     },
+ *   );
+ *
+ *   // -------------------------------------------------------
+ *   // GLOBAL ERROR BOUNDARY
+ *   // -------------------------------------------------------
+ *
+ *   const errorLogger =
+ *     app.get(
+ *       ApplicationErrorLogger,
+ *     );
+ *
+ *   app.useGlobalFilters(
+ *     new GlobalExceptionFilter(
+ *       errorLogger,
+ *     ),
+ *   );
+ *
+ *   await app.listen(
+ *     process.env.PORT ?? 3000,
+ *   );
+ * }
+ *
+ *
+ * bootstrap();
+ *
+ */
+
+// ============================================================
+// EXAMPLE RESPONSES
+// ============================================================
+
+/*
+ *
+ * ------------------------------------------------------------
+ * SUCCESSFUL REQUEST
+ * ------------------------------------------------------------
+ *
+ * GET /health
+ *
+ *
+ * {
+ *   "success": true,
+ *   "status": "ok"
+ * }
+ *
+ *
+ *
+ * ------------------------------------------------------------
+ * EXPECTED HTTP ERROR
+ * ------------------------------------------------------------
+ *
+ * GET /test/http-error
+ *
+ *
+ * {
+ *   "success": false,
+ *   "statusCode": 400,
+ *   "error": "Bad Request",
+ *   "message": "Example request error",
+ *   "path": "/test/http-error",
+ *   "timestamp": "2026-08-31T10:00:00.000Z",
+ *   "requestId": "req-123"
+ * }
+ *
+ *
+ *
+ * ------------------------------------------------------------
+ * UNEXPECTED ERROR
+ * ------------------------------------------------------------
+ *
+ * GET /test/unhandled-error
+ *
+ *
+ * {
+ *   "success": false,
+ *   "statusCode": 500,
+ *   "error": "Internal Server Error",
+ *   "message": "Internal server error",
+ *   "path": "/test/unhandled-error",
+ *   "timestamp": "2026-08-31T10:00:00.000Z",
+ *   "requestId": "req-456"
+ * }
+ *
+ *
+ * The client NEVER receives:
+ *
+ *
+ * {
+ *   "stack": "...",
+ *   "databasePassword": "...",
+ *   "internalFilePath": "..."
+ * }
+ *
+ */
+
+// ============================================================
+// UNIT TESTS
+// ============================================================
+
+describe(
+  'GlobalExceptionFilter',
+  () => {
+
+    let filter:
+      GlobalExceptionFilter;
+
+    const logger =
+      {
+        log:
+          jest.fn(),
+      };
+
+    beforeEach(
+      () => {
+
+        jest.clearAllMocks();
+
+        filter =
+          new GlobalExceptionFilter(
+            logger as any,
+          );
+      },
+    );
+
+    // ========================================================
+    // UNEXPECTED ERROR
+    // ========================================================
+
+    it(
+      'converts uncaught errors into a 500 response',
+      () => {
+
+        const request =
+          {
+            method:
+              'GET',
+
+            originalUrl:
+              '/users',
+
+            url:
+              '/users',
+
+            ip:
+              '127.0.0.1',
+
+            headers:
+              {
+                'x-request-id':
+                  'req-123',
+              },
+
+            user:
+              {
+                id:
+                  'user-1',
+              },
+          } as Request;
+
+        const response =
+          {
+            headersSent:
+              false,
+
+            status:
+              jest.fn()
+                .mockReturnThis(),
+
+            json:
+              jest.fn(),
+          } as any;
+
+        const host =
+          {
+            switchToHttp:
+              () => ({
+                getRequest:
+                  () =>
+                    request,
+
+                getResponse:
+                  () =>
+                    response,
+              }),
+          } as any;
+
+        filter.catch(
+          new Error(
+            'database password leaked here',
+          ),
+          host,
+        );
+
+        expect(
+          response.status,
+        ).toHaveBeenCalledWith(
+          500,
+        );
+
+        expect(
+          response.json,
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            success:
+              false,
+
+            statusCode:
+              500,
+
+            message:
+              'Internal server error',
+
+            requestId:
+              'req-123',
+          }),
+        );
+
+        /*
+         * The sensitive exception message must not be returned.
+         */
+
+        expect(
+          response.json.mock.calls[0][0]
+            .message,
+        ).not.toContain(
+          'database password',
+        );
+      },
+    );
+
+    // ========================================================
+    // HTTP EXCEPTION
+    // ========================================================
+
+    it(
+      'preserves expected HTTP exception status',
+      () => {
+
+        const request =
+          {
+            method:
+              'POST',
+
+            originalUrl:
+              '/users',
+
+            url:
+              '/users',
+
+            headers:
+              {},
+          } as Request;
+
+        const response =
+          {
+            headersSent:
+              false,
+
+            status:
+              jest.fn()
+                .mockReturnThis(),
+
+            json:
+              jest.fn(),
+          } as any;
+
+        const host =
+          {
+            switchToHttp:
+              () => ({
+                getRequest:
+                  () =>
+                    request,
+
+                getResponse:
+                  () =>
+                    response,
+              }),
+          } as any;
+
+        filter.catch(
+          new HttpException(
+            'Invalid request',
+            HttpStatus.BAD_REQUEST,
+          ),
+          host,
+        );
+
+        expect(
+          response.status,
+        ).toHaveBeenCalledWith(
+          400,
+        );
+
+        expect(
+          response.json,
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            statusCode:
+              400,
+
+            message:
+              'Invalid request',
+          }),
+        );
+      },
+    );
+
+    // ========================================================
+    // ERROR LOGGING
+    // ========================================================
+
+    it(
+      'logs unexpected exceptions',
+      () => {
+
+        const request =
+          {
+            method:
+              'GET',
+
+            originalUrl:
+              '/test',
+
+            url:
+              '/test',
+
+            ip:
+              '127.0.0.1',
+
+            headers:
+              {},
+          } as Request;
+
+        const response =
+          {
+            headersSent:
+              false,
+
+            status:
+              jest.fn()
+                .mockReturnThis(),
+
+            json:
+              jest.fn(),
+          } as any;
+
+        const host =
+          {
+            switchToHttp:
+              () => ({
+                getRequest:
+                  () =>
+                    request,
+
+                getResponse:
+                  () =>
+                    response,
+              }),
+          } as any;
+
+        const error =
+          new Error(
+            'Unexpected failure',
+          );
+
+        filter.catch(
+          error,
+          host,
+        );
+
+        expect(
+          logger.log,
+        ).toHaveBeenCalled();
+      },
+    );
+
+    // ========================================================
+    // HEADERS ALREADY SENT
+    // ========================================================
+
+    it(
+      'does not attempt to overwrite an existing response',
+      () => {
+
+        const request =
+          {
+            method:
+              'GET',
+
+            originalUrl:
+              '/stream',
+
+            url:
+              '/stream',
+
+            headers:
+              {},
+          } as Request;
+
+        const response =
+          {
+            headersSent:
+              true,
+
+            status:
+              jest.fn(),
+
+            json:
+              jest.fn(),
+
+            end:
+              jest.fn(),
+          } as any;
+
+        const host =
+          {
+            switchToHttp:
+              () => ({
+                getRequest:
+                  () =>
+                    request,
+
+                getResponse:
+                  () =>
+                    response,
+              }),
+          } as any;
+
+        filter.catch(
+          new Error(
+            'stream failure',
+          ),
+          host,
+        );
+
+        expect(
+          response.end,
+        ).toHaveBeenCalled();
+
+        expect(
+          response.json,
+        ).not.toHaveBeenCalled();
+      },
+    );
+  },
+);
+
+// ============================================================
+// ERROR HANDLING POLICY
+// ============================================================
+
+/*
+ *
+ * The global error boundary follows these rules:
+ *
+ *
+ * 1. EXPECTED APPLICATION ERRORS
+ *
+ *    Use NestJS HttpException subclasses.
+ *
+ *    Example:
+ *
+ *      throw new NotFoundException(
+ *        'User not found',
+ *      );
+ *
+ *
+ *
+ * 2. UNEXPECTED ERRORS
+ *
+ *    Any unknown exception becomes HTTP 500.
+ *
+ *
+ *
+ * 3. LOGGING
+ *
+ *    Unexpected errors are logged with:
+ *
+ *      - stack trace
+ *      - request ID
+ *      - HTTP method
+ *      - request path
+ *      - IP address
+ *      - authenticated user ID
+ *      - timestamp
+ *
+ *
+ *
+ * 4. CLIENT RESPONSE
+ *
+ *    Clients receive a consistent structure.
+ *
+ *
+ *
+ * 5. SECURITY
+ *
+ *    Internal exception messages and stack traces are never
+ *    returned for HTTP 500 errors.
+ *
+ *
+ *
+ * 6. REQUEST CORRELATION
+ *
+ *    Every request receives a request ID.
+ *
+ *    This makes it possible to correlate:
+ *
+ *
+ *      Client error
+ *           ↓
+ *      requestId
+ *           ↓
+ *      application logs
+ *           ↓
+ *      database/service logs
+ *
+ *
+ *
+ * 7. RESPONSE SAFETY
+ *
+ *    If headers have already been sent, the filter does not
+ *    attempt to write a second response.
+ *
+ */
+
+// ============================================================
+// RECOMMENDED PRODUCTION ARCHITECTURE
+// ============================================================
+
+/*
+ *
+ *
+ *                    ┌──────────────────┐
+ *                    │     Client       │
+ *                    └────────┬─────────┘
+ *                             │
+ *                             ▼
+ *                    ┌──────────────────┐
+ *                    │ Request ID       │
+ *                    │ Middleware       │
+ *                    └────────┬─────────┘
+ *                             │
+ *                             ▼
+ *                    ┌──────────────────┐
+ *                    │ Authentication   │
+ *                    └────────┬─────────┘
+ *                             │
+ *                             ▼
+ *                    ┌──────────────────┐
+ *                    │ Controllers /    │
+ *                    │ Services         │
+ *                    └────────┬─────────┘
+ *                             │
+ *                    exception│
+ *                             ▼
+ *                  ┌─────────────────────┐
+ *                  │ Global Exception    │
+ *                  │ Boundary            │
+ *                  └──────────┬──────────┘
+ *                             │
+ *               ┌─────────────┴─────────────┐
+ *               │                           │
+ *               ▼                           ▼
+ *       ┌──────────────┐            ┌──────────────┐
+ *       │ Error Logs   │            │ Safe HTTP    │
+ *       │ + Stack      │            │ Response     │
+ *       └──────────────┘            └──────────────┘
+ *
+ */
+
+// ============================================================
+// END
+// ============================================================
