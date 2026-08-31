@@ -11,5 +11,8 @@
   },
   "devDependencies": {
     "@changesets/cli": "^2.27.0"
+  },
+  "overrides": {
+    "human-id": "3.0.1"
   }
 }
