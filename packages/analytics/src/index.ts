@@ -85,6 +85,14 @@ export { buildErrorEvent } from "./events/error";
 export { buildCopyEvent } from "./events/copy";
 export type { BuildCopyOptions } from "./events/copy";
 
+// Event builders — experiment / external-link / heatmap
+export { buildExperimentAssignEvent } from "./events/experiment";
+export type { ExperimentAssignEvent, ExperimentAssignProperties } from "./events/experiment";
+export { buildExternalLinkClickEvent, isExternalLink } from "./events/external-link";
+export type { ExternalLinkClickEvent, ExternalLinkClickProperties } from "./events/external-link";
+export { buildHeatmapClickEvent, normaliseClick } from "./events/heatmap";
+export type { HeatmapClickEvent, HeatmapClickProperties } from "./events/heatmap";
+
 // AnalyticsClient — high-level batching client
 export { AnalyticsClient } from "./client";
 export type { AnalyticsClientConfig } from "./client";

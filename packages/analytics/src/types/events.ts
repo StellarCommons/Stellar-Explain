@@ -25,6 +25,9 @@ export const EventName = [
   "result_view",
   "time_on_page",
   "scroll_depth",
+  "experiment_assign",
+  "external_link_click",
+  "heatmap_click",
 ] as const;
 
 export type EventName = (typeof EventName)[number];

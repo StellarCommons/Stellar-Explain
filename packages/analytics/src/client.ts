@@ -24,6 +24,9 @@ import { buildHistoryOpenEvent } from "./events/history";
 import { buildResultViewEvent } from "./events/result-view";
 import { buildErrorEvent } from "./events/error";
 import { buildCopyEvent } from "./events/copy";
+import { buildExperimentAssignEvent } from "./events/experiment";
+import { buildExternalLinkClickEvent, isExternalLink } from "./events/external-link";
+import { buildHeatmapClickEvent, normaliseClick } from "./events/heatmap";
 import { getSessionId } from "./session";
 import { getUserId, attachUserProperties } from "./user";
 import { GroupContext, attachGroupContext } from "./group";
@@ -113,6 +116,21 @@ export interface AnalyticsClientConfig {
   autoTrackPageViews?: boolean;
 
   /**
+   * When `true` (default), the client registers a global click listener
+   * that detects clicks on external links (different origin) and tracks
+   * them as `external_link_click` events. Set to `false` to disable.
+   */
+  trackExternalLinks?: boolean;
+
+  /**
+   * When `true` (default), the client registers a global click listener
+   * that records normalised click coordinates (x%, y%) on each page as
+   * `heatmap_click` events for heatmap generation. Set to `false` to
+   * disable.
+   */
+  trackHeatmapClicks?: boolean;
+
+  /**
    * When `true` (default) and an `endpoint` is configured, any events still
    * queued when the page unloads are flushed via `navigator.sendBeacon`,
    * falling back to a synchronous POST when `sendBeacon` is unavailable.
@@ -185,6 +203,8 @@ export class AnalyticsClient {
 
   private readonly scrollHandler: (() => void) | undefined;
   private readonly timeOnPageHandler: (() => void) | undefined;
+  private readonly externalLinkHandler: ((e: MouseEvent) => void) | undefined;
+  private readonly heatmapHandler: ((e: MouseEvent) => void) | undefined;
   /** Persistent anonymous user ID resolved once at construction time. */
   private readonly userId: string | undefined;
 
@@ -208,6 +228,8 @@ export class AnalyticsClient {
 
     this.scrollHandler = this._bindScrollDepthTracking();
     this.timeOnPageHandler = this._bindTimeOnPageTracking();
+    this.externalLinkHandler = this._bindExternalLinkTracking();
+    this.heatmapHandler = this._bindHeatmapTracking();
     this.userId = getUserId();
     this.sessionId = getSessionId();
 
@@ -346,6 +368,40 @@ export class AnalyticsClient {
    */
   trackCopy(field: string): void {
     this.track(buildCopyEvent(field));
+  }
+
+  /**
+   * Queue an `experiment_assign` event recording which A/B test variant
+   * a user was assigned to.
+   *
+   * @param experimentId - The experiment identifier.
+   * @param variantId    - The variant the user was assigned to.
+   */
+  trackExperiment(experimentId: string, variantId: string): void {
+    this.track(buildExperimentAssignEvent(experimentId, variantId));
+  }
+
+  /**
+   * Queue an `external_link_click` event recording a click on an external
+   * link (different origin).
+   *
+   * @param url  - The full destination URL.
+   * @param path - Optional page path where the click occurred.
+   */
+  trackExternalLinkClick(url: string, path?: string): void {
+    this.track(buildExternalLinkClickEvent(url, path));
+  }
+
+  /**
+   * Queue a `heatmap_click` event recording normalised click coordinates
+   * for heatmap generation.
+   *
+   * @param x    - Horizontal click position as a percentage (0–100).
+   * @param y    - Vertical click position as a percentage (0–100).
+   * @param path - Page path where the click occurred.
+   */
+  trackHeatmapClick(x: number, y: number, path: string): void {
+    this.track(buildHeatmapClickEvent(x, y, path));
   }
 
   /**
@@ -507,6 +563,12 @@ export class AnalyticsClient {
     if (this.onRouteChange) {
       window.removeEventListener("popstate", this.onRouteChange);
       window.removeEventListener("hashchange", this.onRouteChange);
+    }
+    if (this.externalLinkHandler) {
+      window.removeEventListener("click", this.externalLinkHandler);
+    }
+    if (this.heatmapHandler) {
+      window.removeEventListener("click", this.heatmapHandler);
     }
   }
 
@@ -735,6 +797,52 @@ export class AnalyticsClient {
     const handler = (): void => this.trackPageView();
     window.addEventListener("popstate", handler);
     window.addEventListener("hashchange", handler);
+    return handler;
+  }
+
+  /**
+   * Registers a global click listener that detects clicks on external
+   * links and tracks them as `external_link_click` events. Returns
+   * `undefined` when tracking is disabled or not in a browser.
+   */
+  private _bindExternalLinkTracking(): ((e: MouseEvent) => void) | undefined {
+    if (this.config.trackExternalLinks === false) return undefined;
+    if (typeof window === "undefined") return undefined;
+
+    const handler = (e: MouseEvent): void => {
+      const anchor = (e.target as Element | null)?.closest?.("a");
+      if (!anchor) return;
+      const href = anchor.getAttribute("href");
+      if (!href || !isExternalLink(href)) return;
+
+      try {
+        const url = new URL(href, window.location.href).toString();
+        this.trackExternalLinkClick(url, currentPath());
+      } catch {
+        // malformed URL — ignore
+      }
+    };
+
+    window.addEventListener("click", handler);
+    return handler;
+  }
+
+  /**
+   * Registers a global click listener that records normalised click
+   * coordinates as `heatmap_click` events for heatmap generation.
+   * Returns `undefined` when tracking is disabled or not in a browser.
+   */
+  private _bindHeatmapTracking(): ((e: MouseEvent) => void) | undefined {
+    if (this.config.trackHeatmapClicks === false) return undefined;
+    if (typeof window === "undefined") return undefined;
+
+    const handler = (e: MouseEvent): void => {
+      const coords = normaliseClick(e.clientX, e.clientY);
+      if (!coords) return;
+      this.trackHeatmapClick(coords.x, coords.y, currentPath());
+    };
+
+    window.addEventListener("click", handler);
     return handler;
   }
 
