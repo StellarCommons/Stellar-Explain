@@ -47,4 +47,6 @@ export interface AnalyticsEvent {
   properties?: Record<string, unknown>;
   userId?: string;
   sessionId?: string;
+  /** Organisation/workspace context attached via `AnalyticsClient.group()` (issue #86). */
+  groupId?: string;
 }
