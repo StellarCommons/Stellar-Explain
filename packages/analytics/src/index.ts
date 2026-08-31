@@ -83,6 +83,18 @@ export type { ExternalLinkClickEvent, ExternalLinkClickProperties } from "./even
 export { buildHeatmapClickEvent, normaliseClick } from "./events/heatmap";
 export type { HeatmapClickEvent, HeatmapClickProperties } from "./events/heatmap";
 
+// Event builders — dead-click, visibility, focus/blur
+export { buildDeadClickEvent } from "./events/dead-click";
+export type { DeadClickEvent, DeadClickProperties } from "./events/dead-click";
+export { buildVisibilityChangeEvent } from "./events/visibility";
+export type { VisibilityChangeEvent, VisibilityChangeProperties } from "./events/visibility";
+export { buildWindowFocusEvent, buildWindowBlurEvent } from "./events/focus";
+export type { WindowFocusEvent, WindowFocusProperties, WindowBlurEvent, WindowBlurProperties } from "./events/focus";
+
+// Web Vitals tracking
+export { buildWebVitalEvent, startVitalsTracking } from "./vitals";
+export type { WebVitalEvent, WebVitalProperties } from "./vitals";
+
 // AnalyticsClient — high-level batching client
 export { AnalyticsClient } from "./client";
 export type { AnalyticsClientConfig } from "./client";

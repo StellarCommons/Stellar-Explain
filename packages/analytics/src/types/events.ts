@@ -28,6 +28,11 @@ export const EventName = [
   "experiment_assign",
   "external_link_click",
   "heatmap_click",
+  "dead_click",
+  "visibility_change",
+  "web_vital",
+  "window_focus",
+  "window_blur",
 ] as const;
 
 export type EventName = (typeof EventName)[number];
