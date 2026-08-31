@@ -95,6 +95,18 @@ export type { WindowFocusEvent, WindowFocusProperties, WindowBlurEvent, WindowBl
 export { buildWebVitalEvent, startVitalsTracking } from "./vitals";
 export type { WebVitalEvent, WebVitalProperties } from "./vitals";
 
+// Event builders — click, form submit, funnel
+export { buildClickEvent } from "./events/click";
+export type { ClickEvent, ClickProperties } from "./events/click";
+export { buildFormSubmitEvent } from "./events/form";
+export type { FormSubmitEvent, FormSubmitProperties } from "./events/form";
+export { buildFunnelStepEvent } from "./events/funnel";
+export type { FunnelStepEvent, FunnelStepProperties } from "./events/funnel";
+
+// Event middleware
+export { runMiddleware } from "./middleware";
+export type { EventMiddleware } from "./middleware";
+
 // AnalyticsClient — high-level batching client
 export { AnalyticsClient } from "./client";
 export type { AnalyticsClientConfig } from "./client";

@@ -33,6 +33,9 @@ export const EventName = [
   "web_vital",
   "window_focus",
   "window_blur",
+  "click",
+  "form_submit",
+  "funnel_step",
 ] as const;
 
 export type EventName = (typeof EventName)[number];
