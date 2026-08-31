@@ -4,5 +4,12 @@
   "workspaces": [
     "packages/analytics",
     "packages/ui"
-  ]
+  ],
+  "scripts": {
+    "version": "changeset version",
+    "publish": "changeset publish"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.27.0"
+  }
 }

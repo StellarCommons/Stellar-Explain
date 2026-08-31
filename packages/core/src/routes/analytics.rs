@@ -488,7 +488,10 @@ mod tests {
         let result = ingest_event(body).await;
         let (status, message) = result.expect_err("batch over the limit should be rejected");
         assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
-        assert!(message.contains("101"), "message should mention the batch size: {message}");
+        assert!(
+            message.contains("101"),
+            "message should mention the batch size: {message}"
+        );
         assert!(
             message.contains(&MAX_INGEST_BATCH_SIZE.to_string()),
             "message should mention the limit: {message}"
