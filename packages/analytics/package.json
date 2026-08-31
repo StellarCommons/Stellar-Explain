@@ -35,7 +35,7 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.5",
     "@vitest/coverage-v8": "^4.1.11",
-    "eslint": "^9.0.0",
+    "eslint": "^10.9.1",
     "jsdom": "^25.0.1",
     "next": "^15.5.3",
     "react": "^19.2.8",
