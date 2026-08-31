@@ -339,8 +339,7 @@ export class AnalyticsClient {
     // Issue #936 — plugins: let each beforeTrack hook observe/transform the
     // event ahead of sampling and enrichment.
     const plugins = this.config.plugins ?? [];
-    const beforePlugins = runBeforeTrack(plugins, afterMiddleware);
-    const beforePlugins = runBeforeTrack(plugins, base, this.logger);
+    const beforePlugins = runBeforeTrack(plugins, afterMiddleware, this.logger);
 
     if (this.config.sampleRate !== undefined && !shouldSample(this.config.sampleRate)) {
       return;
@@ -1042,7 +1041,9 @@ export class AnalyticsClient {
    */
   private _bindVisibilityTracking(): (() => void) | undefined {
     if (this.config.trackVisibility === false) return undefined;
-    if (typeof document === "undefined") return undefined;
+    if (typeof document === "undefined" || typeof document.addEventListener !== "function") {
+      return undefined;
+    }
 
     const handler = (): void => {
       if (document.hidden) {
@@ -1097,7 +1098,19 @@ export class AnalyticsClient {
    */
   private _bindVitalsTracking(): (() => void) | undefined {
     if (this.config.trackVitals === false) return undefined;
-    if (typeof window === "undefined") return undefined;
+    // The web-vitals library reaches into `document`, the bare global
+    // `addEventListener`, and `self` internally, so a window-only (or even
+    // window+document) environment isn't enough on its own — a partial test
+    // fixture or an unusual SSR/worker context can have `window`/`document`
+    // objects without those. `self` is the cheapest reliable proxy: it's
+    // only ever set in a real browser/worker global scope.
+    if (
+      typeof window === "undefined" ||
+      typeof document === "undefined" ||
+      typeof self === "undefined"
+    ) {
+      return undefined;
+    }
 
     return startVitalsTracking((event) => this.track(event));
   }

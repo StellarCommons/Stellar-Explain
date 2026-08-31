@@ -92,6 +92,7 @@ describe("AnalyticsClient environment attachment", () => {
       deviceType: "desktop",
       browser: "Edge",
       os: "Windows",
+      screenResolution: { width: 1920, height: 1080 },
     });
   });
 });

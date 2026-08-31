@@ -39,7 +39,9 @@ describe("EventEmitter track/queue behaviour", () => {
   it("applies transforms and attaches a session id before delivery", () => {
     const emitter = new EventEmitter();
     const received: AnalyticsEvent[] = [];
-    emitter.on("login", (event) => received.push(event));
+    emitter.on("login", (event) => {
+      received.push(event);
+    });
 
     const raw: AnalyticsEvent = { id: "2", name: "login", timestamp: new Date() };
     const prepared = applyTransforms(withSessionId(raw, "sess-123"), [
@@ -55,7 +57,9 @@ describe("EventEmitter track/queue behaviour", () => {
   it("enqueues and drains multiple events in order", () => {
     const emitter = new EventEmitter();
     const order: string[] = [];
-    emitter.on("search", (event) => order.push(event.id));
+    emitter.on("search", (event) => {
+      order.push(event.id);
+    });
 
     emitter.track({ id: "a", name: "search", timestamp: new Date() });
     emitter.track({ id: "b", name: "search", timestamp: new Date() });
