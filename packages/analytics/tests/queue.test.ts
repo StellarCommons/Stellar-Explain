@@ -142,6 +142,27 @@ describe("EventQueue", () => {
     queue.destroy();
   });
 
+  it("routes a flush error through an injected logger instead of the console (issue #98)", async () => {
+    const onFlush = vi.fn().mockRejectedValueOnce(new Error("network error"));
+    const logger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const queue = new EventQueue(onFlush, { logger });
+    queue.enqueue(makeEvent("1"));
+
+    await queue.flush();
+
+    expect(logger.error).toHaveBeenCalledTimes(1);
+    expect(errorSpy).not.toHaveBeenCalled();
+
+    errorSpy.mockRestore();
+    queue.destroy();
+  });
+
   it("stops the periodic timer after destroy()", async () => {
     const onFlush = vi.fn();
     const queue = new EventQueue(onFlush);

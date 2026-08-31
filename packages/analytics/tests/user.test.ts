@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { getUserId, newUserId, USER_ID_STORAGE_KEY } from "../src/user";
+import { getUserId, newUserId, USER_ID_STORAGE_KEY, attachUserProperties } from "../src/user";
+import type { AnalyticsEvent } from "../src/types/events";
 import { OPT_OUT_STORAGE_KEY } from "../src/optout";
 
 const originalLocalStorage = (globalThis as { localStorage?: unknown }).localStorage;
@@ -83,5 +84,33 @@ describe("newUserId", () => {
 
   it("generates a unique ID each call", () => {
     expect(newUserId()).not.toBe(newUserId());
+  });
+});
+
+describe("attachUserProperties (issue #85)", () => {
+  function makeEvent(overrides: Partial<AnalyticsEvent> = {}): AnalyticsEvent {
+    return { id: "1", name: "page_view", timestamp: new Date(), ...overrides };
+  }
+
+  it("returns the event unchanged when traits is undefined", () => {
+    const event = makeEvent();
+    expect(attachUserProperties(event, undefined)).toBe(event);
+  });
+
+  it("returns the event unchanged when traits is an empty object", () => {
+    const event = makeEvent();
+    expect(attachUserProperties(event, {})).toBe(event);
+  });
+
+  it("merges traits into properties", () => {
+    const event = makeEvent({ properties: { path: "/tx/abc" } });
+    const result = attachUserProperties(event, { plan: "pro" });
+    expect(result.properties).toEqual({ plan: "pro", path: "/tx/abc" });
+  });
+
+  it("lets the event's own property win over a trait with the same key", () => {
+    const event = makeEvent({ properties: { plan: "override" } });
+    const result = attachUserProperties(event, { plan: "pro" });
+    expect(result.properties?.plan).toBe("override");
   });
 });

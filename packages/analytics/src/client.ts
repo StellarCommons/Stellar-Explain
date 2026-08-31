@@ -1,5 +1,6 @@
 import { AnalyticsEvent, EventName } from "./types/events";
 import { EventQueue, FlushCallback } from "./queue";
+import { Logger, defaultLogger } from "./lib/logger";
 import { StellarAnalyticsEvent } from "./types";
 import { getConnectionType } from "./network";
 import { isOptedOutViaDoNotTrack, isOptedOutViaLocalStorage } from "./optout";
@@ -31,7 +32,8 @@ import { buildVisibilityChangeEvent } from "./events/visibility";
 import { buildWindowFocusEvent, buildWindowBlurEvent } from "./events/focus";
 import { startVitalsTracking } from "./vitals";
 import { getSessionId } from "./session";
-import { getUserId } from "./user";
+import { getUserId, attachUserProperties } from "./user";
+import { GroupContext, attachGroupContext } from "./group";
 
 import { validateOrDrop } from "./validate";
 import { resolveEndpoint } from "./config";
@@ -180,6 +182,13 @@ export interface AnalyticsClientConfig {
    * (with a console warning) rather than blocking the others.
    */
   plugins?: AnalyticsPlugin[];
+
+  /**
+   * Structured logger used for every diagnostic previously sent to
+   * `console.warn`/`console.error` (issue #98). Defaults to the package's
+   * shared `defaultLogger`; override for testing or custom log routing.
+   */
+  logger?: Logger;
 }
 
 // ---------------------------------------------------------------------------
@@ -211,6 +220,7 @@ export interface AnalyticsClientConfig {
  */
 export class AnalyticsClient {
   private readonly config: AnalyticsClientConfig;
+  private readonly logger: Logger;
   private readonly queue: EventQueue;
   private readonly optedOut: boolean;
 
@@ -246,9 +256,16 @@ export class AnalyticsClient {
   private readonly onPageHide: (() => void) | undefined;
   private readonly onRouteChange: (() => void) | undefined;
 
+  /** Properties set via `identify()`, merged into every subsequent event. In-memory only. */
+  private userTraits: Record<string, unknown> | undefined;
+
+  /** Organisation/workspace context set via `group()`, attached to every subsequent event. */
+  private groupContext: GroupContext | undefined;
+
   constructor(config: AnalyticsClientConfig = {}) {
     this.config = config;
-    this.queue = new EventQueue(this._buildFlushCallback());
+    this.logger = config.logger ?? defaultLogger;
+    this.queue = new EventQueue(this._buildFlushCallback(), { logger: this.logger });
     this.optedOut = this._checkOptOut();
 
     this.scrollHandler = this._bindScrollDepthTracking();
@@ -296,20 +313,22 @@ export class AnalyticsClient {
     };
 
     // Issue #930 — validate event schema before enqueuing; drop if invalid
-    const validated = validateOrDrop(stamped);
+    const validated = validateOrDrop(stamped, this.logger);
     if (!validated) return;
 
     const base = validated as AnalyticsEvent;
 
     if (!EventName.includes(base.name as EventName)) {
-      console.warn(`[analytics] dropped unknown event "${base.name}"`);
+      this.logger.warn(`[analytics] dropped unknown event "${base.name}"`, {
+        eventName: base.name,
+      });
       return;
     }
 
     // Issue #936 — plugins: let each beforeTrack hook observe/transform the
     // event ahead of sampling and enrichment.
     const plugins = this.config.plugins ?? [];
-    const beforePlugins = runBeforeTrack(plugins, base);
+    const beforePlugins = runBeforeTrack(plugins, base, this.logger);
 
     if (this.config.sampleRate !== undefined && !shouldSample(this.config.sampleRate)) {
       return;
@@ -329,12 +348,42 @@ export class AnalyticsClient {
     }
 
     const enriched = this._attachIdentity(
-      this._attachEnvironment(this._attachGlobalProperties(beforePlugins)),
+      attachGroupContext(
+        this._attachEnvironment(
+          attachUserProperties(
+            this._attachGlobalProperties(beforePlugins),
+            this.userTraits,
+          ),
+        ),
+        this.groupContext,
+      ),
     );
     this.queue.enqueue(enriched);
 
     // Issue #936 — plugins: afterTrack observes the final, enriched event.
-    if (plugins.length > 0) runAfterTrack(plugins, enriched);
+    if (plugins.length > 0) runAfterTrack(plugins, enriched, this.logger);
+  }
+
+  /**
+   * Merges `properties` into every subsequent event's `properties` (issue
+   * #85). Cumulative — calling `identify()` again adds to/overwrites
+   * previously identified traits rather than replacing them wholesale, so
+   * callers can enrich what's known about the user over time. In-memory
+   * only: nothing is persisted, and a page reload starts fresh.
+   */
+  identify(properties: Record<string, unknown>): void {
+    this.userTraits = { ...this.userTraits, ...properties };
+  }
+
+  /**
+   * Attaches organisation/workspace-level context to every subsequent event
+   * (issue #86): `groupId` on the event itself, plus `properties` merged
+   * into the event's properties. Replaces any previously set group context
+   * wholesale — a client tracks membership in one group at a time, unlike
+   * `identify()`'s cumulative user traits.
+   */
+  group(groupId: string, properties?: Record<string, unknown>): void {
+    this.groupContext = { groupId, properties };
   }
 
   /**
@@ -830,7 +879,9 @@ export class AnalyticsClient {
       }
       request.send(payload);
     } catch (err) {
-      console.error("[analytics] unload flush failed:", err);
+      this.logger.error("[analytics] unload flush failed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 

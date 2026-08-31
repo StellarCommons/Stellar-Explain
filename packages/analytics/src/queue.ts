@@ -1,5 +1,11 @@
 import { AnalyticsEvent } from "./types/events";
 import { EventDeduplicator } from "./dedup";
+import { Logger, defaultLogger } from "./lib/logger";
+
+export interface EventQueueOptions {
+  /** Injectable for testing — defaults to the package's shared console logger. */
+  logger?: Logger;
+}
 
 /** Maximum number of events held before an automatic flush is triggered. */
 export const QUEUE_MAX_SIZE = 20;
@@ -28,8 +34,13 @@ export class EventQueue {
   private flushing = false;
   private timer: ReturnType<typeof setInterval> | null = null;
   private readonly deduplicator = new EventDeduplicator();
+  private readonly logger: Logger;
 
-  constructor(private readonly onFlush: FlushCallback) {
+  constructor(
+    private readonly onFlush: FlushCallback,
+    options: EventQueueOptions = {},
+  ) {
+    this.logger = options.logger ?? defaultLogger;
     this.timer = setInterval(() => {
       void this.flush();
     }, QUEUE_FLUSH_INTERVAL_MS);
@@ -69,7 +80,9 @@ export class EventQueue {
     try {
       await this.onFlush(batch);
     } catch (err) {
-      console.error("[analytics] EventQueue flush error:", err);
+      this.logger.error("[analytics] EventQueue flush error", {
+        error: err instanceof Error ? err.message : String(err),
+      });
     } finally {
       this.flushing = false;
     }
