@@ -30,7 +30,11 @@ export type { DeviceType } from "./device";
 export { getBrowser } from "./browser";
 export { getOS } from "./os";
 export { getSessionId, newSessionId, SESSION_ID_STORAGE_KEY } from "./session";
-export { getUserId, newUserId, USER_ID_STORAGE_KEY } from "./user";
+export { getUserId, newUserId, USER_ID_STORAGE_KEY, attachUserProperties } from "./user";
+
+// Analytics #86 — group() context for organisation-level tracking
+export { attachGroupContext } from "./group";
+export type { GroupContext } from "./group";
 
 // Event builders (Analytics #13-#16)
 export { buildQRShareEvent } from "./events/qr-share";

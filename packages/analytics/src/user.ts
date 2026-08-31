@@ -8,6 +8,7 @@
  */
 
 import { isOptedOutViaLocalStorage } from "./optout";
+import { AnalyticsEvent } from "./types/events";
 
 /** localStorage key holding the persistent anonymous user ID. */
 export const USER_ID_STORAGE_KEY = "stellar-explain-analytics-user-id";
@@ -55,4 +56,26 @@ export function newUserId(): string {
     return crypto.randomUUID();
   }
   return `user-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+/**
+ * Merges `identify()`-set user properties into an event's `properties`
+ * (issue #85). An event's own properties always win on key collisions, and
+ * the event is returned unchanged when no properties have been identified —
+ * same rules `AnalyticsClient._attachGlobalProperties` already applies to
+ * `config.globalProperties`.
+ */
+export function attachUserProperties(
+  event: AnalyticsEvent,
+  traits: Record<string, unknown> | undefined,
+): AnalyticsEvent {
+  if (!traits || Object.keys(traits).length === 0) return event;
+
+  return {
+    ...event,
+    properties: {
+      ...traits,
+      ...event.properties,
+    },
+  };
 }
