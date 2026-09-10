@@ -135,3 +135,15 @@ export { DEFAULT_ANALYTICS_ENDPOINT, resolveEndpoint } from "./config";
 // Analytics #47 — plugin system
 export { runBeforeTrack, runAfterTrack } from "./plugins";
 export type { AnalyticsPlugin } from "./plugins";
+
+// Analytics #125 — Node.js version check on package initialisation
+import { warnIfUnsupportedNodeVersion } from "./utils/node-check";
+warnIfUnsupportedNodeVersion();
+
+export {
+  MIN_NODE_VERSION,
+  getNodeMajorVersion,
+  isSupportedNodeVersion,
+  warnIfUnsupportedNodeVersion,
+} from "./utils/node-check";
+
