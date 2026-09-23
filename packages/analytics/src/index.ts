@@ -17,5 +17,5 @@ export { isBrowser, isNode } from './env.js';
 export { AnalyticsClient } from './client.js';
 
 // Event builders
-export * from './events/visibility.js';
-export * from './events/scroll-depth.js';
+export * from './events/search.js';
+export * from './events/focus.js';
