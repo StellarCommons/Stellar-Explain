@@ -3,33 +3,23 @@
 // Package version
 export const ANALYTICS_PACKAGE_VERSION = '0.1.0';
 
-// Core types (issue #1059)
-export type { AnalyticsEvent } from './types.js';
+// Core types
+export type { AnalyticsEvent } from './types';
 
-// Client configuration (issue #1060)
-export type { AnalyticsConfig } from './config.js';
-export { resolveConfig } from './config.js';
+// Configuration
+export type { AnalyticsConfig } from './config';
+export { resolveConfig } from './config';
 
-// SSR-safe environment detection (issue #1061)
-export { isBrowser, isNode } from './env.js';
+// Client
+export { AnalyticsClient } from './client';
 
-// Analytics client (issue #1062)
-export { AnalyticsClient } from './client.js';
+// Logger
+export type { LogLevel } from './lib/logger';
+export { Logger } from './lib/logger';
 
-// Event builders
-export * from './events/form.js';
-export * from './events/copy.js';
-// Storage availability and locale capture
-export * from './lib/storageAvailability.js';
-export * from './locale.js';
-// User and group analytics
-export * from './user.js';
-export * from './group.js';
-// Opt-out and page context
-export * from './optout.js';
-export * from './context/page.js';
-// Event builders
-export * from './events/click.js';
-export * from './events/page-view.js';
-export * from './events/search.js';
-export * from './events/focus.js';
+// Property validation
+export { validateProperties } from './validate';
+
+// Emitter
+export type { Emitter } from './emitter/index';
+export { NoopEmitter } from './emitter/NoopEmitter';

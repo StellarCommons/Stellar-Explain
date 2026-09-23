@@ -1,42 +1,50 @@
-/**
- * @fileoverview Minimal `AnalyticsClient` class — the public API surface
- * for the analytics package.  Subsequent issues will add tracking behaviour,
- * a flush queue, and an HTTP sink on top of this foundation.
- */
-
-import type { AnalyticsConfig } from './config.js';
+import type { AnalyticsConfig } from './config';
+import type { AnalyticsEvent } from './types';
+import { Logger } from './lib/logger';
+import { validateProperties } from './validate';
 
 /**
- * The main analytics client.
+ * Core analytics client.
  *
- * Instantiate once (e.g. as a module-level singleton) and share it across
- * your application.  Pass a fully-resolved {@link AnalyticsConfig} — produced
- * by {@link resolveConfig} — to the constructor.
+ * Instantiate once per application, then call `track()` wherever events
+ * need to be recorded.
  *
  * @example
  * ```ts
- * import { resolveConfig } from './config.js';
- * import { AnalyticsClient } from './client.js';
- *
- * const client = new AnalyticsClient(
- *   resolveConfig({ endpoint: 'https://ingest.example.com/v1/events' })
- * );
+ * const client = new AnalyticsClient(resolveConfig({ endpoint: '/ingest' }));
+ * client.track('page_view', { path: '/home' });
  * ```
  */
 export class AnalyticsClient {
-  /**
-   * The resolved configuration this client was constructed with.
-   * Accessible to subclasses so they can read endpoint, API key, etc.
-   */
   protected readonly config: AnalyticsConfig;
+  private readonly logger: Logger;
 
-  /**
-   * Creates a new `AnalyticsClient` and stores the supplied configuration.
-   *
-   * @param config - A fully-resolved {@link AnalyticsConfig}.  Use
-   *   {@link resolveConfig} to obtain one with defaults applied.
-   */
   constructor(config: AnalyticsConfig) {
     this.config = config;
+    this.logger = new Logger(config.debug ?? false);
+  }
+
+  /**
+   * Record an analytics event.
+   *
+   * @param name - Non-empty string identifying the event type.
+   * @param properties - Serializable key-value metadata. Defaults to `{}`.
+   * @throws {TypeError} If `name` is not a non-empty string.
+   * @throws {TypeError} If `properties` contains non-serializable values.
+   */
+  track(name: string, properties: Record<string, unknown> = {}): void {
+    if (typeof name !== 'string' || name.trim() === '') {
+      throw new TypeError('Event name must be a non-empty string');
+    }
+
+    validateProperties(properties);
+
+    const event: AnalyticsEvent = {
+      name,
+      timestamp: Date.now(),
+      properties,
+    };
+
+    this.logger.debug('track()', event);
   }
 }
