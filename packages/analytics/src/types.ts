@@ -1,3 +1,7 @@
+/** Core analytics event shape. */
+export interface AnalyticsEvent {
+  name: string;
+  timestamp: number;
 export interface AnalyticsEvent {
   name: string;
   timestamp: number;
