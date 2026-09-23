@@ -16,6 +16,9 @@ export { isBrowser, isNode } from './env.js';
 // Analytics client (issue #1062)
 export { AnalyticsClient } from './client.js';
 
+// Event builders
+export * from './events/form.js';
+export * from './events/copy.js';
 // Storage availability and locale capture
 export * from './lib/storageAvailability.js';
 export * from './locale.js';
