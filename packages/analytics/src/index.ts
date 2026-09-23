@@ -16,6 +16,9 @@ export { isBrowser, isNode } from './env.js';
 // Analytics client (issue #1062)
 export { AnalyticsClient } from './client.js';
 
+// Opt-out and page context
+export * from './optout.js';
+export * from './context/page.js';
 // Event builders
 export * from './events/click.js';
 export * from './events/page-view.js';
