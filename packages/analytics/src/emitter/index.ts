@@ -1,3 +1,5 @@
+import type { AnalyticsEvent } from '../types.js';
+
 import type { AnalyticsEvent } from '../types';
 
 /**

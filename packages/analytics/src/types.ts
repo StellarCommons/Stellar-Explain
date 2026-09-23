@@ -1,3 +1,6 @@
+export interface AnalyticsEvent {
+  name: string;
+  timestamp: number;
 /**
  * Represents a single analytics event to be tracked and emitted.
  */
