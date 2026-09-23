@@ -6,6 +6,12 @@ export const ANALYTICS_PACKAGE_VERSION = '0.1.0';
 export type { AnalyticsEvent } from './types.js';
 export type { AnalyticsConfig } from './config.js';
 export { resolveConfig } from './config.js';
+export type { Emitter } from './emitter/index.js';
+export { NoopEmitter } from './emitter/NoopEmitter.js';
+export { EventQueue } from './queue.js';
+export { AnalyticsClient } from './client.js';
+// Core types
+export type { AnalyticsEvent } from './types';
 
 export type { Emitter } from './emitter/index.js';
 export { NoopEmitter } from './emitter/NoopEmitter.js';
@@ -15,3 +21,20 @@ export { AnalyticsClient } from './client.js';
 
 // sinks
 export { ConsoleSink } from './sinks/ConsoleSink.js';
+// Configuration
+export type { AnalyticsConfig } from './config';
+export { resolveConfig } from './config';
+
+// Client
+export { AnalyticsClient } from './client';
+
+// Logger
+export type { LogLevel } from './lib/logger';
+export { Logger } from './lib/logger';
+
+// Property validation
+export { validateProperties } from './validate';
+
+// Emitter
+export type { Emitter } from './emitter/index';
+export { NoopEmitter } from './emitter/NoopEmitter';

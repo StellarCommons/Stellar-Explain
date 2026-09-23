@@ -27,6 +27,14 @@ export class EventQueue {
   }
 
   /** Removes and returns all queued events in FIFO order. */
+
+export class EventQueue {
+  private readonly events: AnalyticsEvent[] = [];
+
+  enqueue(event: AnalyticsEvent): void {
+    this.events.push(event);
+  }
+
   drain(): AnalyticsEvent[] {
     return this.events.splice(0, this.events.length);
   }
