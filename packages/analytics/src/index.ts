@@ -1,15 +1,35 @@
 /** @stellar-explain/analytics — rebuilt from scratch, see tracked "Analytics #1..#125" issues. */
+
+// Package version
 export const ANALYTICS_PACKAGE_VERSION = '0.1.0';
 
+// Core types (issue #1059)
 export type { AnalyticsEvent } from './types.js';
+
+// Client configuration (issue #1060)
 export type { AnalyticsConfig } from './config.js';
 export { resolveConfig } from './config.js';
-export type { Emitter } from './emitter/index.js';
-export { NoopEmitter } from './emitter/NoopEmitter.js';
-export { Logger } from './lib/logger.js';
-export { EventQueue } from './queue.js';
-export { validateProperties } from './validate.js';
+
+// SSR-safe environment detection (issue #1061)
+export { isBrowser, isNode } from './env.js';
+
+// Analytics client (issue #1062)
 export { AnalyticsClient } from './client.js';
-export { ConsoleSink } from './sinks/ConsoleSink.js';
-export { HttpSink } from './sinks/HttpSink.js';
-export type { HttpSinkOptions } from './sinks/HttpSink.js';
+
+// Event builders
+export * from './events/form.js';
+export * from './events/copy.js';
+// Storage availability and locale capture
+export * from './lib/storageAvailability.js';
+export * from './locale.js';
+// User and group analytics
+export * from './user.js';
+export * from './group.js';
+// Opt-out and page context
+export * from './optout.js';
+export * from './context/page.js';
+// Event builders
+export * from './events/click.js';
+export * from './events/page-view.js';
+export * from './events/search.js';
+export * from './events/focus.js';
