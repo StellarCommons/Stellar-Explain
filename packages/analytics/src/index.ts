@@ -19,3 +19,17 @@ export { AnalyticsClient } from './client.js';
 // Event builders
 export * from './events/form.js';
 export * from './events/copy.js';
+// Storage availability and locale capture
+export * from './lib/storageAvailability.js';
+export * from './locale.js';
+// User and group analytics
+export * from './user.js';
+export * from './group.js';
+// Opt-out and page context
+export * from './optout.js';
+export * from './context/page.js';
+// Event builders
+export * from './events/click.js';
+export * from './events/page-view.js';
+export * from './events/search.js';
+export * from './events/focus.js';
