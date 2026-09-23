@@ -19,3 +19,5 @@ export { AnalyticsClient } from './client.js';
 // Event builders
 export * from './events/click.js';
 export * from './events/page-view.js';
+export * from './events/search.js';
+export * from './events/focus.js';
