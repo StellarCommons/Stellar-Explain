@@ -1,7 +1,6 @@
 import type { Emitter } from './emitter/index.js';
 import type { AnalyticsConfig } from './config.js';
 import type { AnalyticsEvent } from './types.js';
-import { resolveConfig } from './config.js';
 import { NoopEmitter } from './emitter/NoopEmitter.js';
 import { EventQueue } from './queue.js';
 import { Logger } from './lib/logger.js';
@@ -20,9 +19,14 @@ import type { CircuitState } from './lib/circuitBreaker.js';
  * #1073 — max-queue-size cap delegated to EventQueue
  * Analytics #82 — exposes the emitter's circuit breaker state, when available
  * Analytics #84 — pauses flushing while offline, resumes on reconnect
+ *
+ * Stores whatever `config` it's given as-is (applying defaults only where
+ * a field is used, via `??`) rather than re-resolving it — callers that
+ * want a fully-resolved config up front can call `resolveConfig()`
+ * themselves before constructing the client.
  */
 export class AnalyticsClient {
-  private readonly config: Required<AnalyticsConfig>;
+  protected readonly config: AnalyticsConfig;
   private readonly emitter: Emitter;
   private readonly queue: EventQueue;
   private readonly logger: Logger;
@@ -32,17 +36,18 @@ export class AnalyticsClient {
   private offlineHandler: (() => void) | undefined;
 
   constructor(config: AnalyticsConfig = {}, emitter?: Emitter) {
-    this.config = resolveConfig(config);
-    this.logger = new Logger(this.config.debug);
+    this.config = config;
+    this.logger = new Logger(this.config.debug ?? false);
     this.emitter = emitter ?? new NoopEmitter();
     this.queue = new EventQueue(this.config.maxQueueSize, this.logger);
     this.isOffline = typeof navigator !== 'undefined' && 'onLine' in navigator ? !navigator.onLine : false;
 
     // #1072 — start auto-flush timer if configured
-    if (this.config.flushIntervalMs > 0) {
+    const flushIntervalMs = this.config.flushIntervalMs ?? 0;
+    if (flushIntervalMs > 0) {
       this.timer = setInterval(() => {
         void this.flush();
-      }, this.config.flushIntervalMs);
+      }, flushIntervalMs);
     }
 
     // Analytics #84 — pause flushing while offline, resume on reconnect
