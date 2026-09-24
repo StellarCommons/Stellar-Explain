@@ -1,6 +1,17 @@
 const PREFIX = '[analytics]';
 
-/** Lightweight logger that respects a debug flag. */
+/**
+ * Log levels supported by the analytics Logger.
+ */
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+/**
+ * Lightweight logger used internally by the analytics package.
+ *
+ * All output is prefixed with `[analytics]` to aid filtering.
+ * `debug`/`info` respect the `enabled` flag (off unless `config.debug === true`);
+ * `warn`/`error` are always emitted regardless of the flag.
+ */
 export class Logger {
   constructor(private readonly enabled: boolean) {}
 
@@ -19,63 +30,5 @@ export class Logger {
 
   error(...args: unknown[]): void {
     console.error(PREFIX, ...args);
-export class Logger {
-  private readonly enabled: boolean;
-
-  constructor(enabled: boolean) {
-    this.enabled = enabled;
-  }
-
-  debug(message: string, ...args: unknown[]): void {
-    if (this.enabled) {
-      console.debug(PREFIX, message, ...args);
-    }
-  }
-
-  info(message: string, ...args: unknown[]): void {
-    if (this.enabled) {
-      console.info(PREFIX, message, ...args);
-    }
-  }
-
-  warn(message: string, ...args: unknown[]): void {
-    if (this.enabled) {
-      console.warn(PREFIX, message, ...args);
-    }
-  }
-
-  error(message: string, ...args: unknown[]): void {
-    if (this.enabled) {
-      console.error(PREFIX, message, ...args);
-    }
-/**
- * Log levels supported by the analytics Logger.
- */
-export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
-
-/**
- * Lightweight logger used internally by the analytics package.
- *
- * All output is prefixed with `[analytics]` to aid filtering.
- * When `enabled` is `false` (the default unless `config.debug === true`)
- * every method is a no-op, so there is zero overhead in production.
- */
-export class Logger {
-  constructor(private readonly enabled: boolean) {}
-
-  debug(msg: string, ...args: unknown[]): void {
-    if (this.enabled) console.debug('[analytics]', msg, ...args);
-  }
-
-  info(msg: string, ...args: unknown[]): void {
-    if (this.enabled) console.info('[analytics]', msg, ...args);
-  }
-
-  warn(msg: string, ...args: unknown[]): void {
-    if (this.enabled) console.warn('[analytics]', msg, ...args);
-  }
-
-  error(msg: string, ...args: unknown[]): void {
-    if (this.enabled) console.error('[analytics]', msg, ...args);
   }
 }
