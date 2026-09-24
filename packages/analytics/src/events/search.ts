@@ -1,4 +1,4 @@
-import { AnalyticsEvent } from '../types';
+import { AnalyticsEvent } from '../types.js';
 
 export interface SearchEventOptions {
   query: string;
@@ -9,7 +9,7 @@ export function createSearchEvent(query: string, resultCount: number): Analytics
 export function createSearchEvent(options: SearchEventOptions): AnalyticsEvent;
 export function createSearchEvent(
   queryOrOptions: string | SearchEventOptions,
-  resultCountParam?: number
+  resultCountParam?: number,
 ): AnalyticsEvent {
   let queryLength = 0;
   let resultCount = 0;
