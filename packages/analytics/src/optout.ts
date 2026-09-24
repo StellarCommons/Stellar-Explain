@@ -27,7 +27,9 @@ export class OptOutManager {
     if (typeof localStorage !== 'undefined') {
       try {
         localStorage.setItem(OPT_OUT_KEY, 'true');
-      } catch {}
+      } catch {
+        // ignore storage failures; in-memory flag still applies
+      }
     }
   }
 
@@ -36,7 +38,9 @@ export class OptOutManager {
     if (typeof localStorage !== 'undefined') {
       try {
         localStorage.removeItem(OPT_OUT_KEY);
-      } catch {}
+      } catch {
+        // ignore storage failures; in-memory flag still applies
+      }
     }
   }
 }

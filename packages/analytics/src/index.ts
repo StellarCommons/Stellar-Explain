@@ -3,38 +3,50 @@
 // Package version
 export const ANALYTICS_PACKAGE_VERSION = '0.1.0';
 
+// Core types
 export type { AnalyticsEvent } from './types.js';
+
+// Configuration
 export type { AnalyticsConfig } from './config.js';
 export { resolveConfig } from './config.js';
-export type { Emitter } from './emitter/index.js';
-export { NoopEmitter } from './emitter/NoopEmitter.js';
-export { EventQueue } from './queue.js';
-export { AnalyticsClient } from './client.js';
-// Core types
-export type { AnalyticsEvent } from './types';
 
+// Emitter / Sink contract
 export type { Emitter } from './emitter/index.js';
 export { NoopEmitter } from './emitter/NoopEmitter.js';
 
+// Queuing
 export { EventQueue } from './queue.js';
-export { AnalyticsClient } from './client.js';
-
-// sinks
-export { ConsoleSink } from './sinks/ConsoleSink.js';
-// Configuration
-export type { AnalyticsConfig } from './config';
-export { resolveConfig } from './config';
 
 // Client
-export { AnalyticsClient } from './client';
+export { AnalyticsClient } from './client.js';
 
-// Logger
-export type { LogLevel } from './lib/logger';
-export { Logger } from './lib/logger';
+// Logging
+export type { LogLevel } from './lib/logger.js';
+export { Logger } from './lib/logger.js';
 
 // Property validation
-export { validateProperties } from './validate';
+export { validateProperties } from './validate.js';
 
-// Emitter
-export type { Emitter } from './emitter/index';
-export { NoopEmitter } from './emitter/NoopEmitter';
+// PII scrubbing
+export {
+  scrubEventProperties,
+  scrubPii,
+  scrubPiiString,
+  SCRUBBED_EMAIL,
+  SCRUBBED_LONG_NUMBER,
+} from './lib/scrubPii.js';
+
+// Dead-letter (#91)
+export { DeadLetterQueue } from './lib/DeadLetterQueue.js';
+
+// Sinks
+export { ConsoleSink } from './sinks/ConsoleSink.js';
+
+// Environment / opt-out helpers
+export { isBrowser, isNode } from './env.js';
+export { OptOutManager, optOutManager } from './optout.js';
+export {
+  isLocalStorageAvailable,
+  isSessionStorageAvailable,
+  isStorageAvailable,
+} from './lib/storageAvailability.js';

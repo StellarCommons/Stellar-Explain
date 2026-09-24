@@ -16,7 +16,9 @@ export function getLocaleInfo(): LocaleInfo {
   let timeZone = 'UTC';
   try {
     timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-  } catch {}
+  } catch {
+    // ignore timezone lookup failures and fall back to UTC
+  }
 
   return {
     language: navigator.language || 'en-US',
