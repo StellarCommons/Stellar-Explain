@@ -1,81 +1,59 @@
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+export interface AnalyticsLogRecord {
+  level: LogLevel;
+  event: string;
+  meta: Record<string, unknown>;
+}
+
 const PREFIX = '[analytics]';
 
-/** Lightweight logger that respects a debug flag. */
+/** Lightweight logger used by the analytics package. */
 export class Logger {
-  constructor(private readonly enabled: boolean) {}
+  private enabled: boolean;
 
-  debug(...args: unknown[]): void {
-    if (this.enabled) console.debug(PREFIX, ...args);
-  }
-
-  info(...args: unknown[]): void {
-    if (this.enabled) console.info(PREFIX, ...args);
-  }
-
-  warn(...args: unknown[]): void {
-    // Warnings are always emitted regardless of debug flag.
-    console.warn(PREFIX, ...args);
-  }
-
-  error(...args: unknown[]): void {
-    console.error(PREFIX, ...args);
-export class Logger {
-  private readonly enabled: boolean;
-
-  constructor(enabled: boolean) {
+  constructor(enabled = false) {
     this.enabled = enabled;
   }
 
+  setEnabled(enabled: boolean): void {
+    this.enabled = enabled;
+  }
+
+  isEnabled(): boolean {
+    return this.enabled;
+  }
+
   debug(message: string, ...args: unknown[]): void {
-    if (this.enabled) {
-      console.debug(PREFIX, message, ...args);
-    }
+    if (this.enabled) console.debug(PREFIX, message, ...args);
   }
 
   info(message: string, ...args: unknown[]): void {
-    if (this.enabled) {
-      console.info(PREFIX, message, ...args);
-    }
+    if (this.enabled) console.info(PREFIX, message, ...args);
   }
 
   warn(message: string, ...args: unknown[]): void {
-    if (this.enabled) {
-      console.warn(PREFIX, message, ...args);
-    }
+    if (this.enabled) console.warn(PREFIX, message, ...args);
   }
 
   error(message: string, ...args: unknown[]): void {
-    if (this.enabled) {
-      console.error(PREFIX, message, ...args);
-    }
-/**
- * Log levels supported by the analytics Logger.
- */
-export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
-
-/**
- * Lightweight logger used internally by the analytics package.
- *
- * All output is prefixed with `[analytics]` to aid filtering.
- * When `enabled` is `false` (the default unless `config.debug === true`)
- * every method is a no-op, so there is zero overhead in production.
- */
-export class Logger {
-  constructor(private readonly enabled: boolean) {}
-
-  debug(msg: string, ...args: unknown[]): void {
-    if (this.enabled) console.debug('[analytics]', msg, ...args);
+    if (this.enabled) console.error(PREFIX, message, ...args);
   }
 
-  info(msg: string, ...args: unknown[]): void {
-    if (this.enabled) console.info('[analytics]', msg, ...args);
+  /** Emit one consistently-shaped structured record for aggregation. */
+  log(level: LogLevel, event: string, meta: Record<string, unknown> = {}): void {
+    if (!this.enabled) return;
+
+    const record: AnalyticsLogRecord = { level, event, meta };
+    const method = console[level] as (...args: unknown[]) => void;
+    method.call(console, PREFIX, record);
   }
 
-  warn(msg: string, ...args: unknown[]): void {
-    if (this.enabled) console.warn('[analytics]', msg, ...args);
-  }
-
-  error(msg: string, ...args: unknown[]): void {
-    if (this.enabled) console.error('[analytics]', msg, ...args);
+  /** Emit a warning even when ordinary debug logging is disabled. */
+  warnAlways(event: string, meta: Record<string, unknown> = {}): void {
+    const record: AnalyticsLogRecord = { level: 'warn', event, meta };
+    console.warn(PREFIX, event, record);
   }
 }
+
+export const defaultLogger = new Logger(false);

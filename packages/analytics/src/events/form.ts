@@ -1,4 +1,4 @@
-import { AnalyticsEvent } from '../types';
+import { AnalyticsEvent } from '../types.js';
 
 export interface FormSubmissionOptions {
   formId?: string;
