@@ -6,6 +6,11 @@ import { NoopEmitter } from './emitter/NoopEmitter.js';
 import { EventQueue } from './queue.js';
 import { Logger } from './lib/logger.js';
 import { validateProperties } from './validate.js';
+import {
+  clearPersistedQueue,
+  loadPersistedQueue,
+  persistPendingQueue,
+} from './lib/queuePersistence.js';
 
 /**
  * Main analytics client.
@@ -17,6 +22,8 @@ import { validateProperties } from './validate.js';
  * #1071 — flush() drains the queue to the emitter
  * #1072 — optional auto-flush timer; stoppable via destroy()
  * #1073 — max-queue-size cap delegated to EventQueue
+ * #85  — persists the pending queue to localStorage on `beforeunload`
+ * #86  — restores a persisted queue on construction and re-flushes it
  */
 export class AnalyticsClient {
   protected readonly config: AnalyticsConfig;
@@ -25,17 +32,37 @@ export class AnalyticsClient {
   private readonly logger: Logger;
   private timer: ReturnType<typeof setInterval> | undefined;
 
+  private readonly handleBeforeUnload = (): void => {
+    this.persistQueueNow();
+  };
+
   constructor(config: Partial<AnalyticsConfig> = {}, emitter?: Emitter) {
     this.config = resolveConfig(config);
     this.logger = new Logger(this.config.debug);
     this.emitter = emitter ?? new NoopEmitter();
     this.queue = new EventQueue(this.config.maxQueueSize, this.logger);
 
-    // #1072 — start auto-flush timer if configured
+    // #86 — restore any queue persisted by #85 across a page unload.
+    const restored = loadPersistedQueue();
+    if (restored.length > 0) {
+      clearPersistedQueue();
+      for (const event of restored) {
+        this.queue.enqueue(event);
+      }
+      this.logger.debug(`restored ${restored.length} persisted events`);
+      void this.flush();
+    }
+
+    // #72 — start auto-flush timer if configured
     if (this.config.flushIntervalMs > 0) {
       this.timer = setInterval(() => {
         void this.flush();
       }, this.config.flushIntervalMs);
+    }
+
+    // #85— persist the pending queue when the page is torn down.
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      window.addEventListener('beforeunload', this.handleBeforeUnload);
     }
   }
 
@@ -69,14 +96,25 @@ export class AnalyticsClient {
   }
 
   /**
-   * #1072 — Stop the auto-flush interval and perform a final flush.
+   * #72 — Stop the auto-flush interval and perform a final flush.
    */
   destroy(): void {
     if (this.timer !== undefined) {
       clearInterval(this.timer);
       this.timer = undefined;
     }
+    if (typeof window !== 'undefined' && typeof window.removeEventListener === 'function') {
+      window.removeEventListener('beforeunload', this.handleBeforeUnload);
+    }
     void this.flush();
+  }
+
+  /**
+   * #85 — Immediately persist the currently pending (undrained) queue.
+   * Returns whether the events were handed to storage.
+   */
+  persistQueueNow(): boolean {
+    return persistPendingQueue(this.queue.peek());
   }
 
   // ── test / inspection helpers ──────────────────────────────────────────────

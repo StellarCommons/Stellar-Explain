@@ -37,6 +37,11 @@ export class EventQueue {
     return this.events.splice(0, this.events.length);
   }
 
+  /** Returns a shallow copy of the queued events without draining them. */
+  peek(): AnalyticsEvent[] {
+    return [...this.events];
+  }
+
   /** Number of events currently queued. */
   get size(): number {
     return this.events.length;

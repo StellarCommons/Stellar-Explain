@@ -29,6 +29,26 @@ export { validateProperties } from './validate.js';
 
 // Sinks
 export { ConsoleSink } from './sinks/ConsoleSink.js';
+export { HttpSink } from './sinks/HttpSink.js';
+export type { HttpSinkOptions } from './sinks/HttpSink.js';
+
+// PII scrubbing
+export {
+  scrubEventProperties,
+  scrubPii,
+  scrubPiiString,
+  SCRUBBED_EMAIL,
+  SCRUBBED_LONG_NUMBER,
+} from './lib/scrubPii.js';
+
+// Queue persistence (#85/#86)
+export {
+  loadPersistedQueue,
+  persistPendingQueue,
+  clearPersistedQueue,
+  PENDING_QUEUE_STORAGE_KEY,
+  MAX_PERSISTED_EVENTS,
+} from './lib/queuePersistence.js';
 
 // Environment / opt-out helpers
 export { isBrowser, isNode } from './env.js';
