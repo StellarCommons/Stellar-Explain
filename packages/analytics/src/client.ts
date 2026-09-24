@@ -6,6 +6,10 @@ import { NoopEmitter } from './emitter/NoopEmitter.js';
 import { EventQueue } from './queue.js';
 import { Logger } from './lib/logger.js';
 import { validateProperties } from './validate.js';
+import { MultiSink } from './sinks/MultiSink.js';
+import type { Plugin } from './plugins.js';
+import { PluginRegistry } from './plugins.js';
+import { Middleware } from './middleware.js';
 
 /**
  * Main analytics client.
@@ -17,18 +21,23 @@ import { validateProperties } from './validate.js';
  * #1071 — flush() drains the queue to the emitter
  * #1072 — optional auto-flush timer; stoppable via destroy()
  * #1073 — max-queue-size cap delegated to EventQueue
+ * #97  — accepts an Emitter or an array of Emitters (fanned out via MultiSink)
+ * #98  — plugins registered with beforeSend hooks
+ * #99  — a Middleware pipeline composes beforeSend hooks and runs each event through it
  */
 export class AnalyticsClient {
-  private readonly config: Required<AnalyticsConfig>;
+  protected readonly config: AnalyticsConfig;
   private readonly emitter: Emitter;
   private readonly queue: EventQueue;
   private readonly logger: Logger;
+  private readonly plugins = new PluginRegistry();
+  private readonly middleware = new Middleware();
   private timer: ReturnType<typeof setInterval> | undefined;
 
-  constructor(config: AnalyticsConfig = {}, emitter?: Emitter) {
+  constructor(config: Partial<AnalyticsConfig> = {}, emitter?: Emitter | Emitter[]) {
     this.config = resolveConfig(config);
     this.logger = new Logger(this.config.debug);
-    this.emitter = emitter ?? new NoopEmitter();
+    this.emitter = this.buildEmitter(emitter);
     this.queue = new EventQueue(this.config.maxQueueSize, this.logger);
 
     // #1072 — start auto-flush timer if configured
@@ -37,6 +46,19 @@ export class AnalyticsClient {
         void this.flush();
       }, this.config.flushIntervalMs);
     }
+  }
+
+  /**
+   * #97 — normalize the emitter argument: no emitter → NoopEmitter,
+   * a single emitter → itself, an array → MultiSink fan-out.
+   */
+  private buildEmitter(emitter?: Emitter | Emitter[]): Emitter {
+    if (Array.isArray(emitter)) {
+      if (emitter.length === 0) return new NoopEmitter();
+      if (emitter.length === 1) return emitter[0];
+      return new MultiSink(emitter);
+    }
+    return emitter ?? new NoopEmitter();
   }
 
   /**
@@ -61,11 +83,17 @@ export class AnalyticsClient {
   }
 
   /**
-   * #1071 — Drain the queue and forward every event to the emitter.
+   * #1071, #99 — Drain the queue, run each event through the middleware
+   * pipeline, then forward it to the emitter(s).
    */
   async flush(): Promise<void> {
     const events = this.queue.drain();
-    await Promise.all(events.map((e) => this.emitter.send(e)));
+    await Promise.all(
+      events.map(async (event) => {
+        const prepared = await this.middleware.process(event);
+        await this.emitter.send(prepared);
+      }),
+    );
   }
 
   /**
@@ -79,6 +107,20 @@ export class AnalyticsClient {
     void this.flush();
   }
 
+  /**
+   * #98 — Register a plugin and wire its beforeSend hook into the
+   * middleware pipeline. Plugins run in registration order.
+   */
+  registerPlugin(plugin: Plugin): void {
+    this.plugins.register(plugin);
+    this.middleware.fromPlugin(plugin);
+  }
+
+  /** #98 — snapshot of registered plugins. */
+  getPlugins(): Plugin[] {
+    return this.plugins.getPlugins();
+  }
+
   // ── test / inspection helpers ──────────────────────────────────────────────
 
   getEmitter(): Emitter {
@@ -87,109 +129,5 @@ export class AnalyticsClient {
 
   getQueue(): EventQueue {
     return this.queue;
-import type { AnalyticsConfig } from './config.js';
-import { resolveConfig } from './config.js';
-import type { Emitter } from './emitter/index.js';
-import { NoopEmitter } from './emitter/NoopEmitter.js';
-import { Logger } from './lib/logger.js';
-import type { AnalyticsEvent } from './types.js';
-import { validateProperties } from './validate.js';
-import { EventQueue } from './queue.js';
-
-export class AnalyticsClient {
-  private readonly config: AnalyticsConfig;
-  private readonly emitter: Emitter;
-  private readonly logger: Logger;
-  private readonly queue: EventQueue;
-
-  constructor(config?: Partial<AnalyticsConfig>, emitter?: Emitter) {
-    this.config = resolveConfig(config);
-    this.emitter = emitter ?? new NoopEmitter();
-    this.logger = new Logger(this.config.debug);
-    this.queue = new EventQueue();
-  }
-
-  track(name: string, properties: Record<string, unknown> = {}): void {
-    if (typeof name !== 'string' || name.trim() === '') {
-      throw new TypeError('Event name must be a non-empty string');
-    }
-
-    validateProperties(properties);
-
-    const event: AnalyticsEvent = {
-      name,
-      timestamp: Date.now(),
-      properties,
-    };
-
-    this.logger.debug('track()', event);
-
-    // Route through the queue instead of calling emitter directly (#1070).
-    // Emitter will be called during flush() in a subsequent issue.
-    this.queue.enqueue(event);
-  }
-
-  /**
-   * Returns the internal queue instance.
-   * Used by tests and future flush() implementation.
-   */
-  getQueue(): EventQueue {
-    return this.queue;
-  }
-
-  /**
-   * Returns the configured emitter.
-   * Used by tests and future flush() implementation.
-   */
-  getEmitter(): Emitter {
-    return this.emitter;
-import type { AnalyticsConfig } from './config';
-import type { AnalyticsEvent } from './types';
-import { Logger } from './lib/logger';
-import { validateProperties } from './validate';
-
-/**
- * Core analytics client.
- *
- * Instantiate once per application, then call `track()` wherever events
- * need to be recorded.
- *
- * @example
- * ```ts
- * const client = new AnalyticsClient(resolveConfig({ endpoint: '/ingest' }));
- * client.track('page_view', { path: '/home' });
- * ```
- */
-export class AnalyticsClient {
-  protected readonly config: AnalyticsConfig;
-  private readonly logger: Logger;
-
-  constructor(config: AnalyticsConfig) {
-    this.config = config;
-    this.logger = new Logger(config.debug ?? false);
-  }
-
-  /**
-   * Record an analytics event.
-   *
-   * @param name - Non-empty string identifying the event type.
-   * @param properties - Serializable key-value metadata. Defaults to `{}`.
-   * @throws {TypeError} If `name` is not a non-empty string.
-   * @throws {TypeError} If `properties` contains non-serializable values.
-   */
-  track(name: string, properties: Record<string, unknown> = {}): void {
-    if (typeof name !== 'string' || name.trim() === '') {
-      throw new TypeError('Event name must be a non-empty string');
-    }
-
-    validateProperties(properties);
-
-    const event: AnalyticsEvent = {
-      name,
-      timestamp: Date.now(),
-      properties,
-    };
-
-    this.logger.debug('track()', event);
   }
 }
