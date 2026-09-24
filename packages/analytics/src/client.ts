@@ -1,7 +1,6 @@
 import type { Emitter } from './emitter/index.js';
 import type { AnalyticsConfig } from './config.js';
 import type { AnalyticsEvent } from './types.js';
-import { resolveConfig } from './config.js';
 import { NoopEmitter } from './emitter/NoopEmitter.js';
 import { EventQueue } from './queue.js';
 import { Logger } from './lib/logger.js';
@@ -25,7 +24,7 @@ import { createHeartbeatEvent, shouldFireHeartbeat } from './events/heartbeat.js
  * Analytics #68 — daily-active-user heartbeat on first activity
  */
 export class AnalyticsClient {
-  private readonly config: Required<AnalyticsConfig>;
+  protected readonly config: AnalyticsConfig;
   private readonly emitter: Emitter;
   private readonly queue: EventQueue;
   private readonly logger: Logger;
@@ -34,16 +33,17 @@ export class AnalyticsClient {
   private hasFiredHeartbeatThisSession = false;
 
   constructor(config: AnalyticsConfig = {}, emitter?: Emitter) {
-    this.config = resolveConfig(config);
-    this.logger = new Logger(this.config.debug);
+    this.config = config;
+    this.logger = new Logger(this.config.debug ?? false);
     this.emitter = emitter ?? new NoopEmitter();
     this.queue = new EventQueue(this.config.maxQueueSize, this.logger);
 
     // #1072 — start auto-flush timer if configured
-    if (this.config.flushIntervalMs > 0) {
+    const flushIntervalMs = this.config.flushIntervalMs ?? 0;
+    if (flushIntervalMs > 0) {
       this.timer = setInterval(() => {
         void this.flush();
-      }, this.config.flushIntervalMs);
+      }, flushIntervalMs);
     }
 
     // Analytics #66 — opt-in global error capture
