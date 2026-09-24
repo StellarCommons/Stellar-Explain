@@ -1,6 +1,4 @@
-/** @stellar-explain/analytics — rebuilt from scratch, see tracked "Analytics #1..#125" issues. */
-
-// Package version
+/** Public API for the Stellar Explain analytics package. */
 export const ANALYTICS_PACKAGE_VERSION = '0.1.0';
 
 export type { AnalyticsEvent } from './types.js';
