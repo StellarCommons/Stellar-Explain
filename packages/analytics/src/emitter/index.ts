@@ -1,8 +1,5 @@
 import type { AnalyticsEvent } from '../types.js';
 
-/** Contract for event emitters / sinks. */
-import type { AnalyticsEvent } from '../types';
-
 /**
  * Contract for all event emitters used by the analytics client.
  *

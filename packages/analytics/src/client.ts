@@ -6,6 +6,9 @@ import { NoopEmitter } from './emitter/NoopEmitter.js';
 import { EventQueue } from './queue.js';
 import { Logger } from './lib/logger.js';
 import { validateProperties } from './validate.js';
+import { createErrorEvent } from './events/error.js';
+import { createNetworkErrorEvent } from './events/network-error.js';
+import { createHeartbeatEvent, shouldFireHeartbeat } from './events/heartbeat.js';
 
 /**
  * Main analytics client.
@@ -17,6 +20,9 @@ import { validateProperties } from './validate.js';
  * #1071 — flush() drains the queue to the emitter
  * #1072 — optional auto-flush timer; stoppable via destroy()
  * #1073 — max-queue-size cap delegated to EventQueue
+ * Analytics #66 — optional global `window.onerror` capture
+ * Analytics #67 — trackNetworkError() for host-reported failed fetches
+ * Analytics #68 — daily-active-user heartbeat on first activity
  */
 export class AnalyticsClient {
   private readonly config: Required<AnalyticsConfig>;
@@ -24,6 +30,8 @@ export class AnalyticsClient {
   private readonly queue: EventQueue;
   private readonly logger: Logger;
   private timer: ReturnType<typeof setInterval> | undefined;
+  private globalErrorHandler: ((event: ErrorEvent) => void) | undefined;
+  private hasFiredHeartbeatThisSession = false;
 
   constructor(config: AnalyticsConfig = {}, emitter?: Emitter) {
     this.config = resolveConfig(config);
@@ -36,6 +44,11 @@ export class AnalyticsClient {
       this.timer = setInterval(() => {
         void this.flush();
       }, this.config.flushIntervalMs);
+    }
+
+    // Analytics #66 — opt-in global error capture
+    if (this.config.captureGlobalErrors) {
+      this.bindGlobalErrorHandler();
     }
   }
 
@@ -50,6 +63,8 @@ export class AnalyticsClient {
     }
     validateProperties(properties);
 
+    this.maybeFireHeartbeat();
+
     const event: AnalyticsEvent = {
       name,
       timestamp: Date.now(),
@@ -58,6 +73,41 @@ export class AnalyticsClient {
 
     this.queue.enqueue(event);
     this.logger.debug(`tracked event "${name}"`);
+  }
+
+  /**
+   * Analytics #68 — fire a `daily_active_user` heartbeat once per client
+   * instance, on first activity, deduped against localStorage so it fires
+   * at most once per day per user across sessions.
+   */
+  private maybeFireHeartbeat(): void {
+    if (this.hasFiredHeartbeatThisSession) return;
+    this.hasFiredHeartbeatThisSession = true;
+
+    if (shouldFireHeartbeat()) {
+      this.queue.enqueue(createHeartbeatEvent());
+      this.logger.debug('tracked heartbeat "daily_active_user"');
+    }
+  }
+
+  /**
+   * Analytics #66 — track an error directly (used internally by the
+   * `window.onerror` handler, but also callable by a host app that wants
+   * to report a caught error without relying on the global listener).
+   */
+  trackError(message: string, stack?: string): void {
+    this.queue.enqueue(createErrorEvent(message, stack));
+    this.logger.debug(`tracked error "${message}"`);
+  }
+
+  /**
+   * Analytics #67 — track a failed `fetch`/network call. The host app is
+   * responsible for calling this from its own fetch wrapper/interceptor,
+   * since the analytics package doesn't patch `fetch` itself.
+   */
+  trackNetworkError(url: string, status?: number, message?: string): void {
+    this.queue.enqueue(createNetworkErrorEvent(url, status, message));
+    this.logger.debug(`tracked network error for "${url}"`);
   }
 
   /**
@@ -76,6 +126,7 @@ export class AnalyticsClient {
       clearInterval(this.timer);
       this.timer = undefined;
     }
+    this.unbindGlobalErrorHandler();
     void this.flush();
   }
 
@@ -87,109 +138,24 @@ export class AnalyticsClient {
 
   getQueue(): EventQueue {
     return this.queue;
-import type { AnalyticsConfig } from './config.js';
-import { resolveConfig } from './config.js';
-import type { Emitter } from './emitter/index.js';
-import { NoopEmitter } from './emitter/NoopEmitter.js';
-import { Logger } from './lib/logger.js';
-import type { AnalyticsEvent } from './types.js';
-import { validateProperties } from './validate.js';
-import { EventQueue } from './queue.js';
-
-export class AnalyticsClient {
-  private readonly config: AnalyticsConfig;
-  private readonly emitter: Emitter;
-  private readonly logger: Logger;
-  private readonly queue: EventQueue;
-
-  constructor(config?: Partial<AnalyticsConfig>, emitter?: Emitter) {
-    this.config = resolveConfig(config);
-    this.emitter = emitter ?? new NoopEmitter();
-    this.logger = new Logger(this.config.debug);
-    this.queue = new EventQueue();
   }
 
-  track(name: string, properties: Record<string, unknown> = {}): void {
-    if (typeof name !== 'string' || name.trim() === '') {
-      throw new TypeError('Event name must be a non-empty string');
-    }
+  // ── Analytics #66 internals ─────────────────────────────────────────────────
 
-    validateProperties(properties);
+  private bindGlobalErrorHandler(): void {
+    if (typeof window === 'undefined' || this.globalErrorHandler) return;
 
-    const event: AnalyticsEvent = {
-      name,
-      timestamp: Date.now(),
-      properties,
+    this.globalErrorHandler = (event: ErrorEvent) => {
+      const message = event.message || 'Unknown error';
+      const stack = event.error instanceof Error ? event.error.stack : undefined;
+      this.trackError(message, stack);
     };
-
-    this.logger.debug('track()', event);
-
-    // Route through the queue instead of calling emitter directly (#1070).
-    // Emitter will be called during flush() in a subsequent issue.
-    this.queue.enqueue(event);
+    window.addEventListener('error', this.globalErrorHandler);
   }
 
-  /**
-   * Returns the internal queue instance.
-   * Used by tests and future flush() implementation.
-   */
-  getQueue(): EventQueue {
-    return this.queue;
-  }
-
-  /**
-   * Returns the configured emitter.
-   * Used by tests and future flush() implementation.
-   */
-  getEmitter(): Emitter {
-    return this.emitter;
-import type { AnalyticsConfig } from './config';
-import type { AnalyticsEvent } from './types';
-import { Logger } from './lib/logger';
-import { validateProperties } from './validate';
-
-/**
- * Core analytics client.
- *
- * Instantiate once per application, then call `track()` wherever events
- * need to be recorded.
- *
- * @example
- * ```ts
- * const client = new AnalyticsClient(resolveConfig({ endpoint: '/ingest' }));
- * client.track('page_view', { path: '/home' });
- * ```
- */
-export class AnalyticsClient {
-  protected readonly config: AnalyticsConfig;
-  private readonly logger: Logger;
-
-  constructor(config: AnalyticsConfig) {
-    this.config = config;
-    this.logger = new Logger(config.debug ?? false);
-  }
-
-  /**
-   * Record an analytics event.
-   *
-   * @param name - Non-empty string identifying the event type.
-   * @param properties - Serializable key-value metadata. Defaults to `{}`.
-   * @throws {TypeError} If `name` is not a non-empty string.
-   * @throws {TypeError} If `properties` contains non-serializable values.
-   */
-  track(name: string, properties: Record<string, unknown> = {}): void {
-    if (typeof name !== 'string' || name.trim() === '') {
-      throw new TypeError('Event name must be a non-empty string');
-    }
-
-    validateProperties(properties);
-
-    const event: AnalyticsEvent = {
-      name,
-      timestamp: Date.now(),
-      properties,
-    };
-
-    this.logger.debug('track()', event);
+  private unbindGlobalErrorHandler(): void {
+    if (typeof window === 'undefined' || !this.globalErrorHandler) return;
+    window.removeEventListener('error', this.globalErrorHandler);
+    this.globalErrorHandler = undefined;
   }
 }

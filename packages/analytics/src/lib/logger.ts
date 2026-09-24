@@ -1,81 +1,36 @@
-const PREFIX = '[analytics]';
-
-/** Lightweight logger that respects a debug flag. */
-export class Logger {
-  constructor(private readonly enabled: boolean) {}
-
-  debug(...args: unknown[]): void {
-    if (this.enabled) console.debug(PREFIX, ...args);
-  }
-
-  info(...args: unknown[]): void {
-    if (this.enabled) console.info(PREFIX, ...args);
-  }
-
-  warn(...args: unknown[]): void {
-    // Warnings are always emitted regardless of debug flag.
-    console.warn(PREFIX, ...args);
-  }
-
-  error(...args: unknown[]): void {
-    console.error(PREFIX, ...args);
-export class Logger {
-  private readonly enabled: boolean;
-
-  constructor(enabled: boolean) {
-    this.enabled = enabled;
-  }
-
-  debug(message: string, ...args: unknown[]): void {
-    if (this.enabled) {
-      console.debug(PREFIX, message, ...args);
-    }
-  }
-
-  info(message: string, ...args: unknown[]): void {
-    if (this.enabled) {
-      console.info(PREFIX, message, ...args);
-    }
-  }
-
-  warn(message: string, ...args: unknown[]): void {
-    if (this.enabled) {
-      console.warn(PREFIX, message, ...args);
-    }
-  }
-
-  error(message: string, ...args: unknown[]): void {
-    if (this.enabled) {
-      console.error(PREFIX, message, ...args);
-    }
 /**
  * Log levels supported by the analytics Logger.
  */
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
+const PREFIX = '[analytics]';
+
 /**
  * Lightweight logger used internally by the analytics package.
  *
  * All output is prefixed with `[analytics]` to aid filtering.
- * When `enabled` is `false` (the default unless `config.debug === true`)
- * every method is a no-op, so there is zero overhead in production.
+ * `debug`/`info` are no-ops unless `enabled` is `true` (typically wired to
+ * `config.debug`), so there is zero overhead in production. `warn`/`error`
+ * always emit regardless of the debug flag, since they signal conditions
+ * (e.g. a dropped event from queue overflow) a host app should be able to
+ * see even without debug logging turned on.
  */
 export class Logger {
   constructor(private readonly enabled: boolean) {}
 
   debug(msg: string, ...args: unknown[]): void {
-    if (this.enabled) console.debug('[analytics]', msg, ...args);
+    if (this.enabled) console.debug(PREFIX, msg, ...args);
   }
 
   info(msg: string, ...args: unknown[]): void {
-    if (this.enabled) console.info('[analytics]', msg, ...args);
+    if (this.enabled) console.info(PREFIX, msg, ...args);
   }
 
   warn(msg: string, ...args: unknown[]): void {
-    if (this.enabled) console.warn('[analytics]', msg, ...args);
+    console.warn(PREFIX, msg, ...args);
   }
 
   error(msg: string, ...args: unknown[]): void {
-    if (this.enabled) console.error('[analytics]', msg, ...args);
+    console.error(PREFIX, msg, ...args);
   }
 }
