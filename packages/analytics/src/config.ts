@@ -16,9 +16,12 @@ export interface AnalyticsConfig {
   sampleRate?: number;
 }
 
-const DEFAULTS: Required<AnalyticsConfig> = {
+/** A config with every field but `apiKey` guaranteed to be present. */
+export type ResolvedAnalyticsConfig = Required<Omit<AnalyticsConfig, 'apiKey'>> &
+  Pick<AnalyticsConfig, 'apiKey'>;
+
+const DEFAULTS: Omit<ResolvedAnalyticsConfig, 'apiKey'> = {
   endpoint: '',
-  apiKey: '',
   debug: false,
   flushIntervalMs: 5000,
   maxQueueSize: 100,
@@ -28,9 +31,13 @@ const DEFAULTS: Required<AnalyticsConfig> = {
 /**
  * Merges caller-supplied options with sensible defaults.
  *
+ * `apiKey` is left `undefined` when not provided rather than defaulted to
+ * an empty string, so callers can distinguish "no key configured" from
+ * "explicitly empty key".
+ *
  * @param options - Partial configuration supplied by the consumer.
- * @returns A fully-resolved `AnalyticsConfig` with every field populated.
+ * @returns A fully-resolved config with every field but `apiKey` populated.
  */
-export function resolveConfig(options: AnalyticsConfig = {}): Required<AnalyticsConfig> {
+export function resolveConfig(options: AnalyticsConfig = {}): ResolvedAnalyticsConfig {
   return { ...DEFAULTS, ...options };
 }
