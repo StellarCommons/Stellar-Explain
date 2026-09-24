@@ -9,8 +9,8 @@ export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
  * Lightweight logger used internally by the analytics package.
  *
  * All output is prefixed with `[analytics]` to aid filtering.
- * `debug`/`info` respect the `enabled` flag (off unless `config.debug === true`);
- * `warn`/`error` are always emitted regardless of the flag.
+ * When `enabled` is `false` (the default unless `config.debug === true`)
+ * every method is a no-op, so there is zero overhead in production.
  */
 export class Logger {
   constructor(private readonly enabled: boolean) {}
@@ -24,11 +24,10 @@ export class Logger {
   }
 
   warn(...args: unknown[]): void {
-    // Warnings are always emitted regardless of debug flag.
-    console.warn(PREFIX, ...args);
+    if (this.enabled) console.warn(PREFIX, ...args);
   }
 
   error(...args: unknown[]): void {
-    console.error(PREFIX, ...args);
+    if (this.enabled) console.error(PREFIX, ...args);
   }
 }

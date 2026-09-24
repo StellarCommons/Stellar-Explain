@@ -16,6 +16,5 @@ export function usePageView(path: string, options?: Omit<PageViewOptions, 'url'>
   useEffect(() => {
     const event = createPageViewEvent({ ...options, url: path });
     client.track(event.name, event.properties);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, path]);
 }
