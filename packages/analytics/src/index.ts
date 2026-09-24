@@ -3,38 +3,35 @@
 // Package version
 export const ANALYTICS_PACKAGE_VERSION = '0.1.0';
 
+// Core types
 export type { AnalyticsEvent } from './types.js';
+
+// Configuration
 export type { AnalyticsConfig } from './config.js';
 export { resolveConfig } from './config.js';
-export type { Emitter } from './emitter/index.js';
-export { NoopEmitter } from './emitter/NoopEmitter.js';
-export { EventQueue } from './queue.js';
-export { AnalyticsClient } from './client.js';
-// Core types
-export type { AnalyticsEvent } from './types';
-
-export type { Emitter } from './emitter/index.js';
-export { NoopEmitter } from './emitter/NoopEmitter.js';
-
-export { EventQueue } from './queue.js';
-export { AnalyticsClient } from './client.js';
-
-// sinks
-export { ConsoleSink } from './sinks/ConsoleSink.js';
-// Configuration
-export type { AnalyticsConfig } from './config';
-export { resolveConfig } from './config';
-
-// Client
-export { AnalyticsClient } from './client';
-
-// Logger
-export type { LogLevel } from './lib/logger';
-export { Logger } from './lib/logger';
-
-// Property validation
-export { validateProperties } from './validate';
 
 // Emitter
-export type { Emitter } from './emitter/index';
-export { NoopEmitter } from './emitter/NoopEmitter';
+export type { Emitter } from './emitter/index.js';
+export { NoopEmitter } from './emitter/NoopEmitter.js';
+
+// Queue
+export { EventQueue } from './queue.js';
+
+// Client
+export { AnalyticsClient } from './client.js';
+
+// Logger
+export type { LogLevel } from './lib/logger.js';
+export { Logger } from './lib/logger.js';
+
+// Property validation
+export { validateProperties } from './validate.js';
+
+// Circuit breaker
+export { CircuitBreaker } from './lib/circuitBreaker.js';
+export type { CircuitState, CircuitBreakerOptions } from './lib/circuitBreaker.js';
+
+// Sinks
+export { ConsoleSink } from './sinks/ConsoleSink.js';
+export { HttpSink } from './sinks/HttpSink.js';
+export type { HttpSinkOptions } from './sinks/HttpSink.js';

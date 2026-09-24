@@ -6,6 +6,7 @@ import { NoopEmitter } from './emitter/NoopEmitter.js';
 import { EventQueue } from './queue.js';
 import { Logger } from './lib/logger.js';
 import { validateProperties } from './validate.js';
+import type { CircuitState } from './lib/circuitBreaker.js';
 
 /**
  * Main analytics client.
@@ -17,6 +18,8 @@ import { validateProperties } from './validate.js';
  * #1071 — flush() drains the queue to the emitter
  * #1072 — optional auto-flush timer; stoppable via destroy()
  * #1073 — max-queue-size cap delegated to EventQueue
+ * Analytics #82 — exposes the emitter's circuit breaker state, when available
+ * Analytics #84 — pauses flushing while offline, resumes on reconnect
  */
 export class AnalyticsClient {
   private readonly config: Required<AnalyticsConfig>;
@@ -24,12 +27,16 @@ export class AnalyticsClient {
   private readonly queue: EventQueue;
   private readonly logger: Logger;
   private timer: ReturnType<typeof setInterval> | undefined;
+  private isOffline: boolean;
+  private onlineHandler: (() => void) | undefined;
+  private offlineHandler: (() => void) | undefined;
 
   constructor(config: AnalyticsConfig = {}, emitter?: Emitter) {
     this.config = resolveConfig(config);
     this.logger = new Logger(this.config.debug);
     this.emitter = emitter ?? new NoopEmitter();
     this.queue = new EventQueue(this.config.maxQueueSize, this.logger);
+    this.isOffline = typeof navigator !== 'undefined' && 'onLine' in navigator ? !navigator.onLine : false;
 
     // #1072 — start auto-flush timer if configured
     if (this.config.flushIntervalMs > 0) {
@@ -37,6 +44,9 @@ export class AnalyticsClient {
         void this.flush();
       }, this.config.flushIntervalMs);
     }
+
+    // Analytics #84 — pause flushing while offline, resume on reconnect
+    this.bindConnectivityHandlers();
   }
 
   /**
@@ -62,8 +72,17 @@ export class AnalyticsClient {
 
   /**
    * #1071 — Drain the queue and forward every event to the emitter.
+   *
+   * Analytics #84 — while offline, this is a no-op: events stay queued
+   * until connectivity is restored, at which point a flush is triggered
+   * automatically.
    */
   async flush(): Promise<void> {
+    if (this.isOffline) {
+      this.logger.debug('flush() skipped — offline');
+      return;
+    }
+
     const events = this.queue.drain();
     await Promise.all(events.map((e) => this.emitter.send(e)));
   }
@@ -76,7 +95,18 @@ export class AnalyticsClient {
       clearInterval(this.timer);
       this.timer = undefined;
     }
+    this.unbindConnectivityHandlers();
     void this.flush();
+  }
+
+  /**
+   * Analytics #82 — the current circuit breaker state of the configured
+   * emitter, when it exposes one (e.g. `HttpSink`). Returns `undefined`
+   * for emitters that don't use a circuit breaker.
+   */
+  getCircuitState(): CircuitState | undefined {
+    const emitter = this.emitter as Partial<{ getCircuitState(): CircuitState }>;
+    return typeof emitter.getCircuitState === 'function' ? emitter.getCircuitState() : undefined;
   }
 
   // ── test / inspection helpers ──────────────────────────────────────────────
@@ -87,109 +117,37 @@ export class AnalyticsClient {
 
   getQueue(): EventQueue {
     return this.queue;
-import type { AnalyticsConfig } from './config.js';
-import { resolveConfig } from './config.js';
-import type { Emitter } from './emitter/index.js';
-import { NoopEmitter } from './emitter/NoopEmitter.js';
-import { Logger } from './lib/logger.js';
-import type { AnalyticsEvent } from './types.js';
-import { validateProperties } from './validate.js';
-import { EventQueue } from './queue.js';
-
-export class AnalyticsClient {
-  private readonly config: AnalyticsConfig;
-  private readonly emitter: Emitter;
-  private readonly logger: Logger;
-  private readonly queue: EventQueue;
-
-  constructor(config?: Partial<AnalyticsConfig>, emitter?: Emitter) {
-    this.config = resolveConfig(config);
-    this.emitter = emitter ?? new NoopEmitter();
-    this.logger = new Logger(this.config.debug);
-    this.queue = new EventQueue();
   }
 
-  track(name: string, properties: Record<string, unknown> = {}): void {
-    if (typeof name !== 'string' || name.trim() === '') {
-      throw new TypeError('Event name must be a non-empty string');
-    }
+  // ── Analytics #84 internals ─────────────────────────────────────────────────
 
-    validateProperties(properties);
+  private bindConnectivityHandlers(): void {
+    if (typeof window === 'undefined') return;
 
-    const event: AnalyticsEvent = {
-      name,
-      timestamp: Date.now(),
-      properties,
+    this.offlineHandler = () => {
+      this.isOffline = true;
+      this.logger.debug('offline — pausing flush');
+    };
+    this.onlineHandler = () => {
+      this.isOffline = false;
+      this.logger.debug('online — resuming flush');
+      void this.flush();
     };
 
-    this.logger.debug('track()', event);
-
-    // Route through the queue instead of calling emitter directly (#1070).
-    // Emitter will be called during flush() in a subsequent issue.
-    this.queue.enqueue(event);
+    window.addEventListener('offline', this.offlineHandler);
+    window.addEventListener('online', this.onlineHandler);
   }
 
-  /**
-   * Returns the internal queue instance.
-   * Used by tests and future flush() implementation.
-   */
-  getQueue(): EventQueue {
-    return this.queue;
-  }
+  private unbindConnectivityHandlers(): void {
+    if (typeof window === 'undefined') return;
 
-  /**
-   * Returns the configured emitter.
-   * Used by tests and future flush() implementation.
-   */
-  getEmitter(): Emitter {
-    return this.emitter;
-import type { AnalyticsConfig } from './config';
-import type { AnalyticsEvent } from './types';
-import { Logger } from './lib/logger';
-import { validateProperties } from './validate';
-
-/**
- * Core analytics client.
- *
- * Instantiate once per application, then call `track()` wherever events
- * need to be recorded.
- *
- * @example
- * ```ts
- * const client = new AnalyticsClient(resolveConfig({ endpoint: '/ingest' }));
- * client.track('page_view', { path: '/home' });
- * ```
- */
-export class AnalyticsClient {
-  protected readonly config: AnalyticsConfig;
-  private readonly logger: Logger;
-
-  constructor(config: AnalyticsConfig) {
-    this.config = config;
-    this.logger = new Logger(config.debug ?? false);
-  }
-
-  /**
-   * Record an analytics event.
-   *
-   * @param name - Non-empty string identifying the event type.
-   * @param properties - Serializable key-value metadata. Defaults to `{}`.
-   * @throws {TypeError} If `name` is not a non-empty string.
-   * @throws {TypeError} If `properties` contains non-serializable values.
-   */
-  track(name: string, properties: Record<string, unknown> = {}): void {
-    if (typeof name !== 'string' || name.trim() === '') {
-      throw new TypeError('Event name must be a non-empty string');
+    if (this.offlineHandler) {
+      window.removeEventListener('offline', this.offlineHandler);
+      this.offlineHandler = undefined;
     }
-
-    validateProperties(properties);
-
-    const event: AnalyticsEvent = {
-      name,
-      timestamp: Date.now(),
-      properties,
-    };
-
-    this.logger.debug('track()', event);
+    if (this.onlineHandler) {
+      window.removeEventListener('online', this.onlineHandler);
+      this.onlineHandler = undefined;
+    }
   }
 }
