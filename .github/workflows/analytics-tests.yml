@@ -5,7 +5,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Run vitest
         run: |
           npm ci
           npm run test --workspace=packages/analytics
+      - name: Require an analytics changeset for package changes
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          changed_files="$(git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.sha }}")"
+          if grep -q '^packages/analytics/' <<< "$changed_files" \
+            && ! grep -qE '^\.changeset/[^/]+\.md$' <<< "$changed_files"; then
+            echo "A changeset is required for changes to packages/analytics."
+            exit 1
+          fi
