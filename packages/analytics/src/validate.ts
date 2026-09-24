@@ -1,61 +1,46 @@
-/**
- * Validate event properties.
- * Throws a TypeError if:
- * - any value is a function
- * - the object contains a circular reference
- */
-export function validateProperties(properties: Record<string, unknown>): void {
-  // Check for circular references via JSON.stringify
-  try {
-    JSON.stringify(properties);
-  } catch {
-    throw new TypeError('Analytics event properties contain a circular reference.');
-  }
+function assertSerializable(value: unknown, seen: WeakSet<object>): void {
+  if (value === null) return;
 
-  // Check for function values
-  for (const [key, value] of Object.entries(properties)) {
-    if (typeof value === 'function') {
-      throw new TypeError(
-        `Analytics event property "${key}" must not be a function.`,
-      );
-    }
-  }
-function containsFunction(value: unknown): boolean {
-  if (typeof value === 'function') return true;
-  if (value !== null && typeof value === 'object') {
-    for (const v of Object.values(value as Record<string, unknown>)) {
-      if (containsFunction(v)) return true;
-    }
-  }
-  return false;
-}
-
-export function validateProperties(props: Record<string, unknown>): void {
-  if (containsFunction(props)) {
-    throw new TypeError('Properties contain non-serializable values');
-  }
-/**
- * Validates that every value inside `props` is serializable to JSON.
- *
- * Throws a `TypeError` if:
- * - Any top-level value is a `function`, or
- * - `JSON.stringify` throws (e.g. circular references).
- *
- * @param props - The properties object attached to an analytics event.
- * @throws {TypeError} When non-serializable values are detected.
- */
-export function validateProperties(props: Record<string, unknown>): void {
-  // Fast path: reject any explicit function values before trying JSON.stringify.
-  for (const value of Object.values(props)) {
-    if (typeof value === 'function') {
+  const type = typeof value;
+  if (type === 'string' || type === 'boolean') return;
+  if (type === 'number') {
+    if (!Number.isFinite(value as number)) {
       throw new TypeError('Properties contain non-serializable values');
     }
+    return;
+  }
+  if (type === 'undefined' || type === 'function' || type === 'symbol' || type === 'bigint') {
+    throw new TypeError('Properties contain non-serializable values');
   }
 
-  // Catch circular references and any other JSON.stringify-level failures.
+  const object = value as object;
+  if (seen.has(object)) {
+    throw new TypeError('Properties contain non-serializable values');
+  }
+  seen.add(object);
+
+  if (Array.isArray(object)) {
+    for (const item of object) assertSerializable(item, seen);
+  } else {
+    for (const item of Object.values(object as Record<string, unknown>)) {
+      assertSerializable(item, seen);
+    }
+  }
+  seen.delete(object);
+}
+
+/** Validate that all event properties can be represented as JSON. */
+export function validateProperties(properties: Record<string, unknown>): void {
   try {
-    JSON.stringify(props);
-  } catch {
+    assertSerializable(properties, new WeakSet<object>());
+    JSON.stringify(properties);
+  } catch (error) {
+    if (
+      error instanceof TypeError &&
+      error.message === 'Properties contain non-serializable values'
+    ) {
+      throw error;
+    }
     throw new TypeError('Properties contain non-serializable values');
   }
 }
