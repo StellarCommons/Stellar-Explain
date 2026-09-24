@@ -1,35 +1,38 @@
-/** @stellar-explain/analytics — rebuilt from scratch, see tracked "Analytics #1..#125" issues. */
-
-// Package version
+/** Public API for the Stellar Explain analytics package. */
 export const ANALYTICS_PACKAGE_VERSION = '0.1.0';
 
-// Core types (issue #1059)
-export type { AnalyticsEvent } from './types.js';
-
-// Client configuration (issue #1060)
+export type {
+  AnalyticsEvent,
+  AnalyticsLifecycleEvent,
+  AnalyticsLifecycleHandler,
+  AnalyticsLifecyclePayload,
+  AnalyticsMetrics,
+} from './types.js';
 export type { AnalyticsConfig } from './config.js';
 export { resolveConfig } from './config.js';
 
-// SSR-safe environment detection (issue #1061)
-export { isBrowser, isNode } from './env.js';
-
-// Analytics client (issue #1062)
+export type { Emitter } from './emitter/index.js';
+export { NoopEmitter } from './emitter/NoopEmitter.js';
+export { EventQueue } from './queue.js';
+export type { QueueDropReason } from './queue.js';
 export { AnalyticsClient } from './client.js';
 
-// Event builders
-export * from './events/form.js';
-export * from './events/copy.js';
-// Storage availability and locale capture
-export * from './lib/storageAvailability.js';
-export * from './locale.js';
-// User and group analytics
-export * from './user.js';
-export * from './group.js';
-// Opt-out and page context
-export * from './optout.js';
-export * from './context/page.js';
-// Event builders
-export * from './events/click.js';
-export * from './events/page-view.js';
-export * from './events/search.js';
-export * from './events/focus.js';
+export { ConsoleSink } from './sinks/ConsoleSink.js';
+export { HttpSink, FetchUnavailableError } from './sinks/HttpSink.js';
+export type { FetchLike, HttpSinkOptions } from './sinks/HttpSink.js';
+export { FanOutSink, MultiSink } from './sinks/MultiSink.js';
+
+export type { LogLevel, AnalyticsLogRecord } from './lib/logger.js';
+export { Logger } from './lib/logger.js';
+export type { CircuitState, CircuitBreakerOptions } from './lib/circuitBreaker.js';
+export { CircuitBreaker } from './lib/circuitBreaker.js';
+
+export { validateProperties } from './validate.js';
+export { shouldSample } from './sampling.js';
+export { EventDeduplicator } from './dedup.js';
+export { eventByteLength, isWithinByteLimit, serializedByteLength } from './utils/eventSize.js';
+export { limitPayload } from './utils/limitPayload.js';
+export type { AnalyticsPlugin } from './plugins.js';
+export { applyPlugins } from './plugins.js';
+export { runMiddleware } from './middleware.js';
+export type { BeforeSend, MiddlewareOptions } from './middleware.js';

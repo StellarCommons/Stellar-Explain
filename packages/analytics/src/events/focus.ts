@@ -1,4 +1,4 @@
-import { AnalyticsEvent } from '../types';
+import { AnalyticsEvent } from '../types.js';
 
 export function createFocusEvent(fieldName: string): AnalyticsEvent {
   return {
