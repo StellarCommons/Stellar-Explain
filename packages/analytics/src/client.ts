@@ -12,6 +12,7 @@ import { shouldSample } from './sampling.js';
 import type { AnalyticsEvent } from './types.js';
 import { limitPayload } from './utils/limitPayload.js';
 import { validateProperties } from './validate.js';
+import type { CircuitState } from './lib/circuitBreaker.js';
 import { createErrorEvent } from './events/error.js';
 import { createNetworkErrorEvent } from './events/network-error.js';
 import { createHeartbeatEvent, shouldFireHeartbeat } from './events/heartbeat.js';
@@ -26,6 +27,8 @@ import { createHeartbeatEvent, shouldFireHeartbeat } from './events/heartbeat.js
  * #1071 — flush() drains the queue to the emitter
  * #1072 — optional auto-flush timer; stoppable via destroy()
  * #1073 — max-queue-size cap delegated to EventQueue
+ * Analytics #82 — exposes the emitter's circuit breaker state, when available
+ * Analytics #84 — pauses flushing while offline, resumes on reconnect
  *
  * Stores whatever `config` it's given as-is (applying defaults only where
  * a field is used, via `??`) rather than re-resolving it — callers that
@@ -53,6 +56,9 @@ export class AnalyticsClient {
   private readonly emitter: Emitter;
   private readonly logger: Logger;
   private timer: ReturnType<typeof setInterval> | undefined;
+  private isOffline: boolean;
+  private onlineHandler: (() => void) | undefined;
+  private offlineHandler: (() => void) | undefined;
   private globalErrorHandler: ((event: ErrorEvent) => void) | undefined;
   private hasFiredHeartbeatThisSession = false;
 
@@ -61,6 +67,7 @@ export class AnalyticsClient {
     this.logger = new Logger(this.config.debug ?? false);
     this.emitter = emitter ?? new NoopEmitter();
     this.queue = new EventQueue(this.config.maxQueueSize, this.logger);
+    this.isOffline = typeof navigator !== 'undefined' && 'onLine' in navigator ? !navigator.onLine : false;
 
     // #1072 — start auto-flush timer if configured
     const flushIntervalMs = this.config.flushIntervalMs ?? 0;
@@ -74,6 +81,9 @@ export class AnalyticsClient {
     if (this.config.captureGlobalErrors) {
       this.bindGlobalErrorHandler();
     }
+
+    // Analytics #84 — pause flushing while offline, resume on reconnect
+    this.bindConnectivityHandlers();
   }
   private readonly dedup: EventDeduplicator;
   private flushTimer: ReturnType<typeof setInterval> | null = null;
@@ -141,8 +151,17 @@ export class AnalyticsClient {
 
   /**
    * #1071 — Drain the queue and forward every event to the emitter.
+   *
+   * Analytics #84 — while offline, this is a no-op: events stay queued
+   * until connectivity is restored, at which point a flush is triggered
+   * automatically.
    */
   async flush(): Promise<void> {
+    if (this.isOffline) {
+      this.logger.debug('flush() skipped — offline');
+      return;
+    }
+
     const events = this.queue.drain();
     await Promise.all(events.map((e) => this.emitter.send(e)));
   }
@@ -155,8 +174,19 @@ export class AnalyticsClient {
       clearInterval(this.timer);
       this.timer = undefined;
     }
+    this.unbindConnectivityHandlers();
     this.unbindGlobalErrorHandler();
     void this.flush();
+  }
+
+  /**
+   * Analytics #82 — the current circuit breaker state of the configured
+   * emitter, when it exposes one (e.g. `HttpSink`). Returns `undefined`
+   * for emitters that don't use a circuit breaker.
+   */
+  getCircuitState(): CircuitState | undefined {
+    const emitter = this.emitter as Partial<{ getCircuitState(): CircuitState }>;
+    return typeof emitter.getCircuitState === 'function' ? emitter.getCircuitState() : undefined;
   }
 
   // ── test / inspection helpers ──────────────────────────────────────────────
@@ -168,6 +198,37 @@ export class AnalyticsClient {
   getQueue(): EventQueue {
     return this.queue;
   }
+
+  // ── Analytics #84 internals ─────────────────────────────────────────────────
+
+  private bindConnectivityHandlers(): void {
+    if (typeof window === 'undefined') return;
+
+    this.offlineHandler = () => {
+      this.isOffline = true;
+      this.logger.debug('offline — pausing flush');
+    };
+    this.onlineHandler = () => {
+      this.isOffline = false;
+      this.logger.debug('online — resuming flush');
+      void this.flush();
+    };
+
+    window.addEventListener('offline', this.offlineHandler);
+    window.addEventListener('online', this.onlineHandler);
+  }
+
+  private unbindConnectivityHandlers(): void {
+    if (typeof window === 'undefined') return;
+
+    if (this.offlineHandler) {
+      window.removeEventListener('offline', this.offlineHandler);
+      this.offlineHandler = undefined;
+    }
+    if (this.onlineHandler) {
+      window.removeEventListener('online', this.onlineHandler);
+      this.onlineHandler = undefined;
+    }
 
   // ── Analytics #66 internals ─────────────────────────────────────────────────
 
