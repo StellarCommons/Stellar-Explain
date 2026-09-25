@@ -5,11 +5,12 @@ import { Logger } from '../lib/logger.js';
 export class ConsoleSink implements Emitter {
   private readonly logger: Logger;
 
-  constructor(debug = true) {
-    this.logger = new Logger(debug);
+  constructor(logger: Logger) {
+    this.logger = logger;
   }
 
   send(event: AnalyticsEvent): void {
+    this.logger.info('event', JSON.stringify(event));
     this.logger.info('event', event);
   }
 }

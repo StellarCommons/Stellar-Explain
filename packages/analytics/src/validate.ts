@@ -8,6 +8,7 @@ export function validateProperties(properties: Record<string, unknown>): void {
   try {
     JSON.stringify(properties);
   } catch {
+    throw new TypeError('Properties contain circular references');
     throw new TypeError('Properties contain a circular reference');
   }
 }

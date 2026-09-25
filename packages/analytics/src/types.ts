@@ -1,10 +1,6 @@
-/** Core analytics event shape shared by the client, queue, and sinks. */
 export interface AnalyticsEvent {
-  /** A non-empty event identifier, for example `page_view`. */
   name: string;
-  /** Unix timestamp in milliseconds. */
   timestamp: number;
-  /** JSON-serializable event metadata. */
   properties: Record<string, unknown>;
   /** Optional host/environment context attached by the client. */
   context?: Record<string, unknown>;

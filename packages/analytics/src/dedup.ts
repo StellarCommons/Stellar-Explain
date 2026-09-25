@@ -1,24 +1,22 @@
 import type { AnalyticsEvent } from './types.js';
 
-/** A small time-window deduplicator used by the client pipeline. */
 export class EventDeduplicator {
-  private readonly seen = new Map<string, number>();
+  private readonly windowMs: number;
+  private readonly seen = new Map<string, number>(); // key → timestamp
 
-  constructor(private readonly windowMs = 0) {}
-
-  isDuplicate(event: AnalyticsEvent, now = Date.now()): boolean {
-    if (this.windowMs <= 0) return false;
-    const key = `${event.name}:${JSON.stringify(event.properties)}`;
-    const expiresAt = this.seen.get(key);
-    if (expiresAt !== undefined && expiresAt > now) return true;
-    this.seen.set(key, now + this.windowMs);
-    this.prune(now);
-    return false;
+  constructor(windowMs = 500) {
+    this.windowMs = windowMs;
   }
 
-  private prune(now: number): void {
-    for (const [key, expiresAt] of this.seen) {
-      if (expiresAt <= now) this.seen.delete(key);
+  isDuplicate(event: AnalyticsEvent): boolean {
+    const key = JSON.stringify({ name: event.name, properties: event.properties, timestamp: event.timestamp });
+    const now = Date.now();
+    // Evict old entries
+    for (const [k, ts] of this.seen) {
+      if (now - ts > this.windowMs) this.seen.delete(k);
     }
+    if (this.seen.has(key)) return true;
+    this.seen.set(key, now);
+    return false;
   }
 }
