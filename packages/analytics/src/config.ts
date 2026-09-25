@@ -1,3 +1,10 @@
+/**
+ * Configuration options for the Analytics client.
+ */
+export interface AnalyticsConfig {
+  /** The HTTP endpoint events are sent to. */
+  endpoint?: string;
+  /** Optional API key included with every request. */
 import type { AnalyticsEvent } from './types.js';
 
 export interface AnalyticsConfig {
@@ -33,6 +40,41 @@ export function resolveConfig(config: AnalyticsConfig): ResolvedConfig {
   debug?: boolean;
   flushIntervalMs?: number;
   maxQueueSize?: number;
+  /** Fraction of events that are actually sent (0–1). Default: 1.0. */
+  sampleRate?: number;
+  /**
+   * When true, installs a global `window.onerror` listener and reports
+   * uncaught errors as `error` events (Analytics #66). Default: false —
+   * opt-in, since a host app may already have its own error reporting.
+   */
+  captureGlobalErrors?: boolean;
+}
+
+/** A config with every field but `apiKey` guaranteed to be present. */
+export type ResolvedAnalyticsConfig = Required<Omit<AnalyticsConfig, 'apiKey'>> &
+  Pick<AnalyticsConfig, 'apiKey'>;
+
+const DEFAULTS: Omit<ResolvedAnalyticsConfig, 'apiKey'> = {
+  endpoint: '',
+  debug: false,
+  flushIntervalMs: 5000,
+  maxQueueSize: 100,
+  sampleRate: 1.0,
+  captureGlobalErrors: false,
+};
+
+/**
+ * Merges caller-supplied options with sensible defaults.
+ *
+ * `apiKey` is left `undefined` when not provided rather than defaulted to
+ * an empty string, so callers can distinguish "no key configured" from
+ * "explicitly empty key".
+ *
+ * @param options - Partial configuration supplied by the consumer.
+ * @returns A fully-resolved config with every field but `apiKey` populated.
+ */
+export function resolveConfig(options: AnalyticsConfig = {}): ResolvedAnalyticsConfig {
+  return { ...DEFAULTS, ...options };
   sampleRate?: number;          // 0-1, default 1.0
   maxPropertyBytes?: number;    // max bytes per property value, default 1024
   beforeSend?: (event: AnalyticsEvent) => AnalyticsEvent | null; // null cancels

@@ -18,6 +18,7 @@ export class EventQueue {
     return this.items.splice(0, this.items.length);
   }
 
+  /** Removes and returns all queued events in FIFO order. */
   get size(): number {
     return this.items.length;
 import type { Logger } from './lib/logger.js';
