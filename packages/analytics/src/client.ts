@@ -12,6 +12,10 @@ import { shouldSample } from './sampling.js';
 import type { AnalyticsEvent } from './types.js';
 import { limitPayload } from './utils/limitPayload.js';
 import { validateProperties } from './validate.js';
+import { RateLimiter } from './lib/rateLimiter.js';
+import { CircuitBreaker } from './lib/CircuitBreaker.js';
+import { DeadLetterQueue } from './lib/DeadLetterQueue.js';
+import { clearPersistedQueue, loadPersistedQueue } from './lib/queuePersistence.js';
 import { scrubEventProperties } from './lib/scrubPii.js';
 import { DeadLetterQueue } from './lib/DeadLetterQueue.js';
 import type { CircuitState } from './lib/circuitBreaker.js';
@@ -29,6 +33,9 @@ import { createHeartbeatEvent, shouldFireHeartbeat } from './events/heartbeat.js
  * #1071 — flush() drains the queue to the emitter
  * #1072 — optional auto-flush timer; stoppable via destroy()
  * #1073 — max-queue-size cap delegated to EventQueue
+ * #93  — client-side rate limiting; over-budget events are dropped + warned
+ * #94  — a circuit breaker guards the emitter from repeated failures
+ * #95  — persisted queue is restored again on construction (offline coverage)
  * #89  — track() scrubs PII from properties (enabled by default, config-disablable)
  * #90  — emitter failures are caught, logged and routed to the dead-letter
  * #91  — bounded dead-letter (oldest evicted on overflow)
@@ -60,6 +67,8 @@ export class AnalyticsClient {
   private readonly config: ResolvedConfig;
   private readonly queue: EventQueue;
   private readonly deadLetter: DeadLetterQueue;
+  private readonly rateLimiter: RateLimiter;
+  private readonly circuitBreaker: CircuitBreaker;
   private readonly emitter: Emitter;
   private readonly logger: Logger;
   private timer: ReturnType<typeof setInterval> | undefined;
@@ -75,6 +84,18 @@ export class AnalyticsClient {
     this.emitter = emitter ?? new NoopEmitter();
     this.queue = new EventQueue(this.config.maxQueueSize, this.logger);
     this.deadLetter = new DeadLetterQueue(100, this.logger);
+    this.rateLimiter = new RateLimiter(this.config.maxEventsPerSecond ?? 100);
+    this.circuitBreaker = new CircuitBreaker();
+
+    // Restore any queue persisted across a page unload.
+    const restored = loadPersistedQueue();
+    if (restored.length > 0) {
+      clearPersistedQueue();
+      for (const event of restored) {
+        this.queue.enqueue(event);
+      }
+      void this.flush();
+    }
   constructor(config: AnalyticsConfig = {}, emitter?: Emitter) {
     this.config = config;
     this.logger = new Logger(this.config.debug ?? false);
@@ -106,6 +127,8 @@ export class AnalyticsClient {
    *
    * Throws a TypeError if `name` is blank or `properties` are invalid.
    *
+   * #93 — when the event would exceed the configured rate, it is dropped
+   * (with a warning) instead of being enqueued.
    * #89 — unless explicitly disabled via `config.scrubPii === false`,
    * email/number PII is scrubbed from `properties` before enqueuing.
    */
@@ -126,6 +149,12 @@ export class AnalyticsClient {
     }
     validateProperties(properties);
 
+    if (!this.rateLimiter.allow()) {
+      this.logger.warn(
+        `analytics rate limit (${this.config.maxEventsPerSecond ?? 100} events/s) exceeded — dropped event "${name}"`,
+      );
+      return;
+    }
     this.maybeFireHeartbeat();
 
     const event: AnalyticsEvent = {
@@ -140,6 +169,11 @@ export class AnalyticsClient {
   }
 
   /**
+   * #1071, #94 — Drain the queue and forward every event to the emitter.
+   *
+   * The circuit breaker short-circuits the emitter once the failure
+   * threshold is crossed; events that cannot be sent are routed to the
+   * dead-letter. `flush()` never rejects.
    * #1071, #90 — Drain the queue and forward every event to the emitter.
    *
    * #90: individual emitter failures are caught and logged, and the failed
@@ -194,6 +228,16 @@ export class AnalyticsClient {
     const events = this.queue.drain();
     await Promise.all(
       events.map(async (event) => {
+        if (!this.circuitBreaker.allowRequest()) {
+          this.logger.warn(`circuit open — ${event.name} deferred to dead-letter`);
+          this.deadLetter.push(event);
+          return;
+        }
+        try {
+          await this.emitter.send(event);
+          this.circuitBreaker.onSuccess();
+        } catch (error) {
+          this.circuitBreaker.onFailure();
         try {
           await this.emitter.send(event);
         } catch (error) {
@@ -260,6 +304,18 @@ export class AnalyticsClient {
 
   getQueue(): EventQueue {
     return this.queue;
+  }
+
+  getDeadLetter(): DeadLetterQueue {
+    return this.deadLetter;
+  }
+
+  getRateLimiter(): RateLimiter {
+    return this.rateLimiter;
+  }
+
+  getCircuitBreaker(): CircuitBreaker {
+    return this.circuitBreaker;
   }
 
   /** #91 — the bounded dead-letter holding events whose send failed. */

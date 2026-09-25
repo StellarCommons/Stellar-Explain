@@ -17,6 +17,7 @@ export class EventQueue {
     this.logger = logger ?? new Logger(false);
   }
 
+
 /** FIFO queue with overflow protection (oldest-first eviction). */
 export class EventQueue {
   private readonly items: AnalyticsEvent[] = [];
@@ -92,6 +93,11 @@ export class EventQueue {
 
   drain(): AnalyticsEvent[] {
     return this.queue.splice(0, this.queue.length);
+  }
+
+  /** Returns a shallow copy of the queued events without draining them. */
+  peek(): AnalyticsEvent[] {
+    return [...this.events];
   }
 
   /** Number of events currently queued. */

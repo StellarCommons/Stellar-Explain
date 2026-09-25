@@ -9,6 +9,13 @@ export type { AnalyticsConfig } from './config.js';
 export { resolveConfig } from './config.js';
 
 // Emitter / Sink contract
+export type { Emitter, Sink } from './emitter/index.js';
+export { NoopEmitter } from './emitter/NoopEmitter.js';
+
+// Queuing
+export { EventQueue } from './queue.js';
+
+// Emitter / Sink contract
 export type { Emitter } from './emitter/index.js';
 export { NoopEmitter } from './emitter/NoopEmitter.js';
 
@@ -81,6 +88,25 @@ export { Logger } from './lib/logger.js';
 // Property validation
 export { validateProperties } from './validate.js';
 
+// Sinks
+export { ConsoleSink } from './sinks/ConsoleSink.js';
+export { HttpSink } from './sinks/HttpSink.js';
+export type { HttpSinkOptions } from './sinks/HttpSink.js';
+
+// Resilience primitives (#93/#94)
+export { RateLimiter } from './lib/rateLimiter.js';
+export type { CircuitState, CircuitBreakerOptions } from './lib/CircuitBreaker.js';
+export { CircuitBreaker } from './lib/CircuitBreaker.js';
+export { DeadLetterQueue } from './lib/DeadLetterQueue.js';
+
+// Queue persistence (#95)
+export {
+  loadPersistedQueue,
+  persistPendingQueue,
+  clearPersistedQueue,
+  PENDING_QUEUE_STORAGE_KEY,
+  MAX_PERSISTED_EVENTS,
+} from './lib/queuePersistence.js';
 // PII scrubbing
 export {
   scrubEventProperties,
@@ -103,6 +129,7 @@ export {
   isLocalStorageAvailable,
   isSessionStorageAvailable,
   isStorageAvailable,
+} from './lib/storageAvailability.js';
 } from './lib/storageAvailability.js';
 
 // Circuit breaker

@@ -2,6 +2,10 @@ import type { AnalyticsEvent } from '../types.js';
 import { Logger } from './logger.js';
 
 /**
+ * A bounded dead-letter holding events that failed to send.
+ *
+ * Newest events are always retained; when the cap is reached the oldest
+ * event is dropped (with a warning) so the dead-letter never grows unbounded.
  * #91 — a bounded dead-letter holding events that failed to send.
  *
  * Newest events are always retained; when the cap is reached the oldest
