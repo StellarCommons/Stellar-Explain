@@ -1,7 +1,4 @@
+/** Returns true when running inside a browser environment (SSR-safe). */
 export function isBrowser(): boolean {
-  return typeof window !== 'undefined' && typeof window.document !== 'undefined';
-}
-
-export function isNode(): boolean {
-  return typeof process !== 'undefined' && process.versions != null && process.versions.node != null;
+  return typeof window !== 'undefined' && typeof navigator !== 'undefined';
 }
