@@ -52,6 +52,14 @@ export function AnalyticsProvider({
         : new AnalyticsClient(config, emitter),
     [config, emitter, disabled],
   );
+export interface AnalyticsProviderProps {
+  config?: AnalyticsConfig;
+  emitter?: Emitter;
+  children: ReactNode;
+}
+
+export function AnalyticsProvider({ config, emitter, children }: AnalyticsProviderProps) {
+  const client = useMemo(() => new AnalyticsClient(config, emitter), [config, emitter]);
 
   return <AnalyticsContext.Provider value={client}>{children}</AnalyticsContext.Provider>;
 }
