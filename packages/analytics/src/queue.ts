@@ -17,6 +17,7 @@ export class EventQueue {
     this.logger = logger ?? new Logger(false);
   }
 
+
 /** FIFO queue with overflow protection (oldest-first eviction). */
 export class EventQueue {
   private readonly items: AnalyticsEvent[] = [];

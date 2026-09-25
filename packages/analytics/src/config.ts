@@ -3,6 +3,8 @@
  */
 export interface AnalyticsConfig {
   /** The HTTP endpoint events are sent to. */
+  endpoint: string;
+  /** Optional API key included with every request. */
   endpoint?: string;
   /** Optional API key included with every request. */
 import type { AnalyticsEvent } from './types.js';
@@ -45,6 +47,15 @@ export function resolveConfig(config: AnalyticsConfig): ResolvedConfig {
   maxQueueSize: number;
   /** Fraction of events that are actually sent (0–1). Default: 1.0. */
   sampleRate: number;
+  /** #93 — client-side send rate cap (events per second). Default: 100. */
+  maxEventsPerSecond?: number;
+}
+
+const DEFAULTS: AnalyticsConfig = {
+  /** Fraction of events that are actually sent (0–1). Default: 1.0. */
+  sampleRate: number;
+  /** #89 — when true (default) track() scrubs PII from event properties. */
+  scrubPii?: boolean;
 }
 
 const DEFAULTS: AnalyticsConfig = {
@@ -71,6 +82,8 @@ const DEFAULTS: Omit<ResolvedAnalyticsConfig, 'apiKey'> = {
   flushIntervalMs: 5000,
   maxQueueSize: 100,
   sampleRate: 1.0,
+  maxEventsPerSecond: 100,
+  scrubPii: true,
   captureGlobalErrors: false,
 };
 
@@ -100,6 +113,7 @@ export function resolveConfig(options: Partial<AnalyticsConfig> = {}): Analytics
   }
 
   return { ...DEFAULTS, ...options };
+}
 }
 export function resolveConfig(options: AnalyticsConfig = {}): ResolvedAnalyticsConfig {
   return { ...DEFAULTS, ...options };

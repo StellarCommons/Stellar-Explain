@@ -15,6 +15,10 @@ export interface HttpSinkOptions {
    * #87 — prefer `navigator.sendBeacon` for `send()`. Useful for
    * fire-and-forget paths (page unload) where beacon is most reliable.
    */
+export interface HttpSinkOptions {
+  endpoint: string;
+  apiKey?: string;
+  headers?: Record<string, string>;
   useBeacon?: boolean;
 }
 
@@ -25,6 +29,10 @@ export interface HttpSinkOptions {
  * `navigator.sendBeacon` on page unload, falling back to a synchronous
  * `fetch(..., { keepalive: true })` where beacon is unavailable, so the
  * event is not lost when the document is torn down.
+ * An `Emitter` that POSTs events to an HTTP(S) endpoint via `fetch`.
+ *
+ * Throws on non-2xx responses so callers can route failures to a
+ * dead-letter / circuit breaker.
  */
 export class HttpSink implements Emitter {
   constructor(private readonly options: HttpSinkOptions) {}
@@ -38,6 +46,7 @@ export class HttpSink implements Emitter {
       this.sendBeacon(event);
       return;
     }
+  async send(event: AnalyticsEvent): Promise<void> {
     const response = await fetch(this.options.endpoint, this.requestInit(event));
     if (!response.ok) {
       throw new Error(`analytics HTTP ${response.status}`);
@@ -57,6 +66,7 @@ export class HttpSink implements Emitter {
     }
     if (typeof fetch === 'function') {
       void fetch(this.options.endpoint, this.requestInit(event, true));
+      void fetch(this.options.endpoint, this.requestInit(event));
       return true;
     }
     return false;
@@ -70,6 +80,7 @@ export class HttpSink implements Emitter {
   }
 
   private requestInit(event: AnalyticsEvent, keepalive = false): RequestInit {
+  private requestInit(event: AnalyticsEvent): RequestInit {
     const headers: Record<string, string> = {
       'content-type': 'application/json',
       ...this.options.headers,

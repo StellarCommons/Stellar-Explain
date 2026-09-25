@@ -8,6 +8,7 @@
  *
  * Secrets / keys are never touched; keys are left as-is, only values are
  * scrubbed so event names and structure stay intact.
+ * Keys are left as-is; only values are scrubbed so event structure is intact.
  */
 
 const EMAIL_PATTERN = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;

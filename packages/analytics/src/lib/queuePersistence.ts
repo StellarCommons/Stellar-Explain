@@ -22,6 +22,15 @@ export const MAX_PERSISTED_EVENTS = 500;
  * Persist `events` to localStorage. Returns `false` when denied by any
  * guard (opt-out, unavailable storage) or a storage failure.
  */
+ * Persistence of the pending queue across page unloads.
+ *
+ * Guarded by the opt-out flag and storage availability; silently no-ops when
+ * storage is unavailable or the user opted out.
+ */
+
+export const PENDING_QUEUE_STORAGE_KEY = 'stellar_analytics_pending_queue';
+export const MAX_PERSISTED_EVENTS = 500;
+
 export function persistPendingQueue(events: AnalyticsEvent[]): boolean {
   if (events.length === 0) return true;
   if (optOutManager.isOptedOut()) return false;
