@@ -1,54 +1,29 @@
 import type { AnalyticsEvent } from './types.js';
-import { Logger } from './lib/logger.js';
+import type { Logger } from './lib/logger.js';
 
-export type QueueDropReason = 'max-size' | 'cleared';
-
-/** In-memory FIFO queue for analytics events. */
 export class EventQueue {
-  private readonly events: AnalyticsEvent[] = [];
+  private readonly queue: AnalyticsEvent[] = [];
+  private readonly maxSize: number;
+  private readonly logger?: Logger;
 
-  constructor(
-    private readonly maxSize = 0,
-    private readonly logger: Logger = new Logger(false),
-    private readonly onDrop?: (event: AnalyticsEvent, reason: QueueDropReason) => void,
-  ) {}
+  constructor(maxSize = 0, logger?: Logger) {
+    this.maxSize = maxSize;
+    this.logger = logger;
+  }
 
   enqueue(event: AnalyticsEvent): void {
-    this.events.push(event);
-
-    if (this.maxSize > 0 && this.events.length > this.maxSize) {
-      const dropped = this.events.shift();
-      if (dropped) {
-        const message = `Max queue size (${this.maxSize}) exceeded — dropped oldest event: "${dropped.name}"`;
-        this.logger.warn(message);
-        this.logger.log('warn', 'queue.drop', {
-          reason: 'max-size',
-          maxSize: this.maxSize,
-          eventName: dropped.name,
-        });
-        this.onDrop?.(dropped, 'max-size');
-      }
-    } else {
-      this.logger.log('debug', 'queue.enqueue', {
-        size: this.events.length,
-        eventName: event.name,
-      });
+    if (this.maxSize > 0 && this.queue.length >= this.maxSize) {
+      const dropped = this.queue.shift();
+      this.logger?.warn(`Queue full (max ${this.maxSize}); dropping oldest event: "${dropped?.name}"`);
     }
+    this.queue.push(event);
   }
 
-  /** Removes and returns all queued events in FIFO order. */
   drain(): AnalyticsEvent[] {
-    const drained = this.events.splice(0, this.events.length);
-    this.logger.log('debug', 'queue.drain', { count: drained.length });
-    return drained;
-  }
-
-  clear(): void {
-    const cleared = this.events.splice(0, this.events.length);
-    for (const event of cleared) this.onDrop?.(event, 'cleared');
+    return this.queue.splice(0, this.queue.length);
   }
 
   get size(): number {
-    return this.events.length;
+    return this.queue.length;
   }
 }
