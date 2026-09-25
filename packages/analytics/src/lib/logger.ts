@@ -92,6 +92,14 @@ export class Logger {
 
   error(...args: unknown[]): void {
     if (this.enabled) console.error(PREFIX, ...args);
+  }
+
+  warn(...args: unknown[]): void {
+    if (this.enabled) console.warn(PREFIX, ...args);
+  }
+
+  error(...args: unknown[]): void {
+    if (this.enabled) console.error(PREFIX, ...args);
   constructor(enabled: boolean) {
     this.enabled = enabled;
   }

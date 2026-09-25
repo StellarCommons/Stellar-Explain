@@ -9,6 +9,7 @@ export type { AnalyticsConfig } from './config.js';
 export { resolveConfig } from './config.js';
 
 
+
 // Emitter
 export type { Emitter } from './emitter/index.js';
 export { NoopEmitter } from './emitter/NoopEmitter.js';
@@ -77,6 +78,8 @@ export { ConsoleSink } from './sinks/ConsoleSink.js';
 export { AnalyticsProvider, AnalyticsContext } from './react/provider.js';
 export type { AnalyticsProviderProps } from './react/provider.js';
 export { useAnalytics } from './react/useAnalytics.js';
+export { useTrackEvent } from './react/useTrackEvent.js';
+export { usePageView } from './react/usePageView.js';
 // Device detection (#1084)
 export { getDeviceType } from './device.js';
 export type { DeviceType } from './device.js';
