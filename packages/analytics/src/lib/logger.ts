@@ -138,6 +138,20 @@ export class Logger {
     if (this.enabled) console.warn(PREFIX, ...args);
   }
 
+  debug(...args: unknown[]): void {
+    if (this.enabled) console.debug(PREFIX, ...args);
+  }
+
+  info(...args: unknown[]): void {
+    if (this.enabled) console.info(PREFIX, ...args);
+  }
+
+  warn(...args: unknown[]): void {
+    if (this.enabled) console.warn(PREFIX, ...args);
+  }
+
+  error(...args: unknown[]): void {
+    if (this.enabled) console.error(PREFIX, ...args);
   error(...args: unknown[]): void {
     if (this.enabled) console.error(PREFIX, ...args);
   warn(...args: unknown[]): void {

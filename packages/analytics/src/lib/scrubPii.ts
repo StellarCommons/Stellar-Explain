@@ -6,6 +6,8 @@
  *  - email addresses → `[email]`
  *  - long numeric strings (e.g. phone/credit-card shaped, >= 12 digits) → `[long-number]`
  *
+ * Secrets / keys are never touched; keys are left as-is, only values are
+ * scrubbed so event names and structure stay intact.
  * Keys are left as-is; only values are scrubbed so event structure is intact.
  */
 
@@ -15,12 +17,18 @@ const LONG_NUMBER_PATTERN = /\b\d{12,}\b/g;
 export const SCRUBBED_EMAIL = '[email]';
 export const SCRUBBED_LONG_NUMBER = '[long-number]';
 
+/**
+ * Scrub a single string in place.
+ */
 export function scrubPiiString(value: string): string {
   return value
     .replace(EMAIL_PATTERN, SCRUBBED_EMAIL)
     .replace(LONG_NUMBER_PATTERN, SCRUBBED_LONG_NUMBER);
 }
 
+/**
+ * Recursively scrub an arbitrary JS value.
+ */
 export function scrubPii(value: unknown): unknown {
   if (typeof value === 'string') {
     return scrubPiiString(value);
@@ -38,6 +46,12 @@ export function scrubPii(value: unknown): unknown {
   return value;
 }
 
+/**
+ * Scrub every value inside an event's properties object.
+ *
+ * @param properties - Raw properties as supplied to `track()`.
+ * @returns A new properties object with PII scrubbed from all values.
+ */
 export function scrubEventProperties(
   properties: Record<string, unknown>,
 ): Record<string, unknown> {

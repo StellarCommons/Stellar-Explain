@@ -116,6 +116,14 @@ export {
   SCRUBBED_LONG_NUMBER,
 } from './lib/scrubPii.js';
 
+// Queue persistence (#85/#86)
+export {
+  loadPersistedQueue,
+  persistPendingQueue,
+  clearPersistedQueue,
+  PENDING_QUEUE_STORAGE_KEY,
+  MAX_PERSISTED_EVENTS,
+} from './lib/queuePersistence.js';
 // Dead-letter (#91)
 export { DeadLetterQueue } from './lib/DeadLetterQueue.js';
 

@@ -12,6 +12,11 @@ import { shouldSample } from './sampling.js';
 import type { AnalyticsEvent } from './types.js';
 import { limitPayload } from './utils/limitPayload.js';
 import { validateProperties } from './validate.js';
+import {
+  clearPersistedQueue,
+  loadPersistedQueue,
+  persistPendingQueue,
+} from './lib/queuePersistence.js';
 import { RateLimiter } from './lib/rateLimiter.js';
 import { CircuitBreaker } from './lib/CircuitBreaker.js';
 import { DeadLetterQueue } from './lib/DeadLetterQueue.js';
@@ -33,6 +38,8 @@ import { createHeartbeatEvent, shouldFireHeartbeat } from './events/heartbeat.js
  * #1071 — flush() drains the queue to the emitter
  * #1072 — optional auto-flush timer; stoppable via destroy()
  * #1073 — max-queue-size cap delegated to EventQueue
+ * #85  — persists the pending queue to localStorage on `beforeunload`
+ * #86  — restores a persisted queue on construction and re-flushes it
  * #93  — client-side rate limiting; over-budget events are dropped + warned
  * #94  — a circuit breaker guards the emitter from repeated failures
  * #95  — persisted queue is restored again on construction (offline coverage)
@@ -78,6 +85,13 @@ export class AnalyticsClient {
   private globalErrorHandler: ((event: ErrorEvent) => void) | undefined;
   private hasFiredHeartbeatThisSession = false;
 
+  private readonly handleBeforeUnload = (): void => {
+    this.persistQueueNow();
+  };
+
+  constructor(config: Partial<AnalyticsConfig> = {}, emitter?: Emitter) {
+    this.config = resolveConfig(config);
+    this.logger = new Logger(this.config.debug);
   constructor(config: Partial<AnalyticsConfig> = {}, emitter?: Emitter) {
     this.config = resolveConfig(config);
     this.logger = new Logger(this.config.debug);
@@ -103,6 +117,19 @@ export class AnalyticsClient {
     this.queue = new EventQueue(this.config.maxQueueSize, this.logger);
     this.isOffline = typeof navigator !== 'undefined' && 'onLine' in navigator ? !navigator.onLine : false;
 
+    // #86 — restore any queue persisted by #85 across a page unload.
+    const restored = loadPersistedQueue();
+    if (restored.length > 0) {
+      clearPersistedQueue();
+      for (const event of restored) {
+        this.queue.enqueue(event);
+      }
+      this.logger.debug(`restored ${restored.length} persisted events`);
+      void this.flush();
+    }
+
+    // #72 — start auto-flush timer if configured
+    if (this.config.flushIntervalMs > 0) {
     // #1072 — start auto-flush timer if configured
     const flushIntervalMs = this.config.flushIntervalMs ?? 0;
     if (flushIntervalMs > 0) {
@@ -116,6 +143,10 @@ export class AnalyticsClient {
       this.bindGlobalErrorHandler();
     }
 
+    // #85— persist the pending queue when the page is torn down.
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      window.addEventListener('beforeunload', this.handleBeforeUnload);
+    }
     // Analytics #84 — pause flushing while offline, resume on reconnect
     this.bindConnectivityHandlers();
   }
@@ -274,13 +305,35 @@ export class AnalyticsClient {
   }
 
   /**
-   * #1072 — Stop the auto-flush interval and perform a final flush.
+   * #72 — Stop the auto-flush interval and perform a final flush.
    */
   destroy(): void {
     if (this.timer !== undefined) {
       clearInterval(this.timer);
       this.timer = undefined;
     }
+    if (typeof window !== 'undefined' && typeof window.removeEventListener === 'function') {
+      window.removeEventListener('beforeunload', this.handleBeforeUnload);
+    }
+    void this.flush();
+  }
+
+  /**
+   * #85 — Immediately persist the currently pending (undrained) queue.
+   * Returns whether the events were handed to storage.
+   */
+  persistQueueNow(): boolean {
+    return persistPendingQueue(this.queue.peek());
+  }
+
+  // ── test / inspection helpers ──────────────────────────────────────────────
+
+  getEmitter(): Emitter {
+    return this.emitter;
+  }
+
+  getQueue(): EventQueue {
+    return this.queue;
     this.unbindConnectivityHandlers();
     this.unbindGlobalErrorHandler();
     void this.flush();

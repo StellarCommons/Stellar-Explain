@@ -3,6 +3,25 @@ import { optOutManager } from '../optout.js';
 import { isLocalStorageAvailable } from './storageAvailability.js';
 
 /**
+ * #85/#86 — persistence of the pending queue across page unloads.
+ *
+ * On `beforeunload` the client persists its queued (unsent) events to
+ * localStorage; on the next construction the queue is restored and re-flushed.
+ *
+ * Guards:
+ *  - #35 opt-out: never persist when the user has opted out.
+ *  - storage availability: silently no-op when storage is unavailable
+ *    (private browsing / SSR / disabled cookies).
+ */
+
+export const PENDING_QUEUE_STORAGE_KEY = 'stellar_analytics_pending_queue';
+/** Hard cap on how many events we keep across a reload. */
+export const MAX_PERSISTED_EVENTS = 500;
+
+/**
+ * Persist `events` to localStorage. Returns `false` when denied by any
+ * guard (opt-out, unavailable storage) or a storage failure.
+ */
  * Persistence of the pending queue across page unloads.
  *
  * Guarded by the opt-out flag and storage availability; silently no-ops when
@@ -25,6 +44,11 @@ export function persistPendingQueue(events: AnalyticsEvent[]): boolean {
   }
 }
 
+/**
+ * Load the persisted queue (if any). Returns an empty array when nothing
+ * valid was stored. The stored value is left in place until the client
+ * confirms it took ownership (see `clearPersistedQueue`).
+ */
 export function loadPersistedQueue(): AnalyticsEvent[] {
   if (!isLocalStorageAvailable()) return [];
   try {
@@ -38,6 +62,9 @@ export function loadPersistedQueue(): AnalyticsEvent[] {
   }
 }
 
+/**
+ * Remove the persisted queue once it has been restored.
+ */
 export function clearPersistedQueue(): void {
   if (!isLocalStorageAvailable()) return;
   try {
