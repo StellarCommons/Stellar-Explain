@@ -26,6 +26,11 @@ import { createHeartbeatEvent, shouldFireHeartbeat } from './events/heartbeat.js
  * #1071 — flush() drains the queue to the emitter
  * #1072 — optional auto-flush timer; stoppable via destroy()
  * #1073 — max-queue-size cap delegated to EventQueue
+ *
+ * Stores whatever `config` it's given as-is (applying defaults only where
+ * a field is used, via `??`) rather than re-resolving it — callers that
+ * want a fully-resolved config up front can call `resolveConfig()`
+ * themselves before constructing the client.
  * Analytics #66 — optional global `window.onerror` capture
  * Analytics #67 — trackNetworkError() for host-reported failed fetches
  * Analytics #68 — daily-active-user heartbeat on first activity

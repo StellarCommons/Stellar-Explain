@@ -6,6 +6,9 @@ export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 const PREFIX = '[analytics]';
 
 /**
+ * Log levels supported by the analytics Logger.
+ */
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
  * Lightweight logger used internally by the analytics package.
  *
  * All output is prefixed with `[analytics]` to aid filtering.
@@ -75,6 +78,20 @@ export class Logger {
   private readonly enabled: boolean;
   private readonly prefix = '[analytics]';
 
+  debug(...args: unknown[]): void {
+    if (this.enabled) console.debug(PREFIX, ...args);
+  }
+
+  info(...args: unknown[]): void {
+    if (this.enabled) console.info(PREFIX, ...args);
+  }
+
+  warn(...args: unknown[]): void {
+    if (this.enabled) console.warn(PREFIX, ...args);
+  }
+
+  error(...args: unknown[]): void {
+    if (this.enabled) console.error(PREFIX, ...args);
   constructor(enabled: boolean) {
     this.enabled = enabled;
   }

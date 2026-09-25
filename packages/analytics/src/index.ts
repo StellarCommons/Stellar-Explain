@@ -8,6 +8,7 @@ export type { AnalyticsEvent } from './types.js';
 export type { AnalyticsConfig } from './config.js';
 export { resolveConfig } from './config.js';
 
+
 // Emitter
 export type { Emitter } from './emitter/index.js';
 export { NoopEmitter } from './emitter/NoopEmitter.js';
@@ -37,6 +38,8 @@ export { isBrowser } from './env.js';
 export type { Emitter } from './emitter/index.js';
 export { NoopEmitter } from './emitter/NoopEmitter.js';
 
+// Queue
+export { EventQueue } from './queue.js';
 // Sinks
 export { ConsoleSink } from './sinks/ConsoleSink.js';
 export { HttpSink } from './sinks/HttpSink.js';
@@ -60,6 +63,20 @@ export { validateProperties } from './validate.js';
 // Client
 export { AnalyticsClient } from './client.js';
 
+// Logger
+export type { LogLevel } from './lib/logger.js';
+export { Logger } from './lib/logger.js';
+
+// Property validation
+export { validateProperties } from './validate.js';
+
+// Sinks
+export { ConsoleSink } from './sinks/ConsoleSink.js';
+
+// React bindings
+export { AnalyticsProvider, AnalyticsContext } from './react/provider.js';
+export type { AnalyticsProviderProps } from './react/provider.js';
+export { useAnalytics } from './react/useAnalytics.js';
 // Device detection (#1084)
 export { getDeviceType } from './device.js';
 export type { DeviceType } from './device.js';
