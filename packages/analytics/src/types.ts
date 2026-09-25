@@ -1,3 +1,6 @@
+/**
+ * Represents a single analytics event to be tracked and emitted.
+ */
 /** Core analytics event shape. */
 export interface AnalyticsEvent {
   /** Unique event identifier (UUID). */
