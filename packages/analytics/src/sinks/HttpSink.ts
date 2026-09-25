@@ -6,6 +6,8 @@ export interface HttpSinkOptions {
   apiKey?: string;
   maxRetries?: number;
   baseDelayMs?: number;
+  maxRetries?: number;  // default 3
+  baseDelayMs?: number; // default 200ms
 }
 
 export class HttpSink implements Emitter {
@@ -45,7 +47,26 @@ export class HttpSink implements Emitter {
         if (attempt < this.maxRetries) {
           const delay = this.baseDelayMs * Math.pow(2, attempt - 1);
           await new Promise(resolve => setTimeout(resolve, delay));
+    let attempt = 0;
+    while (attempt <= this.maxRetries) {
+      try {
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (this.apiKey) headers['Authorization'] = `Bearer ${this.apiKey}`;
+        const res = await fetch(this.endpoint, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify([event]),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return;
+      } catch (err) {
+        attempt++;
+        if (attempt > this.maxRetries) {
+          this.deadLetters.push(event);
+          return;
         }
+        // exponential backoff: baseDelay * 2^(attempt-1)
+        await new Promise(r => setTimeout(r, this.baseDelayMs * Math.pow(2, attempt - 1)));
       }
     }
 
@@ -59,5 +80,6 @@ export class HttpSink implements Emitter {
 
   clearDeadLetters(): void {
     this.deadLetters.length = 0;
+    this.deadLetters.splice(0, this.deadLetters.length);
   }
 }

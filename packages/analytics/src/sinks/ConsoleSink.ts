@@ -11,5 +11,6 @@ export class ConsoleSink implements Emitter {
 
   send(event: AnalyticsEvent): void {
     this.logger.info('event', JSON.stringify(event));
+    this.logger.info('event', event);
   }
 }
