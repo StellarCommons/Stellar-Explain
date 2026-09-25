@@ -1,4 +1,4 @@
-import { AnalyticsEvent } from '../types';
+import { AnalyticsEvent } from '../types.js';
 
 export type ScrollThreshold = 25 | 50 | 75 | 100;
 
