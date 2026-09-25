@@ -9,6 +9,19 @@ export type { AnalyticsConfig } from './config.js';
 export { resolveConfig } from './config.js';
 
 // Emitter / Sink contract
+export type { Emitter } from './emitter/index.js';
+export { NoopEmitter } from './emitter/NoopEmitter.js';
+
+// Multi-sink fan-out (#97)
+export { MultiSink } from './sinks/MultiSink.js';
+
+// Plugins (#98)
+export type { Plugin } from './plugins.js';
+export { PluginRegistry } from './plugins.js';
+
+// Middleware (#99)
+export type { BeforeSendHook } from './middleware.js';
+export { Middleware } from './middleware.js';
 export type { Emitter, Sink } from './emitter/index.js';
 export { NoopEmitter } from './emitter/NoopEmitter.js';
 

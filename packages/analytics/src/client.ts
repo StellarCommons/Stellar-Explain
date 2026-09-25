@@ -12,6 +12,10 @@ import { shouldSample } from './sampling.js';
 import type { AnalyticsEvent } from './types.js';
 import { limitPayload } from './utils/limitPayload.js';
 import { validateProperties } from './validate.js';
+import { MultiSink } from './sinks/MultiSink.js';
+import type { Plugin } from './plugins.js';
+import { PluginRegistry } from './plugins.js';
+import { Middleware } from './middleware.js';
 import {
   clearPersistedQueue,
   loadPersistedQueue,
@@ -38,6 +42,9 @@ import { createHeartbeatEvent, shouldFireHeartbeat } from './events/heartbeat.js
  * #1071 — flush() drains the queue to the emitter
  * #1072 — optional auto-flush timer; stoppable via destroy()
  * #1073 — max-queue-size cap delegated to EventQueue
+ * #97  — accepts an Emitter or an array of Emitters (fanned out via MultiSink)
+ * #98  — plugins registered with beforeSend hooks
+ * #99  — a Middleware pipeline composes beforeSend hooks and runs each event through it
  * #85  — persists the pending queue to localStorage on `beforeunload`
  * #86  — restores a persisted queue on construction and re-flushes it
  * #93  — client-side rate limiting; over-budget events are dropped + warned
@@ -78,6 +85,8 @@ export class AnalyticsClient {
   private readonly circuitBreaker: CircuitBreaker;
   private readonly emitter: Emitter;
   private readonly logger: Logger;
+  private readonly plugins = new PluginRegistry();
+  private readonly middleware = new Middleware();
   private timer: ReturnType<typeof setInterval> | undefined;
   private isOffline: boolean;
   private onlineHandler: (() => void) | undefined;
@@ -85,6 +94,10 @@ export class AnalyticsClient {
   private globalErrorHandler: ((event: ErrorEvent) => void) | undefined;
   private hasFiredHeartbeatThisSession = false;
 
+  constructor(config: Partial<AnalyticsConfig> = {}, emitter?: Emitter | Emitter[]) {
+    this.config = resolveConfig(config);
+    this.logger = new Logger(this.config.debug);
+    this.emitter = this.buildEmitter(emitter);
   private readonly handleBeforeUnload = (): void => {
     this.persistQueueNow();
   };
@@ -154,6 +167,22 @@ export class AnalyticsClient {
   private flushTimer: ReturnType<typeof setInterval> | null = null;
 
   /**
+   * #97 — normalize the emitter argument: no emitter → NoopEmitter,
+   * a single emitter → itself, an array → MultiSink fan-out.
+   */
+  private buildEmitter(emitter?: Emitter | Emitter[]): Emitter {
+    if (Array.isArray(emitter)) {
+      if (emitter.length === 0) return new NoopEmitter();
+      if (emitter.length === 1) return emitter[0];
+      return new MultiSink(emitter);
+    }
+    return emitter ?? new NoopEmitter();
+  }
+
+  /**
+   * Enqueue a tracking event.
+   *
+   * Throws a TypeError if `name` is blank or `properties` are invalid.
    * Enqueue a tracking event.
    *
    * Throws a TypeError if `name` is blank or `properties` are invalid.
@@ -200,6 +229,8 @@ export class AnalyticsClient {
   }
 
   /**
+   * #1071, #99 — Drain the queue, run each event through the middleware
+   * pipeline, then forward it to the emitter(s).
    * #1071, #94 — Drain the queue and forward every event to the emitter.
    *
    * The circuit breaker short-circuits the emitter once the failure
@@ -259,6 +290,10 @@ export class AnalyticsClient {
     const events = this.queue.drain();
     await Promise.all(
       events.map(async (event) => {
+        const prepared = await this.middleware.process(event);
+        await this.emitter.send(prepared);
+      }),
+    );
         if (!this.circuitBreaker.allowRequest()) {
           this.logger.warn(`circuit open — ${event.name} deferred to dead-letter`);
           this.deadLetter.push(event);
@@ -340,6 +375,27 @@ export class AnalyticsClient {
   }
 
   /**
+   * #98 — Register a plugin and wire its beforeSend hook into the
+   * middleware pipeline. Plugins run in registration order.
+   */
+  registerPlugin(plugin: Plugin): void {
+    this.plugins.register(plugin);
+    this.middleware.fromPlugin(plugin);
+  }
+
+  /** #98 — snapshot of registered plugins. */
+  getPlugins(): Plugin[] {
+    return this.plugins.getPlugins();
+  }
+
+  // ── test / inspection helpers ──────────────────────────────────────────────
+
+  getEmitter(): Emitter {
+    return this.emitter;
+  }
+
+  getQueue(): EventQueue {
+    return this.queue;
    * Analytics #82 — the current circuit breaker state of the configured
    * emitter, when it exposes one (e.g. `HttpSink`). Returns `undefined`
    * for emitters that don't use a circuit breaker.

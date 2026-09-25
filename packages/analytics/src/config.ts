@@ -47,6 +47,10 @@ export function resolveConfig(config: AnalyticsConfig): ResolvedConfig {
   maxQueueSize: number;
   /** Fraction of events that are actually sent (0–1). Default: 1.0. */
   sampleRate: number;
+  /** #100 — the active environment name (e.g. "production", "test"). */
+  environment?: string;
+  /** #100 — per-environment endpoint lookup; used when `endpoint` is empty. */
+  endpointConfig?: Record<string, string>;
   /** #93 — client-side send rate cap (events per second). Default: 100. */
   maxEventsPerSecond?: number;
 }
@@ -93,6 +97,10 @@ const DEFAULTS: Omit<ResolvedAnalyticsConfig, 'apiKey'> = {
  * When every required field is already present (i.e. the input was produced
  * by a previous `resolveConfig` call) the input is returned as-is so that
  * downstream identity checks hold.
+ *
+ * #100 — when `endpoint` is empty and `environment` + `endpointConfig`
+ * are provided, the endpoint for the active environment is applied.
+ * An explicit `endpoint` always wins over the environment map.
  * `apiKey` is left `undefined` when not provided rather than defaulted to
  * an empty string, so callers can distinguish "no key configured" from
  * "explicitly empty key".
@@ -108,6 +116,20 @@ export function resolveConfig(options: Partial<AnalyticsConfig> = {}): Analytics
     'maxQueueSize' in options &&
     'sampleRate' in options;
 
+  const resolved = isComplete ? (options as AnalyticsConfig) : { ...DEFAULTS, ...options };
+
+  // #100 — derive the endpoint from the environment map when no explicit
+  // endpoint was given.
+  if (
+    !resolved.endpoint &&
+    resolved.environment &&
+    resolved.endpointConfig &&
+    resolved.endpointConfig[resolved.environment]
+  ) {
+    resolved.endpoint = resolved.endpointConfig[resolved.environment];
+  }
+
+  return resolved;
   if (isComplete) {
     return options as AnalyticsConfig;
   }

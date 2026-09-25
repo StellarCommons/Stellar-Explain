@@ -17,6 +17,7 @@ export interface Emitter {
   send(event: AnalyticsEvent): void | Promise<void>;
 }
 }
+}
 
 /**
  * #96 — alias of {@link Emitter}. Delivery-oriented naming for the same
