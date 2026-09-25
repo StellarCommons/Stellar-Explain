@@ -37,6 +37,19 @@ export function resolveConfig(config: AnalyticsConfig): ResolvedConfig {
     beforeSend: config.beforeSend ?? ((e) => e),
   endpoint: string;
   apiKey?: string;
+  /** When true, debug logging is enabled. Default: false. */
+  debug: boolean;
+  /** How often (ms) the event queue is flushed. Default: 5000. */
+  flushIntervalMs: number;
+  /** Maximum number of events held in the queue before flushing. Default: 100. */
+  maxQueueSize: number;
+  /** Fraction of events that are actually sent (0–1). Default: 1.0. */
+  sampleRate: number;
+  /** #89 — when true (default) track() scrubs PII from event properties. */
+  scrubPii?: boolean;
+}
+
+const DEFAULTS: AnalyticsConfig = {
   debug?: boolean;
   flushIntervalMs?: number;
   maxQueueSize?: number;
@@ -60,12 +73,16 @@ const DEFAULTS: Omit<ResolvedAnalyticsConfig, 'apiKey'> = {
   flushIntervalMs: 5000,
   maxQueueSize: 100,
   sampleRate: 1.0,
+  scrubPii: true,
   captureGlobalErrors: false,
 };
 
 /**
  * Merges caller-supplied options with sensible defaults.
  *
+ * When every required field is already present (i.e. the input was produced
+ * by a previous `resolveConfig` call) the input is returned as-is so that
+ * downstream identity checks hold.
  * `apiKey` is left `undefined` when not provided rather than defaulted to
  * an empty string, so callers can distinguish "no key configured" from
  * "explicitly empty key".
@@ -73,6 +90,20 @@ const DEFAULTS: Omit<ResolvedAnalyticsConfig, 'apiKey'> = {
  * @param options - Partial configuration supplied by the consumer.
  * @returns A fully-resolved config with every field but `apiKey` populated.
  */
+export function resolveConfig(options: Partial<AnalyticsConfig> = {}): AnalyticsConfig {
+  const isComplete =
+    'endpoint' in options &&
+    'debug' in options &&
+    'flushIntervalMs' in options &&
+    'maxQueueSize' in options &&
+    'sampleRate' in options;
+
+  if (isComplete) {
+    return options as AnalyticsConfig;
+  }
+
+  return { ...DEFAULTS, ...options };
+}
 export function resolveConfig(options: AnalyticsConfig = {}): ResolvedAnalyticsConfig {
   return { ...DEFAULTS, ...options };
   sampleRate?: number;          // 0-1, default 1.0

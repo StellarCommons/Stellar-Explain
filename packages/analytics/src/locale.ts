@@ -17,6 +17,7 @@ export function getLocaleInfo(): LocaleInfo {
   try {
     timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
   } catch {
+    // ignore timezone lookup failures and fall back to UTC
     // Ignore invalid locale data and use UTC.
   }
 

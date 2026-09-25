@@ -28,6 +28,7 @@ export class OptOutManager {
       try {
         localStorage.setItem(OPT_OUT_KEY, 'true');
       } catch {
+        // ignore storage failures; in-memory flag still applies
         // Ignore unavailable storage and retain the current state.
       }
     }
@@ -39,6 +40,7 @@ export class OptOutManager {
       try {
         localStorage.removeItem(OPT_OUT_KEY);
       } catch {
+        // ignore storage failures; in-memory flag still applies
         // Ignore unavailable storage and retain the current state.
       }
     }

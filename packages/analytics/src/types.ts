@@ -12,6 +12,7 @@ export interface AnalyticsEvent {
   name: string;
   timestamp: number;
   properties: Record<string, unknown>;
+}
   /** ISO-8601 timestamp of when track() was called. */
   timestamp: string;
 }

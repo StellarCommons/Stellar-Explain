@@ -1,4 +1,21 @@
 import type { AnalyticsEvent } from './types.js';
+import { Logger } from './lib/logger.js';
+
+/**
+ * In-memory FIFO queue for analytics events.
+ *
+ * #1069 — basic enqueue/drain/size
+ * #1073 — maxSize cap: drops the oldest event and logs a warning on overflow
+ */
+export class EventQueue {
+  private readonly events: AnalyticsEvent[] = [];
+  private readonly maxSize: number;
+  private readonly logger: Logger;
+
+  constructor(maxSize: number = 0, logger?: Logger) {
+    this.maxSize = maxSize;
+    this.logger = logger ?? new Logger(false);
+  }
 
 /** FIFO queue with overflow protection (oldest-first eviction). */
 export class EventQueue {
@@ -6,7 +23,18 @@ export class EventQueue {
 
   constructor(private readonly maxSize: number = 100) {}
 
+  /**
+   * Append an event. When `maxSize > 0` and the queue is full the oldest
+   * event is dropped and a warning is logged.
+   */
   enqueue(event: AnalyticsEvent): void {
+    this.events.push(event);
+
+    if (this.maxSize > 0 && this.events.length > this.maxSize) {
+      const dropped = this.events.shift()!;
+      this.logger.warn(
+        `Max queue size (${this.maxSize}) exceeded — dropped oldest event: "${dropped.name}"`,
+      );
     if (this.items.length >= this.maxSize) {
       this.items.shift(); // evict oldest
     }
@@ -66,6 +94,7 @@ export class EventQueue {
     return this.queue.splice(0, this.queue.length);
   }
 
+  /** Number of events currently queued. */
   get size(): number {
     return this.queue.length;
   }

@@ -12,6 +12,8 @@ import { shouldSample } from './sampling.js';
 import type { AnalyticsEvent } from './types.js';
 import { limitPayload } from './utils/limitPayload.js';
 import { validateProperties } from './validate.js';
+import { scrubEventProperties } from './lib/scrubPii.js';
+import { DeadLetterQueue } from './lib/DeadLetterQueue.js';
 import type { CircuitState } from './lib/circuitBreaker.js';
 import { createErrorEvent } from './events/error.js';
 import { createNetworkErrorEvent } from './events/network-error.js';
@@ -27,6 +29,10 @@ import { createHeartbeatEvent, shouldFireHeartbeat } from './events/heartbeat.js
  * #1071 — flush() drains the queue to the emitter
  * #1072 — optional auto-flush timer; stoppable via destroy()
  * #1073 — max-queue-size cap delegated to EventQueue
+ * #89  — track() scrubs PII from properties (enabled by default, config-disablable)
+ * #90  — emitter failures are caught, logged and routed to the dead-letter
+ * #91  — bounded dead-letter (oldest evicted on overflow)
+ * #92  — flushSync() immediate best-effort send bypassing the queue/interval
  * Analytics #82 — exposes the emitter's circuit breaker state, when available
  * Analytics #84 — pauses flushing while offline, resumes on reconnect
  *
@@ -53,6 +59,7 @@ function generateId(): string {
 export class AnalyticsClient {
   private readonly config: ResolvedConfig;
   private readonly queue: EventQueue;
+  private readonly deadLetter: DeadLetterQueue;
   private readonly emitter: Emitter;
   private readonly logger: Logger;
   private timer: ReturnType<typeof setInterval> | undefined;
@@ -62,6 +69,12 @@ export class AnalyticsClient {
   private globalErrorHandler: ((event: ErrorEvent) => void) | undefined;
   private hasFiredHeartbeatThisSession = false;
 
+  constructor(config: Partial<AnalyticsConfig> = {}, emitter?: Emitter) {
+    this.config = resolveConfig(config);
+    this.logger = new Logger(this.config.debug);
+    this.emitter = emitter ?? new NoopEmitter();
+    this.queue = new EventQueue(this.config.maxQueueSize, this.logger);
+    this.deadLetter = new DeadLetterQueue(100, this.logger);
   constructor(config: AnalyticsConfig = {}, emitter?: Emitter) {
     this.config = config;
     this.logger = new Logger(this.config.debug ?? false);
@@ -88,6 +101,17 @@ export class AnalyticsClient {
   private readonly dedup: EventDeduplicator;
   private flushTimer: ReturnType<typeof setInterval> | null = null;
 
+  /**
+   * Enqueue a tracking event.
+   *
+   * Throws a TypeError if `name` is blank or `properties` are invalid.
+   *
+   * #89 — unless explicitly disabled via `config.scrubPii === false`,
+   * email/number PII is scrubbed from `properties` before enqueuing.
+   */
+  track(name: string, properties: Record<string, unknown> = {}): void {
+    if (typeof name !== 'string' || name.trim() === '') {
+      throw new TypeError('Event name must be a non-empty string.');
   constructor(config: AnalyticsConfig, emitter?: Emitter) {
     this.config = resolveConfig(config);
     this.queue = new EventQueue(this.config.maxQueueSize);
@@ -107,7 +131,8 @@ export class AnalyticsClient {
     const event: AnalyticsEvent = {
       name,
       timestamp: Date.now(),
-      properties,
+      properties:
+        this.config.scrubPii !== false ? scrubEventProperties(properties) : properties,
     };
 
     this.queue.enqueue(event);
@@ -115,6 +140,10 @@ export class AnalyticsClient {
   }
 
   /**
+   * #1071, #90 — Drain the queue and forward every event to the emitter.
+   *
+   * #90: individual emitter failures are caught and logged, and the failed
+   * event is routed to the dead-letter (#91); `flush()` never rejects.
    * Analytics #68 — fire a `daily_active_user` heartbeat once per client
    * instance, on first activity, deduped against localStorage so it fires
    * at most once per day per user across sessions.
@@ -163,7 +192,41 @@ export class AnalyticsClient {
     }
 
     const events = this.queue.drain();
-    await Promise.all(events.map((e) => this.emitter.send(e)));
+    await Promise.all(
+      events.map(async (event) => {
+        try {
+          await this.emitter.send(event);
+        } catch (error) {
+          this.logger.error(`emit failed for "${event.name}"`, error);
+          this.deadLetter.push(event);
+        }
+      }),
+    );
+  }
+
+  /**
+   * #92 — Send immediately, bypassing the queue and the auto-flush interval.
+   *
+   * With an event argument the event is sent directly (never enqueued).
+   * Without an argument the pending queue is drained and sent as-is.
+   * Failures are swallowed (best-effort) and routed to the dead-letter.
+   */
+  flushSync(event?: AnalyticsEvent): void {
+    const pending = event ? [event] : this.queue.drain();
+    for (const item of pending) {
+      try {
+        const result = this.emitter.send(item);
+        if (result && typeof (result as Promise<void>).then === 'function') {
+          void (result as Promise<void>).catch((error: unknown) => {
+            this.logger.error(`emit failed for "${item.name}"`, error);
+            this.deadLetter.push(item);
+          });
+        }
+      } catch (error) {
+        this.logger.error(`emit failed for "${item.name}"`, error);
+        this.deadLetter.push(item);
+      }
+    }
   }
 
   /**
@@ -197,6 +260,11 @@ export class AnalyticsClient {
 
   getQueue(): EventQueue {
     return this.queue;
+  }
+
+  /** #91 — the bounded dead-letter holding events whose send failed. */
+  getDeadLetter(): DeadLetterQueue {
+    return this.deadLetter;
   }
 
   // ── Analytics #84 internals ─────────────────────────────────────────────────

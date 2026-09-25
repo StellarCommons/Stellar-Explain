@@ -8,7 +8,6 @@ import type { Emitter } from './index.js';
  * Events are accepted and silently discarded — no I/O, no side-effects.
  */
 export class NoopEmitter implements Emitter {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   send(_event: AnalyticsEvent): void {
     // Intentional no-op.
 import type { Emitter } from './index.js';
