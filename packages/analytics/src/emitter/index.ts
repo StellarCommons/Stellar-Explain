@@ -10,6 +10,9 @@ import type { AnalyticsEvent } from '../types.js';
  * #96 — "sink" is the delivery-oriented name for the very same contract;
  * `Sink` is provided as an alias so both vocabularies resolve cleanly.
  */
+/** Contract that every event sink must satisfy. */
+export interface Emitter {
+  send(event: AnalyticsEvent): void;
 export interface Emitter {
   send(event: AnalyticsEvent): void | Promise<void>;
 }
@@ -19,3 +22,4 @@ export interface Emitter {
  * interface (e.g. `ConsoleSink`, `HttpSink`, `MultiSink` all implement it).
  */
 export type Sink = Emitter;
+}
