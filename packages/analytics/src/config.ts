@@ -1,77 +1,52 @@
-/** Configuration for AnalyticsClient. */
-export interface AnalyticsConfig {
-  /** Enable debug logging. */
-  debug?: boolean;
-  /**
-   * Milliseconds between automatic flushes.
-   * Set to 0 (or omit) to disable the auto-flush timer.
-   */
-  flushIntervalMs?: number;
-  /**
-   * Maximum number of events held in the queue.
-   * When exceeded, the oldest event is dropped and a warning is logged.
-   * Set to 0 for unlimited.
-   */
-  maxQueueSize?: number;
-}
+import type { AnalyticsEvent } from './types.js';
 
-export function resolveConfig(partial: AnalyticsConfig = {}): Required<AnalyticsConfig> {
-  return {
-    debug: partial.debug ?? false,
-    flushIntervalMs: partial.flushIntervalMs ?? 0,
-    maxQueueSize: partial.maxQueueSize ?? 100,
-  };
 export interface AnalyticsConfig {
+  /** The endpoint to send events to. */
   endpoint: string;
-  flushIntervalMs: number;
-  maxQueueSize: number;
-  sampleRate: number;
-  debug: boolean;
-}
-
-const DEFAULTS: AnalyticsConfig = {
-  endpoint: '',
-  flushIntervalMs: 5000,
-  maxQueueSize: 100,
-  sampleRate: 1.0,
-  debug: false,
-};
-
-export function resolveConfig(partial?: Partial<AnalyticsConfig>): AnalyticsConfig {
-  return { ...DEFAULTS, ...partial };
-/**
- * Configuration options for the Analytics client.
- */
-export interface AnalyticsConfig {
-  /** The HTTP endpoint events are sent to. */
-  endpoint: string;
-  /** Optional API key included with every request. */
-  apiKey?: string;
-  /** When true, debug logging is enabled. Default: false. */
+  /** Enable debug logging. Defaults to false. */
   debug?: boolean;
-  /** How often (ms) the event queue is flushed. Default: 5000. */
-  flushIntervalMs?: number;
-  /** Maximum number of events held in the queue before flushing. Default: 100. */
+  /** Max queue size before oldest events are dropped. Defaults to 100. */
   maxQueueSize?: number;
-  /** Fraction of events that are actually sent (0–1). Default: 1.0. */
+  /** Auto-flush interval in ms. 0 disables. Defaults to 5000. */
+  flushInterval?: number;
+  /** Sampling rate 0–1. 1 = send all events. Defaults to 1. */
   sampleRate?: number;
+  /** Max bytes for any single property value string. Defaults to 1024. */
+  maxPropertyBytes?: number;
+  /** Called before an event is enqueued. Return null to cancel. */
+  beforeSend?: (event: AnalyticsEvent) => AnalyticsEvent | null;
 }
 
-const DEFAULTS: Required<AnalyticsConfig> = {
-  endpoint: '',
-  apiKey: '',
-  debug: false,
-  flushIntervalMs: 5000,
-  maxQueueSize: 100,
-  sampleRate: 1.0,
-};
+export interface ResolvedConfig extends Required<AnalyticsConfig> {}
 
-/**
- * Merges caller-supplied options with sensible defaults.
- *
- * @param options - Partial configuration supplied by the consumer.
- * @returns A fully-resolved `AnalyticsConfig` with every field populated.
- */
-export function resolveConfig(options: Partial<AnalyticsConfig>): AnalyticsConfig {
-  return { ...DEFAULTS, ...options };
+export function resolveConfig(config: AnalyticsConfig): ResolvedConfig {
+  return {
+    endpoint: config.endpoint,
+    debug: config.debug ?? false,
+    maxQueueSize: config.maxQueueSize ?? 100,
+    flushInterval: config.flushInterval ?? 5000,
+    sampleRate: config.sampleRate ?? 1,
+    maxPropertyBytes: config.maxPropertyBytes ?? 1024,
+    beforeSend: config.beforeSend ?? ((e) => e),
+  endpoint: string;
+  apiKey?: string;
+  debug?: boolean;
+  flushIntervalMs?: number;
+  maxQueueSize?: number;
+  sampleRate?: number;          // 0-1, default 1.0
+  maxPropertyBytes?: number;    // max bytes per property value, default 1024
+  beforeSend?: (event: AnalyticsEvent) => AnalyticsEvent | null; // null cancels
+}
+
+export function resolveConfig(config: AnalyticsConfig): Required<Omit<AnalyticsConfig, 'apiKey' | 'beforeSend'>> & Pick<AnalyticsConfig, 'apiKey' | 'beforeSend'> {
+  return {
+    endpoint: config.endpoint,
+    apiKey: config.apiKey,
+    debug: config.debug ?? false,
+    flushIntervalMs: config.flushIntervalMs ?? 5000,
+    maxQueueSize: config.maxQueueSize ?? 100,
+    sampleRate: config.sampleRate ?? 1.0,
+    maxPropertyBytes: config.maxPropertyBytes ?? 1024,
+    beforeSend: config.beforeSend,
+  };
 }
