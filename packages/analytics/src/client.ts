@@ -282,33 +282,22 @@ export class AnalyticsClient {
    * automatically.
    */
   async flush(): Promise<void> {
-    if (this.isOffline) {
-      this.logger.debug('flush() skipped — offline');
-      return;
-    }
-
-    const events = this.queue.drain();
+    if (t    const events = this.queue.drain();
     await Promise.all(
       events.map(async (event) => {
         const prepared = await this.middleware.process(event);
-        await this.emitter.send(prepared);
-      }),
-    );
         if (!this.circuitBreaker.allowRequest()) {
-          this.logger.warn(`circuit open — ${event.name} deferred to dead-letter`);
-          this.deadLetter.push(event);
+          this.logger.warn(`circuit open — ${prepared.name} deferred to dead-letter`);
+          this.deadLetter.push(prepared);
           return;
         }
         try {
-          await this.emitter.send(event);
+          await this.emitter.send(prepared);
           this.circuitBreaker.onSuccess();
         } catch (error) {
           this.circuitBreaker.onFailure();
-        try {
-          await this.emitter.send(event);
-        } catch (error) {
-          this.logger.error(`emit failed for "${event.name}"`, error);
-          this.deadLetter.push(event);
+          this.logger.error(`emit failed for "${prepared.name}"`, error);
+          this.deadLetter.push(prepared);
         }
       }),
     );
@@ -350,6 +339,8 @@ export class AnalyticsClient {
     if (typeof window !== 'undefined' && typeof window.removeEventListener === 'function') {
       window.removeEventListener('beforeunload', this.handleBeforeUnload);
     }
+    this.unbindConnectivityHandlers();
+    this.unbindGlobalErrorHandler();
     void this.flush();
   }
 
@@ -359,19 +350,6 @@ export class AnalyticsClient {
    */
   persistQueueNow(): boolean {
     return persistPendingQueue(this.queue.peek());
-  }
-
-  // ── test / inspection helpers ──────────────────────────────────────────────
-
-  getEmitter(): Emitter {
-    return this.emitter;
-  }
-
-  getQueue(): EventQueue {
-    return this.queue;
-    this.unbindConnectivityHandlers();
-    this.unbindGlobalErrorHandler();
-    void this.flush();
   }
 
   /**
@@ -396,6 +374,9 @@ export class AnalyticsClient {
 
   getQueue(): EventQueue {
     return this.queue;
+  }
+
+  /**
    * Analytics #82 — the current circuit breaker state of the configured
    * emitter, when it exposes one (e.g. `HttpSink`). Returns `undefined`
    * for emitters that don't use a circuit breaker.
@@ -405,13 +386,18 @@ export class AnalyticsClient {
     return typeof emitter.getCircuitState === 'function' ? emitter.getCircuitState() : undefined;
   }
 
-  // ── test / inspection helpers ──────────────────────────────────────────────
-
-  getEmitter(): Emitter {
-    return this.emitter;
+  getDeadLetter(): DeadLetterQueue {
+    return this.deadLetter;
   }
 
-  getQueue(): EventQueue {
+  getRateLimiter(): RateLimiter {
+    return this.rateLimiter;
+  }
+
+  getCircuitBreaker(): CircuitBreaker {
+    return this.circuitBreaker;
+  }
+entQueue {
     return this.queue;
   }
 

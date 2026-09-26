@@ -151,7 +151,6 @@ export {
   isSessionStorageAvailable,
   isStorageAvailable,
 } from './lib/storageAvailability.js';
-} from './lib/storageAvailability.js';
 
 // Circuit breaker
 export { CircuitBreaker } from './lib/circuitBreaker.js';
