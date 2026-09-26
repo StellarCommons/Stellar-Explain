@@ -145,3 +145,46 @@ describe('#86 restore persisted queue on construction', () => {
     expect(client.getQueue().size).toBe(0);
   });
 });
+
+describe('#119 queue persistence under private browsing and quota exceeded', () => {
+  it('returns false and does not throw when storage is unavailable in private browsing', () => {
+    const storage = createFakeStorage();
+    storage.setItem = vi.fn().mockImplementation(() => {
+      throw new DOMException('Private browsing access denied', 'SecurityError');
+    });
+    stubBrowser(storage);
+
+    const client = new AnalyticsClient({}, new NoopEmitter());
+    client.track('event_private');
+
+    expect(client.persistQueueNow()).toBe(false);
+  });
+
+  it('returns false and does not throw when localStorage quota is exceeded', () => {
+    const storage = createFakeStorage();
+    storage.setItem = vi.fn().mockImplementation(() => {
+      throw new DOMException('QuotaExceededError', 'QuotaExceededError');
+    });
+    stubBrowser(storage);
+
+    const client = new AnalyticsClient({}, new NoopEmitter());
+    client.track('event_quota');
+
+    expect(client.persistQueueNow()).toBe(false);
+  });
+
+  it('safely handles unload event when storage throws quota exceeded', () => {
+    const storage = createFakeStorage();
+    storage.setItem = vi.fn().mockImplementation(() => {
+      throw new DOMException('QuotaExceededError', 'QuotaExceededError');
+    });
+    stubBrowser(storage);
+
+    const client = new AnalyticsClient({}, new NoopEmitter());
+    client.track('unload_event');
+
+    expect(() => {
+      if (beforeUnloadHandler) beforeUnloadHandler();
+    }).not.toThrow();
+  });
+});

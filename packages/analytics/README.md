@@ -10,6 +10,10 @@ the one before it, starting from this foundation.
 
 - [Architecture](./ARCHITECTURE.md) — pipeline, module boundaries, metrics, and
   HTTP ingest contract.
+- [Dashboard API](./DASHBOARD_API.md) — ingest endpoint request/response contract
+  and summary query interface.
+- [Runbook](./RUNBOOK.md) — diagnosing stuck circuit breakers, growing dead-letter
+  queues, and missing production events.
 - [Changelog](./CHANGELOG.md) — release history.
 - [Changeset policy](../../.changeset/README.md) — required for package changes.
 
