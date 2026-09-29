@@ -37,7 +37,7 @@
     "@types/node": "^20.0.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
-    "@vitest/coverage-v8": "^2.0.0",
+    "@vitest/coverage-v8": "^5.0.2",
     "eslint": "^9.39.5",
     "jsdom": "^25.0.0",
     "react": "19.1.0",
