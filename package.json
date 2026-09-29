@@ -10,7 +10,7 @@
     "publish": "changeset publish"
   },
   "devDependencies": {
-    "@changesets/cli": "^2.27.0"
+    "@changesets/cli": "^3.0.3"
   },
   "overrides": {
     "human-id": "3.0.1"
