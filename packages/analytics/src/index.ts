@@ -1,5 +1,15 @@
 /** Public API for the Stellar Explain analytics package. */
+import './utils/node-check.js';
+
 export const ANALYTICS_PACKAGE_VERSION = '0.1.0';
+
+// Analytics #125 — Node.js version guard (runs on import, re-exported for tests).
+export {
+  MINIMUM_NODE_MAJOR,
+  checkNodeVersion,
+  getNodeMajorVersion,
+  isSupportedNodeVersion,
+} from './utils/node-check.js';
 
 // Core types
 export type { AnalyticsEvent } from './types.js';
