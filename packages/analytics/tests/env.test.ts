@@ -1,3 +1,16 @@
+// @vitest-environment node
+//
+// #1258: this suite asserts isBrowser() is *false*, but vitest.config.ts sets
+// `environment: 'jsdom'` for the whole package, under which `window` and
+// `navigator` are defined and isBrowser() correctly returns true. Running the
+// suite under jsdom tests the environment, not the implementation.
+//
+// The per-file docblock above overrides the config for this file only, which is
+// why the package default is left alone: the other suites genuinely want jsdom
+// (beacon, storage, React). Changing the implementation to special-case the
+// test runner would be worse — it would make isBrowser() lie in exactly the
+// environment (jsdom-hosted SSR, hybrid rendering) where a caller most needs it
+// to tell the truth.
 import { describe, expect, it } from 'vitest';
 import { isBrowser, isNode } from '../src/env.js';
 
@@ -7,7 +20,7 @@ describe('isBrowser', () => {
   });
 
   it('returns false in Node.js/vitest environment (no window global)', () => {
-    // Vitest runs in Node by default; window is not defined
+    // This file runs under the `node` environment, so window is not defined.
     expect(isBrowser()).toBe(false);
   });
 
