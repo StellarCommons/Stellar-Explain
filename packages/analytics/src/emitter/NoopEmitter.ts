@@ -1,23 +1,13 @@
 import type { AnalyticsEvent } from '../types.js';
 import type { Emitter } from './index.js';
 
-/**
- * A no-op implementation of the `Emitter` interface.
- *
- * Used as the safe default when no real transport has been configured.
- * Events are accepted and silently discarded — no I/O, no side-effects.
- */
-export class NoopEmitter implements Emitter {
-  send(_event: AnalyticsEvent): void {
-    // Intentional no-op.
-import type { Emitter } from './index.js';
-import type { AnalyticsEvent } from '../types.js';
-
 /** An emitter that silently discards every event. Used as the default sink. */
 export class NoopEmitter implements Emitter {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   send(_event: AnalyticsEvent): void {
-    // intentionally empty
-    // intentional no-op
+    // Intentional no-op. The parameter is prefixed with `_` because the
+    // interface requires the signature; `tests/noop-emitter.test.ts` asserts
+    // that send() returns `undefined` and touches no side effect, which is the
+    // whole contract of this class.
   }
 }

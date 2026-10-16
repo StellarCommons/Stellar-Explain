@@ -10,13 +10,18 @@ import type { AnalyticsEvent } from '../types.js';
  * #96 — "sink" is the delivery-oriented name for the very same contract;
  * `Sink` is provided as an alias so both vocabularies resolve cleanly.
  */
-/** Contract that every event sink must satisfy. */
-export interface Emitter {
-  send(event: AnalyticsEvent): void;
 export interface Emitter {
   send(event: AnalyticsEvent): void | Promise<void>;
-}
-}
+  /**
+   * Optional batch variant of {@link Emitter.send}.
+   *
+   * Declared optional because most emitters are genuinely per-event
+   * (`NoopEmitter`, `ConsoleSink`). `MultiSink` uses it to hand a batch
+   * straight to any child sink that can take one, falling back to per-event
+   * sends for the rest — which is why the capability is probed rather than
+   * assumed.
+   */
+  sendBatch?(events: readonly AnalyticsEvent[]): void | Promise<void>;
 }
 
 /**
@@ -24,4 +29,3 @@ export interface Emitter {
  * interface (e.g. `ConsoleSink`, `HttpSink`, `MultiSink` all implement it).
  */
 export type Sink = Emitter;
-}
