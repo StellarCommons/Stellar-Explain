@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CircuitBreaker } from '../src/lib/CircuitBreaker.js';
+// #1254: the capitalised `lib/CircuitBreaker.ts` was a byte-identical
+// case-duplicate of `lib/circuitBreaker.ts` and has been deleted. Only the
+// casing of this import changes here; the duplicated import header further down
+// this file is a separate fix (#1255).
+import { CircuitBreaker } from '../src/lib/circuitBreaker.js';
 import { AnalyticsClient } from '../src/index.js';
 
 describe('#94 CircuitBreaker', () => {
