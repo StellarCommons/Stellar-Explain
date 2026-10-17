@@ -217,7 +217,6 @@ async fn non_existent_transaction_hash_returns_404_json_error() {
 }
 
 #[tokio::test]
-#[ignore = "Enable once /tx includes create_account operation explanations (Issue #11)."]
 async fn create_account_transaction_returns_create_account_explanation() {
     let horizon_mock = MockServer::start().await;
     let hash = test_hash('d');
@@ -248,10 +247,19 @@ async fn create_account_transaction_returns_create_account_explanation() {
     assert_eq!(response.status(), StatusCode::OK);
 
     let payload: Value = response.json().await.expect("json parse failed");
-    let create_account = payload["create_account_explanations"][0]["summary"]
-        .as_str()
-        .unwrap_or_default();
-    assert!(create_account.contains("created account"));
+    let operations = payload["operations"]
+        .as_array()
+        .expect("operations should be an array");
+    let create_account = operations
+        .iter()
+        .find(|op| op["operation_type"] == "create_account")
+        .expect("create_account operation explanation missing");
+    assert!(
+        create_account["summary"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("created account")
+    );
 }
 
 #[tokio::test]
