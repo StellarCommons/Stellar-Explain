@@ -10,89 +10,38 @@ import { Logger } from './lib/logger.js';
 export class EventQueue {
   private readonly events: AnalyticsEvent[] = [];
   private readonly maxSize: number;
-  private readonly logger: Logger;
+  private readonly logger?: Logger;
 
+  /**
+   * @param maxSize - Cap on queued events. `0` (the default) means unlimited.
+   *   Defaulting to unlimited rather than a finite number is deliberate: a bare
+   *   `new EventQueue()` is used in tests and by callers that manage their own
+   *   retention, and silently capping it would make eviction invisible. The
+   *   client passes `config.maxQueueSize` (default 100) explicitly.
+   * @param logger - Optional; when omitted, overflow is silent.
+   */
   constructor(maxSize: number = 0, logger?: Logger) {
     this.maxSize = maxSize;
-    this.logger = logger ?? new Logger(false);
+    this.logger = logger;
   }
-
-
-/** FIFO queue with overflow protection (oldest-first eviction). */
-export class EventQueue {
-  private readonly items: AnalyticsEvent[] = [];
-
-  constructor(private readonly maxSize: number = 100) {}
 
   /**
    * Append an event. When `maxSize > 0` and the queue is full the oldest
    * event is dropped and a warning is logged.
    */
   enqueue(event: AnalyticsEvent): void {
-    this.events.push(event);
-
-    if (this.maxSize > 0 && this.events.length > this.maxSize) {
-      const dropped = this.events.shift()!;
-      this.logger.warn(
-        `Max queue size (${this.maxSize}) exceeded — dropped oldest event: "${dropped.name}"`,
+    if (this.maxSize > 0 && this.events.length >= this.maxSize) {
+      const dropped = this.events.shift();
+      this.logger?.warn(
+        `Queue full (max ${this.maxSize}) — dropped oldest event: "${dropped?.name ?? 'unknown'}"`,
       );
-    if (this.items.length >= this.maxSize) {
-      this.items.shift(); // evict oldest
     }
-    this.items.push(event);
+    this.events.push(event);
   }
 
   /** Drains and returns all queued events, clearing the queue. */
   drain(): AnalyticsEvent[] {
-    return this.items.splice(0, this.items.length);
-  }
-
-  /** Removes and returns all queued events in FIFO order. */
-  get size(): number {
-    return this.items.length;
-import type { Logger } from './lib/logger.js';
-
-export class EventQueue {
-  private readonly queue: AnalyticsEvent[] = [];
-  private readonly maxSize: number;
-  private readonly logger: Logger;
-
-  constructor(maxSize: number, logger: Logger) {
-    this.maxSize = maxSize;
-    this.logger = logger;
-  }
-
-  get size(): number {
-    return this.queue.length;
-  }
-
-  enqueue(event: AnalyticsEvent): void {
-    if (this.queue.length >= this.maxSize) {
-      const dropped = this.queue.shift();
-      this.logger.warn(`Queue full (max ${this.maxSize}), dropping oldest event: ${dropped?.name}`);
-    }
-    this.queue.push(event);
-  }
-
-  drain(): AnalyticsEvent[] {
-    return this.queue.splice(0, this.queue.length);
-  private readonly logger?: Logger;
-
-  constructor(maxSize = 0, logger?: Logger) {
-    this.maxSize = maxSize;
-    this.logger = logger;
-  }
-
-  enqueue(event: AnalyticsEvent): void {
-    if (this.maxSize > 0 && this.queue.length >= this.maxSize) {
-      const dropped = this.queue.shift();
-      this.logger?.warn(`Queue full (max ${this.maxSize}); dropping oldest event: "${dropped?.name}"`);
-    }
-    this.queue.push(event);
-  }
-
-  drain(): AnalyticsEvent[] {
-    return this.queue.splice(0, this.queue.length);
+    return this.events.splice(0, this.events.length);
   }
 
   /** Returns a shallow copy of the queued events without draining them. */
@@ -102,6 +51,6 @@ export class EventQueue {
 
   /** Number of events currently queued. */
   get size(): number {
-    return this.queue.length;
+    return this.events.length;
   }
 }

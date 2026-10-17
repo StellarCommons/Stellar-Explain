@@ -1,3 +1,5 @@
+import type { AnalyticsEvent } from './types.js';
+
 /**
  * Configuration options for the Analytics client.
  */
@@ -5,39 +7,6 @@ export interface AnalyticsConfig {
   /** The HTTP endpoint events are sent to. */
   endpoint: string;
   /** Optional API key included with every request. */
-  endpoint?: string;
-  /** Optional API key included with every request. */
-import type { AnalyticsEvent } from './types.js';
-
-export interface AnalyticsConfig {
-  /** The endpoint to send events to. */
-  endpoint: string;
-  /** Enable debug logging. Defaults to false. */
-  debug?: boolean;
-  /** Max queue size before oldest events are dropped. Defaults to 100. */
-  maxQueueSize?: number;
-  /** Auto-flush interval in ms. 0 disables. Defaults to 5000. */
-  flushInterval?: number;
-  /** Sampling rate 0–1. 1 = send all events. Defaults to 1. */
-  sampleRate?: number;
-  /** Max bytes for any single property value string. Defaults to 1024. */
-  maxPropertyBytes?: number;
-  /** Called before an event is enqueued. Return null to cancel. */
-  beforeSend?: (event: AnalyticsEvent) => AnalyticsEvent | null;
-}
-
-export interface ResolvedConfig extends Required<AnalyticsConfig> {}
-
-export function resolveConfig(config: AnalyticsConfig): ResolvedConfig {
-  return {
-    endpoint: config.endpoint,
-    debug: config.debug ?? false,
-    maxQueueSize: config.maxQueueSize ?? 100,
-    flushInterval: config.flushInterval ?? 5000,
-    sampleRate: config.sampleRate ?? 1,
-    maxPropertyBytes: config.maxPropertyBytes ?? 1024,
-    beforeSend: config.beforeSend ?? ((e) => e),
-  endpoint: string;
   apiKey?: string;
   /** When true, debug logging is enabled. Default: false. */
   debug: boolean;
@@ -47,27 +16,18 @@ export function resolveConfig(config: AnalyticsConfig): ResolvedConfig {
   maxQueueSize: number;
   /** Fraction of events that are actually sent (0–1). Default: 1.0. */
   sampleRate: number;
+  /** Max bytes for any single property value string. Default: 1024. */
+  maxPropertyBytes: number;
+  /** Called before an event is enqueued. Return null to cancel. */
+  beforeSend?: (event: AnalyticsEvent) => AnalyticsEvent | null;
   /** #100 — the active environment name (e.g. "production", "test"). */
   environment?: string;
   /** #100 — per-environment endpoint lookup; used when `endpoint` is empty. */
   endpointConfig?: Record<string, string>;
   /** #93 — client-side send rate cap (events per second). Default: 100. */
   maxEventsPerSecond?: number;
-}
-
-const DEFAULTS: AnalyticsConfig = {
-  /** Fraction of events that are actually sent (0–1). Default: 1.0. */
-  sampleRate: number;
   /** #89 — when true (default) track() scrubs PII from event properties. */
   scrubPii?: boolean;
-}
-
-const DEFAULTS: AnalyticsConfig = {
-  debug?: boolean;
-  flushIntervalMs?: number;
-  maxQueueSize?: number;
-  /** Fraction of events that are actually sent (0–1). Default: 1.0. */
-  sampleRate?: number;
   /**
    * When true, installs a global `window.onerror` listener and reports
    * uncaught errors as `error` events (Analytics #66). Default: false —
@@ -76,16 +36,65 @@ const DEFAULTS: AnalyticsConfig = {
   captureGlobalErrors?: boolean;
 }
 
-/** A config with every field but `apiKey` guaranteed to be present. */
-export type ResolvedAnalyticsConfig = Required<Omit<AnalyticsConfig, 'apiKey'>> &
+/**
+ * The fields {@link resolveConfig} guarantees to populate.
+ *
+ * Named explicitly rather than written as `Required<Omit<AnalyticsConfig,
+ * 'apiKey'>>`: `Required<>` would also make `environment` and `endpointConfig`
+ * mandatory, which they are not — they stay absent unless a caller passes them,
+ * and forcing them into DEFAULTS would mean inventing empty values that then
+ * have to be distinguished from "the caller set this to empty".
+ */
+export type ConfigDefaults = Required<
+  Pick<
+    AnalyticsConfig,
+    | 'endpoint'
+    | 'debug'
+    | 'flushIntervalMs'
+    | 'maxQueueSize'
+    | 'sampleRate'
+    | 'maxPropertyBytes'
+    | 'beforeSend'
+    | 'maxEventsPerSecond'
+    | 'scrubPii'
+    | 'captureGlobalErrors'
+  >
+>;
+
+/**
+ * A config with every defaulted field guaranteed to be present.
+ *
+ * `apiKey` stays optional on the resolved type because "no key configured" and
+ * "explicitly empty key" are different states, and callers need to tell them
+ * apart (an empty key should fail authentication loudly, a missing one should
+ * be treated as anonymous). Collapsing it to `string` here would make that
+ * distinction unrepresentable.
+ */
+export type ResolvedConfig = ConfigDefaults &
+  Omit<AnalyticsConfig, 'apiKey'> &
   Pick<AnalyticsConfig, 'apiKey'>;
 
-const DEFAULTS: Omit<ResolvedAnalyticsConfig, 'apiKey'> = {
+/** @deprecated Use {@link ResolvedConfig}. Retained as the original name. */
+export type ResolvedAnalyticsConfig = ResolvedConfig;
+
+/**
+ * Defaults applied by {@link resolveConfig}.
+ *
+ * `apiKey` is deliberately absent from this table so that it stays `undefined`
+ * rather than defaulting to `''`. See {@link ResolvedConfig} for why that
+ * distinction matters.
+ */
+const DEFAULTS: ConfigDefaults = {
   endpoint: '',
   debug: false,
   flushIntervalMs: 5000,
   maxQueueSize: 100,
   sampleRate: 1.0,
+  maxPropertyBytes: 1024,
+  // Identity transform: the hook is called unconditionally by the client, so
+  // defaulting it to a pass-through keeps that call site free of `?.` and of a
+  // "is beforeSend configured?" branch.
+  beforeSend: (event) => event,
   maxEventsPerSecond: 100,
   scrubPii: true,
   captureGlobalErrors: false,
@@ -130,29 +139,4 @@ export function resolveConfig(options: Partial<AnalyticsConfig> = {}): Analytics
   }
 
   return resolved;
-  if (isComplete) {
-    return options as AnalyticsConfig;
-  }
-
-  return { ...DEFAULTS, ...options };
-}
-}
-export function resolveConfig(options: AnalyticsConfig = {}): ResolvedAnalyticsConfig {
-  return { ...DEFAULTS, ...options };
-  sampleRate?: number;          // 0-1, default 1.0
-  maxPropertyBytes?: number;    // max bytes per property value, default 1024
-  beforeSend?: (event: AnalyticsEvent) => AnalyticsEvent | null; // null cancels
-}
-
-export function resolveConfig(config: AnalyticsConfig): Required<Omit<AnalyticsConfig, 'apiKey' | 'beforeSend'>> & Pick<AnalyticsConfig, 'apiKey' | 'beforeSend'> {
-  return {
-    endpoint: config.endpoint,
-    apiKey: config.apiKey,
-    debug: config.debug ?? false,
-    flushIntervalMs: config.flushIntervalMs ?? 5000,
-    maxQueueSize: config.maxQueueSize ?? 100,
-    sampleRate: config.sampleRate ?? 1.0,
-    maxPropertyBytes: config.maxPropertyBytes ?? 1024,
-    beforeSend: config.beforeSend,
-  };
 }
