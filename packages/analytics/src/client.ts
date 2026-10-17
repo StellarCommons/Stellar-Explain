@@ -1,36 +1,29 @@
-import type { Emitter } from './emitter/index.js';
-import type { AnalyticsConfig } from './config.js';
-import type { AnalyticsEvent } from './types.js';
-import { resolveConfig } from './config.js';
 import type { AnalyticsConfig, ResolvedConfig } from './config.js';
-import { EventDeduplicator } from './dedup.js';
-import type { Emitter } from './emitter/index.js';
-import { NoopEmitter } from './emitter/NoopEmitter.js';
-import { Logger } from './lib/logger.js';
+import { resolveConfig } from './config.js';
+import type { AnalyticsEvent } from './types.js';
 import { EventQueue } from './queue.js';
 import { shouldSample } from './sampling.js';
-import type { AnalyticsEvent } from './types.js';
 import { limitPayload } from './utils/limitPayload.js';
 import { validateProperties } from './validate.js';
+import type { Emitter } from './emitter/index.js';
+import { NoopEmitter } from './emitter/NoopEmitter.js';
 import { MultiSink } from './sinks/MultiSink.js';
-import type { Plugin } from './plugins.js';
-import { PluginRegistry } from './plugins.js';
-import { Middleware } from './middleware.js';
+import { Logger } from './lib/logger.js';
+import { RateLimiter } from './lib/rateLimiter.js';
+import { CircuitBreaker } from './lib/circuitBreaker.js';
+import type { CircuitState } from './lib/circuitBreaker.js';
+import { DeadLetterQueue } from './lib/DeadLetterQueue.js';
 import {
   clearPersistedQueue,
   loadPersistedQueue,
   persistPendingQueue,
 } from './lib/queuePersistence.js';
-import { RateLimiter } from './lib/rateLimiter.js';
-import { CircuitBreaker } from './lib/CircuitBreaker.js';
-import { DeadLetterQueue } from './lib/DeadLetterQueue.js';
-import { clearPersistedQueue, loadPersistedQueue } from './lib/queuePersistence.js';
 import { scrubEventProperties } from './lib/scrubPii.js';
-import { DeadLetterQueue } from './lib/DeadLetterQueue.js';
-import type { CircuitState } from './lib/circuitBreaker.js';
+import type { Plugin } from './plugins.js';
+import { PluginRegistry } from './plugins.js';
+import { Middleware } from './middleware.js';
 import { createErrorEvent } from './events/error.js';
 import { createNetworkErrorEvent } from './events/network-error.js';
-import { createHeartbeatEvent, shouldFireHeartbeat } from './events/heartbeat.js';
 
 /**
  * Main analytics client.
@@ -49,35 +42,26 @@ import { createHeartbeatEvent, shouldFireHeartbeat } from './events/heartbeat.js
  * #86  — restores a persisted queue on construction and re-flushes it
  * #93  — client-side rate limiting; over-budget events are dropped + warned
  * #94  — a circuit breaker guards the emitter from repeated failures
- * #95  — persisted queue is restored again on construction (offline coverage)
  * #89  — track() scrubs PII from properties (enabled by default, config-disablable)
  * #90  — emitter failures are caught, logged and routed to the dead-letter
  * #91  — bounded dead-letter (oldest evicted on overflow)
  * #92  — flushSync() immediate best-effort send bypassing the queue/interval
  * Analytics #82 — exposes the emitter's circuit breaker state, when available
  * Analytics #84 — pauses flushing while offline, resumes on reconnect
- *
- * Stores whatever `config` it's given as-is (applying defaults only where
- * a field is used, via `??`) rather than re-resolving it — callers that
- * want a fully-resolved config up front can call `resolveConfig()`
- * themselves before constructing the client.
  * Analytics #66 — optional global `window.onerror` capture
  * Analytics #67 — trackNetworkError() for host-reported failed fetches
- * Analytics #68 — daily-active-user heartbeat on first activity
  */
 export class AnalyticsClient {
-  protected readonly config: AnalyticsConfig;
-  private readonly emitter: Emitter;
-function generateId(): string {
-  // Prefer crypto.randomUUID when available.
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  // Fallback for environments without crypto.
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-}
-
-export class AnalyticsClient {
+  /**
+   * Typed as {@link ResolvedConfig} because every field the client reads is
+   * one `resolveConfig` guarantees to populate. `resolveConfig`'s own return
+   * type is the looser `AnalyticsConfig` — it must accept partial input — so
+   * the widening here is deliberate: without it, `this.config.beforeSend` and
+   * `this.config.maxEventsPerSecond` are `T | undefined` at every use site and
+   * the client has to sprinkle `!` or `?.` over values that are in fact always
+   * present. `resolveConfig` cannot return a config missing these fields, so
+   * this is a statement about the caller's guarantee, not an unchecked cast.
+   */
   private readonly config: ResolvedConfig;
   private readonly queue: EventQueue;
   private readonly deadLetter: DeadLetterQueue;
@@ -87,48 +71,34 @@ export class AnalyticsClient {
   private readonly logger: Logger;
   private readonly plugins = new PluginRegistry();
   private readonly middleware = new Middleware();
+
+  /**
+   * The single auto-flush interval.
+   *
+   * There is exactly one timer field and one `setInterval` call in this class.
+   * The file this replaces had two (`timer` and `flushTimer`, each with its own
+   * interval), which meant a client could be flushing on two schedules at once
+   * and `destroy()` only ever cleared one of them — leaving a live interval
+   * holding the client, its emitter and its queued events in memory.
+   */
   private timer: ReturnType<typeof setInterval> | undefined;
+
   private isOffline: boolean;
   private onlineHandler: (() => void) | undefined;
   private offlineHandler: (() => void) | undefined;
   private globalErrorHandler: ((event: ErrorEvent) => void) | undefined;
-  private hasFiredHeartbeatThisSession = false;
 
   constructor(config: Partial<AnalyticsConfig> = {}, emitter?: Emitter | Emitter[]) {
-    this.config = resolveConfig(config);
+    this.config = resolveConfig(config) as ResolvedConfig;
     this.logger = new Logger(this.config.debug);
     this.emitter = this.buildEmitter(emitter);
-  private readonly handleBeforeUnload = (): void => {
-    this.persistQueueNow();
-  };
-
-  constructor(config: Partial<AnalyticsConfig> = {}, emitter?: Emitter) {
-    this.config = resolveConfig(config);
-    this.logger = new Logger(this.config.debug);
-  constructor(config: Partial<AnalyticsConfig> = {}, emitter?: Emitter) {
-    this.config = resolveConfig(config);
-    this.logger = new Logger(this.config.debug);
-    this.emitter = emitter ?? new NoopEmitter();
     this.queue = new EventQueue(this.config.maxQueueSize, this.logger);
     this.deadLetter = new DeadLetterQueue(100, this.logger);
-    this.rateLimiter = new RateLimiter(this.config.maxEventsPerSecond ?? 100);
+    this.rateLimiter = new RateLimiter(this.config.maxEventsPerSecond);
     this.circuitBreaker = new CircuitBreaker();
 
-    // Restore any queue persisted across a page unload.
-    const restored = loadPersistedQueue();
-    if (restored.length > 0) {
-      clearPersistedQueue();
-      for (const event of restored) {
-        this.queue.enqueue(event);
-      }
-      void this.flush();
-    }
-  constructor(config: AnalyticsConfig = {}, emitter?: Emitter) {
-    this.config = config;
-    this.logger = new Logger(this.config.debug ?? false);
-    this.emitter = emitter ?? new NoopEmitter();
-    this.queue = new EventQueue(this.config.maxQueueSize, this.logger);
-    this.isOffline = typeof navigator !== 'undefined' && 'onLine' in navigator ? !navigator.onLine : false;
+    this.isOffline =
+      typeof navigator !== 'undefined' && 'onLine' in navigator ? !navigator.onLine : false;
 
     // #86 — restore any queue persisted by #85 across a page unload.
     const restored = loadPersistedQueue();
@@ -141,34 +111,37 @@ export class AnalyticsClient {
       void this.flush();
     }
 
-    // #72 — start auto-flush timer if configured
+    // #72/#1072 — start the auto-flush timer if configured.
     if (this.config.flushIntervalMs > 0) {
-    // #1072 — start auto-flush timer if configured
-    const flushIntervalMs = this.config.flushIntervalMs ?? 0;
-    if (flushIntervalMs > 0) {
       this.timer = setInterval(() => {
         void this.flush();
-      }, flushIntervalMs);
+      }, this.config.flushIntervalMs);
     }
 
-    // Analytics #66 — opt-in global error capture
+    // Analytics #66 — opt-in global error capture.
     if (this.config.captureGlobalErrors) {
       this.bindGlobalErrorHandler();
     }
 
-    // #85— persist the pending queue when the page is torn down.
+    // #85 — persist the pending queue when the page is torn down.
     if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
       window.addEventListener('beforeunload', this.handleBeforeUnload);
     }
-    // Analytics #84 — pause flushing while offline, resume on reconnect
+
+    // Analytics #84 — pause flushing while offline, resume on reconnect.
     this.bindConnectivityHandlers();
   }
-  private readonly dedup: EventDeduplicator;
-  private flushTimer: ReturnType<typeof setInterval> | null = null;
+
+  private readonly handleBeforeUnload = (): void => {
+    this.persistQueueNow();
+  };
 
   /**
    * #97 — normalize the emitter argument: no emitter → NoopEmitter,
    * a single emitter → itself, an array → MultiSink fan-out.
+   *
+   * A one-element array is unwrapped to that emitter rather than wrapped in a
+   * MultiSink, so `getEmitter()` returns what the caller passed.
    */
   private buildEmitter(emitter?: Emitter | Emitter[]): Emitter {
     if (Array.isArray(emitter)) {
@@ -182,76 +155,59 @@ export class AnalyticsClient {
   /**
    * Enqueue a tracking event.
    *
-   * Throws a TypeError if `name` is blank or `properties` are invalid.
-   * Enqueue a tracking event.
-   *
-   * Throws a TypeError if `name` is blank or `properties` are invalid.
+   * Throws a `TypeError` if `name` is blank or `properties` are invalid.
    *
    * #93 — when the event would exceed the configured rate, it is dropped
    * (with a warning) instead of being enqueued.
    * #89 — unless explicitly disabled via `config.scrubPii === false`,
    * email/number PII is scrubbed from `properties` before enqueuing.
+   *
+   * The empty-name check lives here rather than in `validateProperties`
+   * because that function only ever receives `properties`; see #1243.
    */
   track(name: string, properties: Record<string, unknown> = {}): void {
     if (typeof name !== 'string' || name.trim() === '') {
       throw new TypeError('Event name must be a non-empty string.');
-  constructor(config: AnalyticsConfig, emitter?: Emitter) {
-    this.config = resolveConfig(config);
-    this.queue = new EventQueue(this.config.maxQueueSize);
-    this.emitter = emitter ?? new NoopEmitter();
-    this.logger = new Logger(this.config.debug);
-    this.dedup = new EventDeduplicator();
-
-    if (this.config.flushInterval > 0) {
-      this.flushTimer = setInterval(() => {
-        this.flush().catch((err) => this.logger.error('Auto-flush error:', err));
-      }, this.config.flushInterval);
     }
-    validateProperties(properties);
 
-    if (!this.rateLimiter.allow()) {
-      this.logger.warn(
-        `analytics rate limit (${this.config.maxEventsPerSecond ?? 100} events/s) exceeded — dropped event "${name}"`,
-      );
+    // 1. Sampling gate.
+    if (!shouldSample(this.config.sampleRate)) {
+      this.logger.debug(`event "${name}" dropped by sampling`);
       return;
     }
-    this.maybeFireHeartbeat();
+
+    // 2. Validate, then bound each property's serialized size.
+    validateProperties(properties);
+    const limited = limitPayload(properties, this.config.maxPropertyBytes, this.logger);
+
+    // 3. Scrub PII from values (keys are left intact so structure survives).
+    const scrubbed =
+      this.config.scrubPii !== false ? scrubEventProperties(limited) : limited;
 
     const event: AnalyticsEvent = {
       name,
       timestamp: Date.now(),
-      properties:
-        this.config.scrubPii !== false ? scrubEventProperties(properties) : properties,
+      properties: scrubbed,
     };
 
-    this.queue.enqueue(event);
-    this.logger.debug(`tracked event "${name}"`);
-  }
-
-  /**
-   * #1071, #99 — Drain the queue, run each event through the middleware
-   * pipeline, then forward it to the emitter(s).
-   * #1071, #94 — Drain the queue and forward every event to the emitter.
-   *
-   * The circuit breaker short-circuits the emitter once the failure
-   * threshold is crossed; events that cannot be sent are routed to the
-   * dead-letter. `flush()` never rejects.
-   * #1071, #90 — Drain the queue and forward every event to the emitter.
-   *
-   * #90: individual emitter failures are caught and logged, and the failed
-   * event is routed to the dead-letter (#91); `flush()` never rejects.
-   * Analytics #68 — fire a `daily_active_user` heartbeat once per client
-   * instance, on first activity, deduped against localStorage so it fires
-   * at most once per day per user across sessions.
-   */
-  private maybeFireHeartbeat(): void {
-    if (this.hasFiredHeartbeatThisSession) return;
-    this.hasFiredHeartbeatThisSession = true;
-
-    if (shouldFireHeartbeat()) {
-      this.queue.enqueue(createHeartbeatEvent());
-      this.logger.debug('tracked heartbeat "daily_active_user"');
+    // 4. Rate limiting (#93).
+    if (!this.rateLimiter.allow()) {
+      this.logger.warn(
+        `analytics rate limit (${this.config.maxEventsPerSecond} events/s) exceeded — dropped event "${name}"`,
+      );
+      return;
     }
+
+    // 5. beforeSend hook. `null` cancels the event; it is never enqueued.
+    const prepared = this.config.beforeSend(event);
+    if (prepared === null) {
+      this.logger.debug(`event "${name}" cancelled by beforeSend`);
+      return;
+    }
+
+    // 6. Enqueue.
+    this.queue.enqueue(prepared);
+    this.logger.debug(`tracked event "${name}"`);
   }
 
   /**
@@ -275,27 +231,49 @@ export class AnalyticsClient {
   }
 
   /**
-   * #1071 — Drain the queue and forward every event to the emitter.
+   * #1071, #99 — Drain the queue, run each event through the middleware
+   * pipeline, then forward it to the emitter(s).
    *
-   * Analytics #84 — while offline, this is a no-op: events stay queued
-   * until connectivity is restored, at which point a flush is triggered
-   * automatically.
+   * #90/#94 — the circuit breaker short-circuits the emitter once the failure
+   * threshold is crossed; events that cannot be sent are routed to the
+   * dead-letter (#91). `flush()` never rejects: a caller flushing on a timer or
+   * in a `beforeunload` handler has nowhere to put a rejection.
+   *
+   * Analytics #84 — while offline this is a no-op; events stay queued until
+   * connectivity is restored, at which point a flush is triggered.
    */
   async flush(): Promise<void> {
-    if (t    const events = this.queue.drain();
+    if (this.isOffline) {
+      this.logger.debug('offline — flush deferred');
+      return;
+    }
+
+    const events = this.queue.drain();
+    if (events.length === 0) return;
+
     await Promise.all(
       events.map(async (event) => {
-        const prepared = await this.middleware.process(event);
-        if (!this.circuitBreaker.allowRequest()) {
-          this.logger.warn(`circuit open — ${prepared.name} deferred to dead-letter`);
+        let prepared: AnalyticsEvent;
+        try {
+          prepared = await this.middleware.process(event);
+        } catch (error) {
+          // A throwing middleware hook must not lose the event.
+          this.logger.error(`middleware failed for "${event.name}"`, error);
+          this.deadLetter.push(event);
+          return;
+        }
+
+        if (!this.circuitBreaker.canProceed()) {
+          this.logger.warn(`circuit open — "${prepared.name}" routed to dead-letter`);
           this.deadLetter.push(prepared);
           return;
         }
+
         try {
           await this.emitter.send(prepared);
-          this.circuitBreaker.onSuccess();
+          this.circuitBreaker.recordSuccess();
         } catch (error) {
-          this.circuitBreaker.onFailure();
+          this.circuitBreaker.recordFailure();
           this.logger.error(`emit failed for "${prepared.name}"`, error);
           this.deadLetter.push(prepared);
         }
@@ -312,9 +290,12 @@ export class AnalyticsClient {
    */
   flushSync(event?: AnalyticsEvent): void {
     const pending = event ? [event] : this.queue.drain();
+
     for (const item of pending) {
       try {
         const result = this.emitter.send(item);
+        // An emitter may be sync (void) or async (Promise<void>); only the
+        // latter can reject, and a rejection cannot be caught synchronously.
         if (result && typeof (result as Promise<void>).then === 'function') {
           void (result as Promise<void>).catch((error: unknown) => {
             this.logger.error(`emit failed for "${item.name}"`, error);
@@ -329,7 +310,7 @@ export class AnalyticsClient {
   }
 
   /**
-   * #72 — Stop the auto-flush interval and perform a final flush.
+   * #72/#1072 — Stop the auto-flush interval and perform a final flush.
    */
   destroy(): void {
     if (this.timer !== undefined) {
@@ -377,6 +358,35 @@ export class AnalyticsClient {
   }
 
   /**
+   * The client's own dead-letter queue — events whose delivery failed or was
+   * short-circuited by the circuit breaker.
+   *
+   * Prefer this over {@link AnalyticsClient.getDeadLetters}: that method
+   * reports the *emitter's* dead-letter list (e.g. `HttpSink`'s), which is a
+   * different set of events.
+   */
+  getDeadLetter(): DeadLetterQueue {
+    return this.deadLetter;
+  }
+
+  /**
+   * The emitter's own dead-letter entries, when the emitter keeps one.
+   * Empty for emitters that do not (e.g. `ConsoleSink`, a plain function).
+   */
+  getDeadLetters(): AnalyticsEvent[] {
+    const emitter = this.emitter as Partial<{ getDeadLetters(): AnalyticsEvent[] }>;
+    return typeof emitter.getDeadLetters === 'function' ? emitter.getDeadLetters() : [];
+  }
+
+  getRateLimiter(): RateLimiter {
+    return this.rateLimiter;
+  }
+
+  getCircuitBreaker(): CircuitBreaker {
+    return this.circuitBreaker;
+  }
+
+  /**
    * Analytics #82 — the current circuit breaker state of the configured
    * emitter, when it exposes one (e.g. `HttpSink`). Returns `undefined`
    * for emitters that don't use a circuit breaker.
@@ -384,38 +394,6 @@ export class AnalyticsClient {
   getCircuitState(): CircuitState | undefined {
     const emitter = this.emitter as Partial<{ getCircuitState(): CircuitState }>;
     return typeof emitter.getCircuitState === 'function' ? emitter.getCircuitState() : undefined;
-  }
-
-  getDeadLetter(): DeadLetterQueue {
-    return this.deadLetter;
-  }
-
-  getRateLimiter(): RateLimiter {
-    return this.rateLimiter;
-  }
-
-  getCircuitBreaker(): CircuitBreaker {
-    return this.circuitBreaker;
-  }
-entQueue {
-    return this.queue;
-  }
-
-  getDeadLetter(): DeadLetterQueue {
-    return this.deadLetter;
-  }
-
-  getRateLimiter(): RateLimiter {
-    return this.rateLimiter;
-  }
-
-  getCircuitBreaker(): CircuitBreaker {
-    return this.circuitBreaker;
-  }
-
-  /** #91 — the bounded dead-letter holding events whose send failed. */
-  getDeadLetter(): DeadLetterQueue {
-    return this.deadLetter;
   }
 
   // ── Analytics #84 internals ─────────────────────────────────────────────────
@@ -448,6 +426,7 @@ entQueue {
       window.removeEventListener('online', this.onlineHandler);
       this.onlineHandler = undefined;
     }
+  }
 
   // ── Analytics #66 internals ─────────────────────────────────────────────────
 
@@ -466,161 +445,5 @@ entQueue {
     if (typeof window === 'undefined' || !this.globalErrorHandler) return;
     window.removeEventListener('error', this.globalErrorHandler);
     this.globalErrorHandler = undefined;
-  }
-
-  /**
-   * Records an event. Applies sampling → validation → payload limiting →
-   * deduplication → beforeSend hook → enqueue.
-   */
-  track(name: string, properties: Record<string, unknown>): void {
-    // 1. Sampling gate
-    if (!shouldSample(this.config.sampleRate)) {
-      this.logger.log(`[sampling] dropped event "${name}"`);
-      return;
-import type { AnalyticsConfig } from './config.js';
-import { resolveConfig } from './config.js';
-import type { AnalyticsEvent } from './types.js';
-import { Logger } from './lib/logger.js';
-import { EventQueue } from './queue.js';
-import { EventDeduplicator } from './dedup.js';
-import { shouldSample } from './sampling.js';
-import { limitPayload } from './utils/limitPayload.js';
-import { validateProperties } from './validate.js';
-import type { Emitter } from './emitter/index.js';
-import { NoopEmitter } from './emitter/NoopEmitter.js';
-import { HttpSink } from './sinks/HttpSink.js';
-
-export class AnalyticsClient {
-  private readonly config: ReturnType<typeof resolveConfig>;
-  private readonly logger: Logger;
-  private readonly queue: EventQueue;
-  private readonly deduplicator: EventDeduplicator;
-  private readonly emitter: Emitter;
-  private flushTimer?: ReturnType<typeof setInterval>;
-
-  constructor(config: AnalyticsConfig, emitter?: Emitter) {
-    this.config = resolveConfig(config);
-    this.logger = new Logger(this.config.debug);
-    this.queue = new EventQueue(this.config.maxQueueSize, this.logger);
-    this.deduplicator = new EventDeduplicator();
-    this.emitter = emitter ?? new NoopEmitter();
-
-    if (this.config.flushIntervalMs > 0) {
-      this.flushTimer = setInterval(() => {
-        void this.flush();
-      }, this.config.flushIntervalMs);
-    }
-
-    // 2. Validate
-    validateProperties(name, properties);
-
-    // 3. Limit payload
-    const limitedProps = limitPayload(properties, this.config.maxPropertyBytes, this.logger);
-
-    // 4. Build event
-    const timestamp = new Date().toISOString();
-    let event: AnalyticsEvent = {
-      id: generateId(),
-      name,
-      properties: limitedProps,
-      timestamp,
-    };
-
-    // 5. Deduplication
-    if (this.dedup.isDuplicate(name, limitedProps, timestamp)) {
-      this.logger.log(`[dedup] dropped duplicate event "${name}"`);
-      return;
-    }
-
-    // 6. beforeSend hook
-    const mutated = this.config.beforeSend(event);
-    if (mutated === null) {
-      this.logger.log(`[beforeSend] cancelled event "${name}"`);
-      return;
-    }
-    event = mutated;
-
-    // 7. Enqueue
-    this.queue.enqueue(event);
-    this.logger.log(`[track] enqueued "${name}" (queue size: ${this.queue.size})`);
-  }
-
-  /** Drains the queue and delivers all pending events to the emitter. */
-  async flush(): Promise<void> {
-    const events = this.queue.drain();
-    this.logger.log(`[flush] delivering ${events.length} event(s)`);
-    for (const event of events) {
-      this.emitter.send(event);
-    }
-  }
-
-  /** Stops the auto-flush timer and releases resources. */
-  destroy(): void {
-    if (this.flushTimer !== null) {
-      clearInterval(this.flushTimer);
-      this.flushTimer = null;
-    }
-  track(name: string, properties: Record<string, unknown> = {}): void {
-    // 1. Sampling gate
-    if (!shouldSample(this.config.sampleRate)) {
-      this.logger.debug(`Event "${name}" dropped by sampling (sampleRate=${this.config.sampleRate})`);
-      return;
-    }
-
-    // 2. Validate then limit payload
-    validateProperties(properties);
-    const limitedProperties = limitPayload(properties, this.config.maxPropertyBytes, this.logger);
-
-    // 3. Create event
-    const event: AnalyticsEvent = {
-      name,
-      timestamp: Date.now(),
-      properties: limitedProperties,
-    };
-
-    // 4. Deduplication
-    if (this.deduplicator.isDuplicate(event)) {
-      this.logger.debug(`Event "${name}" dropped as duplicate`);
-      return;
-    }
-
-    // 5. beforeSend hook
-    if (this.config.beforeSend) {
-      const result = this.config.beforeSend(event);
-      if (result === null) {
-        this.logger.debug(`Event "${name}" cancelled by beforeSend`);
-        return;
-      }
-      this.queue.enqueue(result);
-      return;
-    }
-
-    // 6. Enqueue
-    this.queue.enqueue(event);
-  }
-
-  async flush(): Promise<void> {
-    const events = this.queue.drain();
-    for (const event of events) {
-      try {
-        await this.emitter.send(event);
-      } catch (err) {
-        this.logger.error('Failed to send event:', err);
-      }
-    }
-  }
-
-  destroy(): void {
-    if (this.flushTimer !== undefined) {
-      clearInterval(this.flushTimer);
-      this.flushTimer = undefined;
-    }
-  }
-
-  getDeadLetters(): AnalyticsEvent[] {
-    if (this.emitter instanceof HttpSink) {
-      return this.emitter.getDeadLetters();
-    }
-    return [];
   }
 }
