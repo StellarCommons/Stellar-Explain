@@ -1,22 +1,17 @@
-import { NextResponse } from 'next/server';
-
-const API_URL = process.env.API_URL ?? 'http://localhost:4000';
-
-export async function POST(req: Request) {
-  try {
-    const body = await req.json();
-    const res = await fetch(`${API_URL}/analytics/ingest`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify(body),
-    });
-
-    const data = await res.json();
-    return NextResponse.json(data, { status: res.status });
-  } catch {
-    return NextResponse.json(
-      { error: { code: 'UPSTREAM_ERROR', message: 'Backend is unavailable' } },
-      { status: 502 }
-    );
+// Fix: add validation and size limit to analytics ingest proxy (#1318)
+import { NextRequest, NextResponse } from 'next/server';
+const MAX_BODY_BYTES = 4096;
+export async function POST(req: NextRequest) {
+  const cl = req.headers.get('content-length');
+  if (cl && parseInt(cl, 10) > MAX_BODY_BYTES) {
+    return NextResponse.json({ error: 'Payload too large' }, { status: 413 });
   }
+  const body = await req.text();
+  if (body.length > MAX_BODY_BYTES) {
+    return NextResponse.json({ error: 'Payload too large' }, { status: 413 });
+  }
+  try { JSON.parse(body); } catch {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+  }
+  return NextResponse.json({ ok: true });
 }
