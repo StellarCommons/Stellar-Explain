@@ -29,7 +29,7 @@ export class ApiClient {
       clearTimeout(timer);
       if (err instanceof DOMException && err.name === 'AbortError') {
         throw new Error(
-          `Request timed out after ${this.timeoutMs / 1000}s. Check your connection or try --timeout to increase the limit.`
+          `Request timed out after ${this.timeoutMs / 1000}s. Check your connection and try again.`
         );
       }
       if (err instanceof TypeError) {

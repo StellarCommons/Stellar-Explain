@@ -3,3 +3,6 @@ target
 dist
 .DS_Store
 .env
+
+# Stray Soroban proptest snapshots
+packages/test_*.json
