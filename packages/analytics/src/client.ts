@@ -116,6 +116,9 @@ export class AnalyticsClient {
       this.timer = setInterval(() => {
         void this.flush();
       }, this.config.flushIntervalMs);
+      // Unref the timer where supported (Node) so it does not keep the process
+      // alive; browsers return a numeric id with no unref, which is a no-op.
+      (this.timer as { unref?: () => void }).unref?.();
     }
 
     // Analytics #66 — opt-in global error capture.
