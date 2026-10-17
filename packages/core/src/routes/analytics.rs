@@ -298,14 +298,23 @@ pub async fn ingest_event(body: Bytes) -> Result<Json<serde_json::Value>, (Statu
         .map(|d| d.as_secs())
         .unwrap_or(0);
 
-    if let Some(ts) = event.get("timestamp").and_then(|v| v.as_u64())
-        && ts > now + 3600
-    {
-        info!("event rejected due to clock skew: timestamp={ts} now={now}");
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "event timestamp is more than 1 hour in the future".to_string(),
-        ));
+    // The clock-skew check must run for every event in the body: a single
+    // JSON object, or each item of a batch array (issue #99 allows batches).
+    let items: &[serde_json::Value] = match &event {
+        serde_json::Value::Array(entries) => entries.as_slice(),
+        other => std::slice::from_ref(other),
+    };
+
+    for item in items {
+        if let Some(ts) = item.get("timestamp").and_then(|v| v.as_u64())
+            && ts > now + 3600
+        {
+            info!("event rejected due to clock skew: timestamp={ts} now={now}");
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "event timestamp is more than 1 hour in the future".to_string(),
+            ));
+        }
     }
 
     Ok(Json(serde_json::json!({"status": "accepted"})))
