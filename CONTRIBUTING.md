@@ -1,6 +1,5 @@
 
 
-````markdown
 # Contributing to StellarCommons
 
 First off, thanks for your interest in contributing! 🚀  
@@ -22,7 +21,7 @@ Contributions of all kinds are welcome — from code to docs, design, or testing
    git checkout -b feature/your-feature-name
    ```
 3. **Make your changes** in small, logical commits.
-4. **Test your changes** locally (Rust, Next.js, or NestJS).
+4. **Test your changes** locally (Rust core, Next.js ui, CLI, or analytics).
 5. **Push to your fork** and open a Pull Request (PR) to `main`.
 
 ---
@@ -33,9 +32,10 @@ This is a **monorepo** containing multiple packages:
 
 ```
 packages/
-  core/         # Rust backend (transaction explain API)
-  frontend/     # Next.js frontend (UI for Stellar Explain)
-  web2-backend/ # NestJS backend (Web2 demo service)
+  core/         # Rust/Axum backend (transaction explain API)
+  ui/           # Next.js frontend (UI for Stellar Explain)
+  cli/          # Node.js CLI
+  analytics/    # TypeScript analytics client
 ```
 
 Each package has its own README and setup instructions.
@@ -51,12 +51,20 @@ cd packages/core
 cargo run
 ```
 
-### Next.js Frontend
+### Next.js UI
 
 ```bash
-cd packages/frontend
+cd packages/ui
 npm install
 npm run dev
+```
+
+### CLI and analytics
+
+```bash
+cd packages/cli        # or packages/analytics
+npm install
+npm test
 ```
 
 ---

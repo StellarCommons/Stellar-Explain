@@ -16,6 +16,7 @@ on:
 jobs:
   ping:
     name: Ping /health
+    if: vars.BACKEND_URL != ''
     runs-on: ubuntu-latest
     steps:
       - name: Ping backend health endpoint
@@ -29,7 +30,8 @@ jobs:
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 60 "${{ vars.BACKEND_URL }}/health" || true)
           echo "Response: $STATUS"
           if [ "$STATUS" != "200" ]; then
-            echo "Warning: health check returned $STATUS"
+            echo "Health check failed: $STATUS"
+            exit 1
           else
             echo "Backend is alive ✅"
           fi
