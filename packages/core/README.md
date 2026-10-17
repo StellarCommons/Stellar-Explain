@@ -1,4 +1,3 @@
-```md
 # Stellar Explain – Core (Backend)
 
 This package contains the **Rust backend** for Stellar Explain.
@@ -143,40 +142,3 @@ Join the maintainer Telegram group:
 🚧 Early development, intentionally minimal.
 
 The backend will grow **one operation type at a time**.
-
-```
-
----
-
-## ✅ What This Achieves
-
-- Clear **vision** without overpromising
-- Strong alignment with the **Drips issue philosophy**
-- Reduced contributor friction
-- Easy onboarding for both FE & BE contributors
-- A roadmap that scales without rewrites
-
----
-```
-
-## 🔍 Structured Logging and Request Tracing
-
-The backend emits structured logs for each request. Logs include request-scoped tracing fields and timing metrics for Horizon fetches and explanation work.
-
-Set `LOG_FORMAT=json` to emit JSON logs:
-
-```bash
-LOG_FORMAT=json cargo run
-```
-
-### Log fields
-
-- `request_id`: UUID generated per request by middleware and also returned as `x-request-id` response header
-- `hash`: transaction hash for `/tx/{hash}` requests
-- `address`: account address for `/account/{address}` requests
-- `horizon_fetch_duration_ms`: time spent waiting on Horizon calls
-- `explain_duration_ms`: time spent generating explanation output (transaction explain route)
-- `total_duration_ms`: total handler response time
-- `status`: HTTP status code emitted by the handler
-- `upstream_error`: upstream failure marker when Horizon is unreachable or fails
-- `fee_stats_available`: whether Horizon `fee_stats` was available for the transaction explanation request
