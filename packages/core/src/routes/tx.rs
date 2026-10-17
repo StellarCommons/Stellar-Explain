@@ -9,7 +9,7 @@ use tracing::{error, info, info_span};
 use utoipa::ToSchema;
 
 use crate::{
-    errors::AppError,
+    errors::{AppError, ValidationError},
     explain::transaction::{TransactionExplanation, explain_transaction_with_ledger},
     middleware::request_id::RequestId,
     services::{explain::map_transaction_to_domain, horizon::HorizonClient},
