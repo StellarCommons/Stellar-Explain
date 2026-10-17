@@ -1,20 +1,12 @@
-import { CLI_VERSION } from '../config/env.js';
-
-let cachedNotice: string | null = null;
-
-export async function checkForUpdate(): Promise<void> {
-  try {
-    const res = await fetch('https://registry.npmjs.org/@stellar-explain/cli/latest');
-    if (!res.ok) return;
-    const pkg = await res.json() as { version: string };
-    if (pkg.version && pkg.version !== CLI_VERSION) {
-      cachedNotice = `Update available: ${CLI_VERSION} → ${pkg.version}`;
-    }
-  } catch {
-    // ignore network errors
-  }
-}
-
-export function getUpdateNotice(): string | null {
-  return cachedNotice;
+// Fix: replace duplicate error-log.ts with real error logging (#1331)
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
+const LOG_FILE = path.join(os.homedir(), '.stellar-explain-errors.log');
+export function logError(error: unknown, context?: string): void {
+  const timestamp = new Date().toISOString();
+  const message = error instanceof Error ? error.message : String(error);
+  const prefix = context ? `[${timestamp}] [${context}]` : `[${timestamp}]`;
+  const entry = `${prefix} ${message}\n`;
+  try { fs.appendFileSync(LOG_FILE, entry, 'utf8'); } catch { }
 }
