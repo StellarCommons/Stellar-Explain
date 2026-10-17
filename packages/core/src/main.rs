@@ -104,9 +104,30 @@ async fn main() {
     // and returns "Unable To Extract Key!". Re-add behind a reverse
     // proxy in production where X-Forwarded-For is available.
 
-    let addr = "0.0.0.0:4000";
+    let host = env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0".to_string());
+    let port = match env::var("PORT") {
+        Ok(raw) => match raw.trim().parse::<u16>() {
+            Ok(p) => p,
+            Err(err) => {
+                tracing::error!(port = %raw, error = %err, "invalid PORT; must be a valid port number");
+                std::process::exit(1);
+            }
+        },
+        Err(_) => 4000,
+    };
+    let addr = format!("{host}:{port}");
     info!(bind_addr = %addr, "server_starting");
 
-    let listener = TcpListener::bind(addr).await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    let listener = match TcpListener::bind(&addr).await {
+        Ok(listener) => listener,
+        Err(err) => {
+            tracing::error!(bind_addr = %addr, error = %err, "failed to bind listener");
+            std::process::exit(1);
+        }
+    };
+
+    if let Err(err) = axum::serve(listener, app).await {
+        tracing::error!(bind_addr = %addr, error = %err, "server terminated with an error");
+        std::process::exit(1);
+    }
 }
