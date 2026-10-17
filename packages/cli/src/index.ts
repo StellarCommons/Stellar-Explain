@@ -94,7 +94,13 @@ program
     if (!Array.isArray(items)) {
       exitProcess(ExitCode.INPUT_ERROR, 'Input must be a JSON array');
     }
+    for (const item of items) {
+      if (!item || typeof item.type !== 'string' || typeof item.identifier !== 'string') {
+        exitProcess(ExitCode.INPUT_ERROR, 'Each batch item must have string "type" and "identifier" fields');
+      }
+    }
     const client = new ApiClient(opts.parent.opts.url);
+    let failures = 0;
     for (const item of items) {
       try {
         let data: unknown;
@@ -104,13 +110,18 @@ program
           data = await client.explainAccount(item.identifier);
         } else {
           printError(`Unknown type: ${item.type}`);
+          failures++;
           continue;
         }
         console.log(JSON.stringify({ type: item.type, identifier: item.identifier, result: data }, null, 2));
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         printError(`Failed: ${item.type} ${item.identifier}: ${msg}`);
+        failures++;
       }
+    }
+    if (failures > 0) {
+      exitProcess(ExitCode.API_ERROR, `${failures} batch item(s) failed`);
     }
   });
 

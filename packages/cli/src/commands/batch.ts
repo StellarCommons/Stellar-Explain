@@ -1,6 +1,7 @@
 import type { Command } from 'commander';
 import * as fs from 'node:fs';
 import { ApiClient } from '../client/api.js';
+import { ExitCode, exitProcess } from '../utils/exit.js';
 import { clampConcurrency, mapWithConcurrency } from '../utils/concurrency.js';
 
 interface BatchItem {
@@ -15,18 +16,21 @@ export function registerBatchCommand(program: Command): void {
     .option('--dry-run', 'Validate input and print planned actions without making API calls', false)
     .option('--concurrency <n>', 'Number of requests to run in parallel (default 3, max 10)', '3')
     .action(async (file: string, opts: { dryRun: boolean; concurrency: string; parent: { opts: { url: string } } }) => {
-      const content = fs.readFileSync(file, 'utf-8');
+      let content: string;
+      try {
+        content = fs.readFileSync(file, 'utf-8');
+      } catch {
+        exitProcess(ExitCode.INPUT_ERROR, `Cannot read file: ${file}`);
+      }
       let items: BatchItem[];
       try {
         items = JSON.parse(content) as BatchItem[];
       } catch {
-        console.error(`Error: invalid JSON in ${file}`);
-        process.exit(1);
+        exitProcess(ExitCode.INPUT_ERROR, `Invalid JSON in ${file}`);
       }
 
       if (!Array.isArray(items)) {
-        console.error('Error: input must be a JSON array');
-        process.exit(1);
+        exitProcess(ExitCode.INPUT_ERROR, 'Input must be a JSON array');
       }
 
       if (opts.dryRun) {
