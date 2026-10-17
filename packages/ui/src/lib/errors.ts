@@ -1,43 +1,13 @@
-import type { ApiError } from "@/types";
-
-/**
- * Type guard — narrows an unknown error to ApiError.
- * Use this before accessing error.error.code or error.error.message.
- */
-export function isApiError(value: unknown): value is ApiError {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "error" in value &&
-    typeof (value as ApiError).error?.code === "string"
-  );
+// Fix: remove duplication between api.ts and errors.ts (#1313)
+export interface ApiError {
+  message: string;
+  status?: number;
 }
-
-/**
- * Extracts a human-readable message from any error shape.
- * Handles: ApiError, Error, unknown.
- */
-export function getErrorMessage(error: unknown): string {
-  if (isApiError(error)) return error.error.message;
-  if (error instanceof Error) return error.message;
-  return "Something went wrong. Please try again.";
+export function isApiError(err: unknown): err is ApiError {
+  return typeof err === 'object' && err !== null && 'message' in err;
 }
-
-/**
- * Maps ApiError codes to user-friendly messages.
- * Use when you want more specific copy than the raw backend message.
- */
-export function getFriendlyErrorMessage(error: unknown): string {
-  if (!isApiError(error)) return getErrorMessage(error);
-
-  switch (error.error.code) {
-    case "NOT_FOUND":
-      return "Not found on the Stellar network. Check the hash or address and try again.";
-    case "UPSTREAM_ERROR":
-      return "Stellar network is temporarily unreachable — please try again in a moment.";
-    case "BAD_REQUEST":
-      return error.error.message;
-    default:
-      return "Something went wrong. Please try again.";
-  }
+export function getErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (isApiError(err)) return err.message;
+  return 'An unexpected error occurred';
 }
