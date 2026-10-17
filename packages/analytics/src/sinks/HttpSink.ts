@@ -1,72 +1,153 @@
 import type { AnalyticsEvent } from '../types.js';
 import type { Emitter } from '../emitter/index.js';
+import { CircuitBreaker, type CircuitState, type CircuitBreakerOptions } from '../lib/circuitBreaker.js';
 
 /**
- * Options for the {@link HttpSink}.
+ * Raised when no `fetch` implementation is available at all.
+ *
+ * Distinct from a network error so callers can tell "this environment cannot
+ * make requests" from "the request failed", which need different handling: the
+ * first is a configuration/environment problem, the second is usually transient.
  */
+export class FetchUnavailableError extends Error {
+  constructor(message = 'Fetch is unavailable in this environment') {
+    super(message);
+    this.name = 'FetchUnavailableError';
+  }
+}
+
+/** Minimal `fetch` shape, so a stub can be injected in tests. */
+export type FetchLike = (
+  url: string,
+  init?: RequestInit,
+) => Promise<{ ok: boolean; status: number }>;
+
+/** Options for the {@link HttpSink}. */
 export interface HttpSinkOptions {
   /** Endpoint the events are POSTed to. */
-  endpoint: string;
+  endpoint?: string;
+  /** Alias of {@link HttpSinkOptions.endpoint}. */
+  url?: string;
   /** Optional API key sent as `Authorization: Bearer <key>`. */
   apiKey?: string;
   /** Extra headers merged into every request. */
   headers?: Record<string, string>;
+  /** Circuit breaker tuning (#81/#83). */
+  circuitBreaker?: CircuitBreakerOptions;
+  /**
+   * Retries after the initial attempt. Default `0`.
+   *
+   * Zero by default so a single `send()` means one HTTP request: a caller that
+   * retries here and again in its own transport would multiply the attempt
+   * count, and `tests/http-sink.test.ts` asserts one `fetch` call per send.
+   */
+  maxRetries?: number;
+  /** Base delay for exponential backoff, in ms. Default 200. */
+  baseDelayMs?: number;
   /**
    * #87 — prefer `navigator.sendBeacon` for `send()`. Useful for
    * fire-and-forget paths (page unload) where beacon is most reliable.
    */
-export interface HttpSinkOptions {
-  endpoint: string;
-  apiKey?: string;
-  headers?: Record<string, string>;
   useBeacon?: boolean;
+  /** Maximum events per request in {@link HttpSink.sendBatch}. Default 50. */
+  batchSize?: number;
+  /** Inject a `fetch` implementation (tests, or non-standard transports). */
+  fetchImpl?: FetchLike;
 }
 
 /**
- * #17, #50, #87 — an `Emitter` that POSTs events to an HTTP(S) endpoint.
+ * #17, #50, #81, #82, #83, #87 — an `Emitter` that POSTs events to an
+ * HTTP(S) endpoint.
  *
- * `send()` uses `fetch`. `sendBeacon()` (new in #87) uses
- * `navigator.sendBeacon` on page unload, falling back to a synchronous
- * `fetch(..., { keepalive: true })` where beacon is unavailable, so the
- * event is not lost when the document is torn down.
- * An `Emitter` that POSTs events to an HTTP(S) endpoint via `fetch`.
+ * Three delivery concerns live here, deliberately in one place rather than
+ * spread across the four class bodies this file used to contain:
  *
- * Throws on non-2xx responses so callers can route failures to a
- * dead-letter / circuit breaker.
+ *  - **transport** — `fetch`, with `navigator.sendBeacon` preferred for the
+ *    page-unload path and a `keepalive` fetch fallback where beacon is absent.
+ *  - **circuit breaking** (#81/#82/#83) — after `failureThreshold` consecutive
+ *    failures the circuit opens and events are skipped rather than sent, until
+ *    the cooldown allows one half-open trial.
+ *  - **retries and dead letters** (#1076/#1077/#1078) — retries with
+ *    exponential backoff; events that exhaust their budget are recorded in the
+ *    dead-letter list instead of being lost silently.
+ *
+ * `send()` rejects on a non-2xx response so callers can route the failure
+ * themselves. `sendBatch()` is the bounded-batch variant used by the ingest
+ * pipeline.
  */
 export class HttpSink implements Emitter {
-  constructor(private readonly options: HttpSinkOptions) {}
+  private readonly endpoint: string;
+  private readonly apiKey?: string;
+  private readonly headers: Record<string, string>;
+  private readonly circuitBreaker: CircuitBreaker;
+  private readonly maxRetries: number;
+  private readonly baseDelayMs: number;
+  private readonly useBeacon: boolean;
+  private readonly batchSize: number;
+  private readonly fetchImpl?: FetchLike;
+  private readonly deadLetters: AnalyticsEvent[] = [];
+
+  constructor(options: HttpSinkOptions) {
+    // `endpoint` is the documented name; `url` is accepted as an alias because
+    // the batching path in ARCHITECTURE.md and tests/analytics-extended.test.ts
+    // use it. Requiring both to be absent is an error rather than a silent
+    // fallback, because "no endpoint" otherwise fails much later as a fetch to
+    // the string "undefined".
+    const endpoint = options.endpoint ?? options.url;
+    if (!endpoint) {
+      throw new TypeError('HttpSink requires an endpoint (or url)');
+    }
+
+    this.endpoint = endpoint;
+    this.apiKey = options.apiKey;
+    this.headers = options.headers ?? {};
+    this.circuitBreaker = new CircuitBreaker(options.circuitBreaker);
+    this.maxRetries = options.maxRetries ?? 0;
+    this.baseDelayMs = options.baseDelayMs ?? 200;
+    this.useBeacon = options.useBeacon ?? false;
+    this.batchSize = options.batchSize ?? 50;
+    this.fetchImpl = options.fetchImpl;
+  }
 
   /**
-   * Send a single event. Awaits the HTTP round-trip and throws on
-   * non-2xx responses so callers can route failures to a dead-letter.
+   * Send a single event, retrying up to `maxRetries` times with exponential
+   * backoff. Throws once the budget is exhausted.
    */
   async send(event: AnalyticsEvent): Promise<void> {
-    if (this.options.useBeacon && this.beaconSupported()) {
+    if (this.useBeacon && this.beaconSupported()) {
       this.sendBeacon(event);
       return;
     }
-  async send(event: AnalyticsEvent): Promise<void> {
-    const response = await fetch(this.options.endpoint, this.requestInit(event));
-    if (!response.ok) {
-      throw new Error(`analytics HTTP ${response.status}`);
+
+    await this.post(event);
+  }
+
+  /**
+   * Send events in bounded batches. Each batch is a separate request with a
+   * JSON array body; a batch that exhausts its retries is dead-lettered as a
+   * whole rather than partially delivered, so a retry cannot double-send the
+   * events that already succeeded.
+   */
+  async sendBatch(events: readonly AnalyticsEvent[]): Promise<void> {
+    for (let offset = 0; offset < events.length; offset += this.batchSize) {
+      const batch = events.slice(offset, offset + this.batchSize);
+      await this.request(this.endpoint, this.batchBody(batch), batch);
     }
   }
 
   /**
    * #87 — best-effort beacon send. Uses `navigator.sendBeacon` when
-   * available, otherwise a synchronous `fetch` with `keepalive`.
+   * available, otherwise a `fetch` with `keepalive`.
    *
    * @returns `true` if the event was handed to the browser, else `false`.
    */
   sendBeacon(event: AnalyticsEvent): boolean {
     if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
       const blob = new Blob([JSON.stringify(event)], { type: 'application/json' });
-      return navigator.sendBeacon(this.options.endpoint, blob);
+      return navigator.sendBeacon(this.endpoint, blob);
     }
-    if (typeof fetch === 'function') {
-      void fetch(this.options.endpoint, this.requestInit(event, true));
-      void fetch(this.options.endpoint, this.requestInit(event));
+    if (this.resolveFetch()) {
+      void this.resolveFetch()!(this.endpoint, this.requestInit(event, true));
       return true;
     }
     return false;
@@ -79,195 +160,107 @@ export class HttpSink implements Emitter {
     return typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function';
   }
 
-  private requestInit(event: AnalyticsEvent, keepalive = false): RequestInit {
-  private requestInit(event: AnalyticsEvent): RequestInit {
-    const headers: Record<string, string> = {
-      'content-type': 'application/json',
-      ...this.options.headers,
-    };
-    if (this.options.apiKey) {
-      headers['authorization'] = `Bearer ${this.options.apiKey}`;
-    }
-    return {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(event),
-      ...(keepalive ? { keepalive: true } : {}),
-    };
-  }
-}
-import type { Emitter } from '../emitter/index.js';
-import type { AnalyticsEvent } from '../types.js';
-import { CircuitBreaker, type CircuitState, type CircuitBreakerOptions } from '../lib/circuitBreaker.js';
-
-export interface HttpSinkOptions {
-  /** The endpoint events are POSTed to. */
-  endpoint: string;
-  /** Optional API key sent as a Bearer token. */
-  apiKey?: string;
-  /** Circuit breaker tuning (#81/#83). */
-  circuitBreaker?: CircuitBreakerOptions;
-}
-
-/**
- * #17 — HTTP transport that POSTs events to a configured endpoint.
- *
- * Analytics #81/#82/#83 — requests are gated by a `CircuitBreaker`: after
- * enough consecutive failures the circuit opens and events are dropped
- * (not sent) until the cooldown elapses and a single half-open trial
- * either closes the circuit again or re-opens it.
- */
-export class HttpSink implements Emitter {
-  private readonly endpoint: string;
-  private readonly apiKey?: string;
-  private readonly circuitBreaker: CircuitBreaker;
-
-export interface HttpSinkOptions {
-  endpoint: string;
-  maxRetries?: number;
-}
-
-/** Emitter that POSTs events to an HTTP endpoint with basic retry logic. */
-export class HttpSink implements Emitter {
-  private readonly endpoint: string;
-  private readonly maxRetries: number;
-  private readonly deadLetter: AnalyticsEvent[] = [];
-
-  constructor(options: HttpSinkOptions) {
-    this.endpoint = options.endpoint;
-    this.maxRetries = options.maxRetries ?? 3;
-  }
-
-  send(event: AnalyticsEvent): void {
-    this.sendWithRetry(event, 0);
-  }
-
-  get deadLetterQueue(): readonly AnalyticsEvent[] {
-    return this.deadLetter;
-  }
-
-  private sendWithRetry(event: AnalyticsEvent, attempt: number): void {
-    fetch(this.endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(event),
-    }).catch(() => {
-      if (attempt < this.maxRetries) {
-        setTimeout(() => this.sendWithRetry(event, attempt + 1), 200 * (attempt + 1));
-      } else {
-        this.deadLetter.push(event);
-      }
-    });
-  apiKey?: string;
-  maxRetries?: number;
-  baseDelayMs?: number;
-  maxRetries?: number;  // default 3
-  baseDelayMs?: number; // default 200ms
-}
-
-export class HttpSink implements Emitter {
-  private readonly endpoint: string;
-  private readonly apiKey?: string;
-  private readonly maxRetries: number;
-  private readonly baseDelayMs: number;
-  private readonly deadLetters: AnalyticsEvent[] = [];
-
-  constructor(options: HttpSinkOptions) {
-    this.endpoint = options.endpoint;
-    this.apiKey = options.apiKey;
-    this.circuitBreaker = new CircuitBreaker(options.circuitBreaker);
-  }
-
-  async send(event: AnalyticsEvent): Promise<void> {
-    if (!this.circuitBreaker.canProceed()) {
-      // Circuit open — drop the request rather than attempting it.
-      return;
-    }
-
-    try {
-      const response = await fetch(this.endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}),
-        },
-        body: JSON.stringify(event),
-      });
-
-      if (!response.ok) {
-        this.circuitBreaker.recordFailure();
-        return;
-      }
-
-      this.circuitBreaker.recordSuccess();
-    } catch {
-      this.circuitBreaker.recordFailure();
-    }
-  }
-
-  /** Analytics #82 — exposes the underlying circuit breaker's current state. */
+  /** Analytics #82 — the underlying circuit breaker's current state. */
   getCircuitState(): CircuitState {
     return this.circuitBreaker.getState();
-    this.maxRetries = options.maxRetries ?? 3;
-    this.baseDelayMs = options.baseDelayMs ?? 200;
   }
 
-  async send(event: AnalyticsEvent): Promise<void> {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-    if (this.apiKey) {
-      headers['Authorization'] = `Bearer ${this.apiKey}`;
-    }
-
-    let lastError: unknown;
-    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
-      try {
-        const res = await fetch(this.endpoint, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(event),
-        });
-        if (res.ok) return;
-        throw new Error(`HTTP ${res.status}`);
-      } catch (err) {
-        lastError = err;
-        if (attempt < this.maxRetries) {
-          const delay = this.baseDelayMs * Math.pow(2, attempt - 1);
-          await new Promise(resolve => setTimeout(resolve, delay));
-    let attempt = 0;
-    while (attempt <= this.maxRetries) {
-      try {
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-        if (this.apiKey) headers['Authorization'] = `Bearer ${this.apiKey}`;
-        const res = await fetch(this.endpoint, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify([event]),
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return;
-      } catch (err) {
-        attempt++;
-        if (attempt > this.maxRetries) {
-          this.deadLetters.push(event);
-          return;
-        }
-        // exponential backoff: baseDelay * 2^(attempt-1)
-        await new Promise(r => setTimeout(r, this.baseDelayMs * Math.pow(2, attempt - 1)));
-      }
-    }
-
-    this.deadLetters.push(event);
-    throw lastError;
-  }
-
+  /** #1078 — events whose delivery exhausted its retry budget. */
   getDeadLetters(): AnalyticsEvent[] {
     return [...this.deadLetters];
   }
 
   clearDeadLetters(): void {
     this.deadLetters.length = 0;
-    this.deadLetters.splice(0, this.deadLetters.length);
+  }
+
+  // ── internals ───────────────────────────────────────────────────────────────
+
+  private resolveFetch(): FetchLike | undefined {
+    const candidate = this.fetchImpl ?? (typeof fetch === 'function' ? (fetch as unknown as FetchLike) : undefined);
+    return candidate;
+  }
+
+  private async post(event: AnalyticsEvent): Promise<void> {
+    await this.request(this.endpoint, JSON.stringify(event), [event]);
+  }
+
+  /** POST `body`, applying the circuit breaker, retries and dead-lettering. */
+  private async request(
+    url: string,
+    body: string,
+    deadLetterOnFailure: readonly AnalyticsEvent[],
+  ): Promise<void> {
+    if (!this.circuitBreaker.canProceed()) {
+      // Circuit open — record the event rather than dropping it silently, so an
+      // outage is recoverable instead of lossy.
+      this.deadLetterAll(deadLetterOnFailure);
+      return;
+    }
+
+    const doFetch = this.resolveFetch();
+    if (!doFetch) {
+      this.circuitBreaker.recordFailure();
+      throw new FetchUnavailableError();
+    }
+
+    let lastStatus = 0;
+    let lastError: unknown;
+
+    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+      if (attempt > 0) {
+        await this.delay(this.baseDelayMs * Math.pow(2, attempt - 1));
+      }
+
+      try {
+        const response = await doFetch(url, this.init(body));
+        if (response.ok) {
+          this.circuitBreaker.recordSuccess();
+          return;
+        }
+        lastStatus = response.status;
+        lastError = new Error(`analytics HTTP ${response.status}`);
+      } catch (error) {
+        lastError = error;
+      }
+      this.circuitBreaker.recordFailure();
+    }
+
+    // Budget exhausted: record for later, then surface the failure.
+    this.deadLetterAll(deadLetterOnFailure);
+    if (lastStatus > 0) throw new Error(`analytics HTTP ${lastStatus}`);
+    throw lastError;
+  }
+
+  private deadLetterAll(events: readonly AnalyticsEvent[]): void {
+    this.deadLetters.push(...events);
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private batchBody(events: readonly AnalyticsEvent[]): string {
+    return JSON.stringify(events);
+  }
+
+  private init(body: string, keepalive = false): RequestInit {
+    const headers: Record<string, string> = {
+      'content-type': 'application/json',
+      ...this.headers,
+    };
+    if (this.apiKey) {
+      headers['authorization'] = `Bearer ${this.apiKey}`;
+    }
+    return {
+      method: 'POST',
+      headers,
+      body,
+      ...(keepalive ? { keepalive: true } : {}),
+    };
+  }
+
+  private requestInit(event: AnalyticsEvent, keepalive = false): RequestInit {
+    return this.init(JSON.stringify(event), keepalive);
   }
 }
