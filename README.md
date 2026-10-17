@@ -83,13 +83,14 @@ See `packages/cli/README.md` for full documentation.
 
 ## 🏗️ Architecture Overview
 
-Stellar Explain is a **monorepo** with three packages:
+Stellar Explain is a **monorepo** with four packages:
 
 ```
 packages/
-├── core/     # Rust/Axum backend — the source of truth
-├── ui/       # Next.js 15 frontend — proxies all API calls server-side
-└── cli/      # Node.js CLI — query the backend from your terminal
+├── core/       # Rust/Axum backend — the source of truth
+├── ui/         # Next.js 15 frontend — proxies all API calls server-side
+├── cli/        # Node.js CLI — query the backend from your terminal
+└── analytics/  # TypeScript analytics client — powers anonymous usage metrics
 ```
 
 | Layer | Tech | Role |
@@ -97,6 +98,7 @@ packages/
 | Backend | Rust + Axum | Fetches from Stellar Horizon, produces human-readable JSON |
 | Frontend | Next.js 15 | Proxy routes keep the backend URL server-side only |
 | CLI | Node.js | `stellar-explain tx <hash>` from your terminal |
+| Analytics | TypeScript | Validates, queues, and delivers anonymous events to the backend |
 
 ### Key principles
 - Backend is the primary product
@@ -147,6 +149,11 @@ Join the Telegram group to ask questions or coordinate with maintainers:
 
 Stellar Explain collects **anonymous** usage analytics. No PII is collected,
 session IDs are ephemeral, and DNT headers are respected.
+
+The **`@stellar-explain/analytics`** package is the TypeScript client that
+validates, queues, and delivers these events to the backend. See
+[`packages/analytics/README.md`](./packages/analytics/README.md) for its API,
+configuration, and development guide.
 
 ### What is tracked?
 
