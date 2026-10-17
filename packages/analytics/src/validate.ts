@@ -1,42 +1,33 @@
 /**
- * Validates that every value inside `props` is serializable to JSON.
+ * Validates that every value inside `properties` is serializable to JSON.
  *
  * Throws a `TypeError` if:
  * - Any top-level value is a `function`, or
  * - `JSON.stringify` throws (e.g. circular references).
+ *
+ * Note that the event *name* is deliberately not validated here. Callers
+ * validate the name in `AnalyticsClient.track()`, where it is available;
+ * keeping it out of this function is what lets `properties` be passed straight
+ * through from callers that never handle a name (plugins, middleware, tests).
  *
  * @param props - The properties object attached to an analytics event.
  * @throws {TypeError} When non-serializable values are detected.
  */
 export function validateProperties(props: Record<string, unknown>): void {
   // Fast path: reject any explicit function values before trying JSON.stringify.
+  // A function serializes to `undefined` rather than throwing, so this is the
+  // only check that catches it — the try/catch below would pass it silently and
+  // the property would vanish from the event instead of raising.
   for (const value of Object.values(props)) {
     if (typeof value === 'function') {
       throw new TypeError('Properties contain non-serializable values');
     }
   }
 
-  // Catch circular references and any other JSON.stringify-level failures.
- * Validates event properties.
- * Throws TypeError when the event name is empty.
- */
-export function validateProperties(name: string, properties: Record<string, unknown>): void {
-  if (!name || name.trim().length === 0) {
-    throw new TypeError('Event name must not be empty.');
-  }
-  if (typeof properties !== 'object' || properties === null || Array.isArray(properties)) {
-    throw new TypeError('Event properties must be a plain object.');
-export function validateProperties(properties: Record<string, unknown>): void {
-  for (const [key, value] of Object.entries(properties)) {
-    if (typeof value === 'function') {
-      throw new TypeError(`Property "${key}" must not be a function`);
-    }
-  }
-  // Check for circular references
+  // Catch circular references and any other JSON.stringify-level failure.
   try {
-    JSON.stringify(properties);
+    JSON.stringify(props);
   } catch {
-    throw new TypeError('Properties contain circular references');
-    throw new TypeError('Properties contain a circular reference');
+    throw new TypeError('Properties contain non-serializable values');
   }
 }
