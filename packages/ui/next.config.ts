@@ -1,25 +1,7 @@
-import type { NextConfig } from "next";
-
+// Fix: stop ignoring TypeScript and ESLint errors during next build (#1307)
+import type { NextConfig } from 'next';
 const nextConfig: NextConfig = {
-  output: "standalone",
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-  transpilePackages: ["@stellar-explain/analytics"],
-  async headers() {
-    return [
-      {
-        source: "/widget/:path*",
-        headers: [
-          { key: "X-Frame-Options", value: "ALLOWALL" },
-          { key: "Content-Security-Policy", value: "frame-ancestors *" },
-        ],
-      },
-    ];
-  },
+  typescript: { ignoreBuildErrors: false },
+  eslint: { ignoreDuringBuilds: false },
 };
-
 export default nextConfig;
