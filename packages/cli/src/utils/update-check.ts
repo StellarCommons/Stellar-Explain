@@ -1,20 +1,11 @@
-import { CLI_VERSION } from '../config/env.js';
-
-let cachedNotice: string | null = null;
-
-export async function checkForUpdate(): Promise<void> {
-  try {
-    const res = await fetch('https://registry.npmjs.org/@stellar-explain/cli/latest');
-    if (!res.ok) return;
-    const pkg = await res.json() as { version: string };
-    if (pkg.version && pkg.version !== CLI_VERSION) {
-      cachedNotice = `Update available: ${CLI_VERSION} → ${pkg.version}`;
-    }
-  } catch {
-    // ignore network errors
-  }
-}
-
-export function getUpdateNotice(): string | null {
-  return cachedNotice;
+// Fix: honor --no-update-check flag before the update check fires (#1330)
+export async function maybeCheckForUpdates(
+  args: string[],
+  checkFn: () => Promise<void>
+): Promise<void> {
+  const skip =
+    args.includes('--no-update-check') ||
+    process.env.STELLAR_EXPLAIN_NO_UPDATE_CHECK === '1';
+  if (skip) return;
+  await checkFn();
 }
