@@ -148,7 +148,7 @@ Join the Telegram group to ask questions or coordinate with maintainers:
 ## 📊 Analytics
 
 Stellar Explain collects **anonymous** usage analytics. No PII is collected,
-session IDs are ephemeral, and DNT headers are respected.
+and session IDs are ephemeral.
 
 The **`@stellar-explain/analytics`** package is the TypeScript client that
 validates, queues, and delivers these events to the backend. See
@@ -168,7 +168,7 @@ configuration, and development guide.
 
 ### How to opt out
 
-Set the `DNT: 1` HTTP header, or use `--no-analytics` in the CLI.
+Opt-out via the `DNT` header or a CLI `--no-analytics` flag is not implemented yet.
 
 ### Privacy
 

@@ -227,10 +227,13 @@ The analytics pipeline requires the following environment variables:
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `ANALYTICS_READ_TOKEN` | No | — | Bearer token for analytics read endpoints (`GET /analytics/*`) |
-| `ANALYTICS_WRITE_TOKEN` | No | — | Bearer token for analytics write endpoint (`POST /analytics/ingest`) |
+| `ANALYTICS_LOG_PATH` | No | `./analytics.ndjson` | File where the backend persists analytics events (NDJSON) |
+| `LOG_FORMAT` | No | — | Backend log output format |
 
-If set, the ingest endpoint requires `Authorization: Bearer <ANALYTICS_WRITE_TOKEN>`
-on each request. Read endpoints similarly require `ANALYTICS_READ_TOKEN`.
+Events are ingested via `POST /analytics/events`. Read endpoints require
+`Authorization: Bearer <ANALYTICS_READ_TOKEN>` when it is set. Note: the UI proxy
+(`packages/ui/src/app/api/analytics/ingest/route.ts`) still forwards to
+`/analytics/ingest` and needs a follow-up fix.
 
 These tokens are not required for local development but should be configured in
 production deployments (see CI secrets in repository Settings).
