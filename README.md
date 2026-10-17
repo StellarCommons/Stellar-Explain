@@ -71,7 +71,7 @@ npx @stellar-explain/cli tx <hash>
 stellar-explain tx b9d0b2292c4e09e8eb22d036171491e87b8d2086bf8b265874c8d182cb9c9020
 
 # Explain an account
-stellar-explain account GA4SX4J5H7J4KJQ2J3X4Z5M6N7P8Q9R0ASDFGHJKL
+stellar-explain account GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN7
 
 # Check backend health
 stellar-explain health
