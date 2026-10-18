@@ -7,7 +7,7 @@ set -euo pipefail
 # Batch file format (JSON array):
 # [
 #   {"type": "tx", "identifier": "b9d0b2292c4e09e8eb22d036171491e87b8d2086bf8b265874c8d182cb9c9020"},
-#   {"type": "account", "identifier": "GA4SX4J5H7J4KJQ2J3X4Z5M6N7P8Q9R0ASDFGHJKL"}
+#   {"type": "account", "identifier": "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN7"}
 # ]
 
 FILE="${1:?Usage: $0 <batch-file>}"

@@ -1,7 +1,7 @@
 {
   "name": "@stellar-explain/cli",
   "version": "0.1.0",
-  "description": "CLI for Stellar Explain â€” query the backend from your terminal",
+  "description": "CLI for Stellar Explain - query the backend from your terminal",
   "bin": {
     "stellar-explain": "./bin/stellar-explain"
   },
