@@ -105,7 +105,9 @@ pub async fn get_account_transactions(
     let limit = params.limit.unwrap_or(10);
 
     if limit == 0 || limit > 50 {
-        let app_error = AppError::BadRequest("limit must be between 1 and 50".to_string());
+        let app_error = AppError::Validation(ValidationError::InvalidLimit(
+            "must be between 1 and 50".to_string(),
+        ));
         info!(
             request_id = %request_id,
             address = %address,

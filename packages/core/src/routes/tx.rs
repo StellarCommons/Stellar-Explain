@@ -9,7 +9,7 @@ use tracing::{error, info, info_span};
 use utoipa::ToSchema;
 
 use crate::{
-    errors::AppError,
+    errors::{AppError, ValidationError},
     explain::transaction::{TransactionExplanation, explain_transaction_with_ledger},
     middleware::request_id::RequestId,
     services::{explain::map_transaction_to_domain, horizon::HorizonClient},
@@ -55,9 +55,9 @@ pub async fn get_tx_explanation(
     );
 
     if !is_valid_transaction_hash(&hash) {
-        let app_error = AppError::BadRequest(
-            "Invalid transaction hash format. Expected 64-character hexadecimal hash.".to_string(),
-        );
+        let app_error = AppError::Validation(ValidationError::InvalidTransactionHash(
+            "Expected 64-character hexadecimal hash.".to_string(),
+        ));
         info!(
             request_id = %request_id,
             hash = %hash,

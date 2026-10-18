@@ -49,6 +49,12 @@ pub enum ValidationError {
 
     #[error("Invalid payment intent: {0}")]
     InvalidPaymentIntent(String),
+
+    #[error("Invalid transaction hash: {0}")]
+    InvalidTransactionHash(String),
+
+    #[error("Invalid limit: {0}")]
+    InvalidLimit(String),
 }
 
 impl ValidationError {
@@ -67,6 +73,8 @@ impl ValidationError {
             ValidationError::InvalidAsset(_) => "INVALID_ASSET",
             ValidationError::InvalidMemo(_) => "INVALID_MEMO",
             ValidationError::InvalidPaymentIntent(_) => "INVALID_PAYMENT_INTENT",
+            ValidationError::InvalidTransactionHash(_) => "INVALID_TRANSACTION_HASH",
+            ValidationError::InvalidLimit(_) => "INVALID_LIMIT",
         }
     }
 }

@@ -1,32 +1,11 @@
-```md
 # Stellar Explain – Core (Backend)
 
-This package contains the **Rust backend** for Stellar Explain.
+This package contains the **Rust/Axum backend** for Stellar Explain.
 
-The backend is responsible for:
-- Fetching data from Stellar Horizon
-- Converting raw blockchain data into internal domain models
-- Producing clear, human-readable explanations
-
----
-
-## 🎯 Scope (v1)
-
-Backend v1 focuses on **one thing only**:
-
-> **Explaining Stellar payment transactions**
-
-Specifically:
-- Fetch a transaction by hash
-- Identify payment operations
-- Produce plain-English explanations
-- Return structured JSON responses
-
-Out of scope for v1:
-- Account summaries
-- Non-payment operations
-- Frontend concerns
-- Smart contracts
+The backend:
+- Fetches data from Stellar Horizon
+- Converts raw blockchain data into internal domain models
+- Produces clear, human-readable explanations as structured JSON
 
 ---
 
@@ -40,35 +19,19 @@ Out of scope for v1:
 
 ---
 
-## 🗂️ Module Layout (Target)
+## 🗂️ Module Layout
 
 ```
-
 src/
-├── main.rs          # Application entry point
-├── app.rs           # Router & middleware setup
-├── config.rs        # Environment & config
-├── state.rs         # Shared app state
-│
+├── main.rs          # Entry point and router setup
 ├── routes/          # HTTP layer (thin)
-│   └── tx.rs
-│
-├── services/        # Orchestration & IO
-│   ├── horizon.rs
-│   └── explain.rs
-│
+├── services/        # Orchestration & IO (Horizon client)
 ├── explain/         # Core explanation logic
-│   ├── transaction.rs
-│   └── operation/
-│       └── payment.rs
-│
 ├── models/          # Internal domain models
-│   ├── transaction.rs
-│   └── operation.rs
-│
+├── middleware/      # Request ID middleware
+├── analytics/       # Event ingestion and persistence
 └── errors.rs        # Unified error handling
-
-````
+```
 
 ---
 
@@ -76,94 +39,44 @@ src/
 
 ```bash
 cargo run
-````
+```
 
-By default, the server runs on port **4000**.
+By default the server runs on port **4000**.
 
-### Health check
+### Environment variables
+
+| Variable | Description |
+|----------|-------------|
+| `PORT` / `BIND_ADDR` | Port and bind address |
+| `STELLAR_NETWORK` | Stellar network to use |
+| `HORIZON_URL` | Horizon base URL |
+| `CORS_ORIGIN` | Allowed CORS origin |
+| `LOG_FORMAT` | Set to `json` for JSON logs |
+| `ANALYTICS_LOG_PATH` | File where analytics events are persisted (NDJSON) |
+| `ANALYTICS_READ_TOKEN` | Bearer token for analytics read endpoints |
+
+### Endpoints
+
+- `GET /health` – returns JSON: `status`, `network`, `horizon_reachable`, `version`
+- `GET /tx/:hash` – human-readable explanation of a transaction
+- `GET /account/:address` – account explanation
+- `GET /account/:address/history` – account transactions (`limit` 1-50, `cursor`, `order`)
+- `POST /analytics/events` – ingest an analytics event
+- `GET /analytics/summary` – analytics summary
+- `GET /docs` – Swagger UI (OpenAPI spec at `/openapi.json`)
 
 ```bash
 curl http://localhost:4000/health
-```
-
-Expected response:
-
-```
-ok
-```
-
-### GET /tx/:hash
-
-Returns a human-readable explanation of a Stellar transaction.
-
-```bash
 curl http://localhost:4000/tx/<transaction-hash>
 ```
 
-### GET /tx/:hash/raw
-
-Returns the raw, unprocessed JSON response from Horizon for the given transaction hash. Useful for developers and power users who want direct access to the full Horizon data.
-
-```bash
-curl http://localhost:4000/tx/<transaction-hash>/raw
-```
-
-Applies the same error handling as `/tx/:hash` — 400 for invalid hashes, 404 for not found, 502 for upstream failures.
+Validation errors return stable codes, e.g. `INVALID_TRANSACTION_HASH`, `INVALID_LIMIT`, `INVALID_ADDRESS_LENGTH`.
 
 ---
-
-## 🧪 Testing
-
-All backend contributions **must include tests**.
-
-Run tests with:
-
-```bash
-cargo test
-```
-
----
-
-## 🤝 Contributing to Core
-
-* Pick an issue from the current backend milestone
-* Keep changes focused and incremental
-* Avoid introducing unused abstractions
-* Follow the existing module boundaries
-
-### 💬 Need Help?
-
-Join the maintainer Telegram group:
-👉 **[https://t.me/+n10W2fqjxBhmNDM0](https://t.me/+n10W2fqjxBhmNDM0)**
-
----
-
-## 🚦 Status
-
-🚧 Early development, intentionally minimal.
-
-The backend will grow **one operation type at a time**.
-
-```
-
----
-
-## ✅ What This Achieves
-
-- Clear **vision** without overpromising
-- Strong alignment with the **Drips issue philosophy**
-- Reduced contributor friction
-- Easy onboarding for both FE & BE contributors
-- A roadmap that scales without rewrites
-
----
-```
 
 ## 🔍 Structured Logging and Request Tracing
 
-The backend emits structured logs for each request. Logs include request-scoped tracing fields and timing metrics for Horizon fetches and explanation work.
-
-Set `LOG_FORMAT=json` to emit JSON logs:
+The backend emits structured logs for each request. Set `LOG_FORMAT=json` to emit JSON logs:
 
 ```bash
 LOG_FORMAT=json cargo run
@@ -171,12 +84,24 @@ LOG_FORMAT=json cargo run
 
 ### Log fields
 
-- `request_id`: UUID generated per request by middleware and also returned as `x-request-id` response header
+- `request_id`: UUID generated per request, also returned as the `x-request-id` response header
 - `hash`: transaction hash for `/tx/{hash}` requests
 - `address`: account address for `/account/{address}` requests
 - `horizon_fetch_duration_ms`: time spent waiting on Horizon calls
-- `explain_duration_ms`: time spent generating explanation output (transaction explain route)
+- `explain_duration_ms`: time spent generating explanation output
 - `total_duration_ms`: total handler response time
 - `status`: HTTP status code emitted by the handler
 - `upstream_error`: upstream failure marker when Horizon is unreachable or fails
-- `fee_stats_available`: whether Horizon `fee_stats` was available for the transaction explanation request
+- `fee_stats_available`: whether Horizon `fee_stats` was available for the request
+
+---
+
+## 🧪 Testing
+
+```bash
+cargo test
+```
+
+## 🤝 Contributing
+
+Keep changes focused and follow the existing module boundaries. Join the maintainer Telegram group: https://t.me/+n10W2fqjxBhmNDM0
