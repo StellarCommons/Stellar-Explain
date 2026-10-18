@@ -32,12 +32,15 @@ Each event includes:
 
 ## Do Not Track (DNT)
 
-We respect the `DNT` (Do Not Track) header. If your browser sends a DNT
-signal, analytics tracking is disabled entirely.
+The `DNT` (Do Not Track) header is not currently honored; this is planned
+but not implemented.
 
 ## Data Retention
 
-Events are stored temporarily in memory and are not persisted to disk or
+Events are buffered in memory and flushed by the backend to an NDJSON file on
+disk (`ANALYTICS_LOG_PATH`, default `./analytics.ndjson`). Only the event
+name and timestamp are stored. There is no automatic retention period; the
+operator is responsible for rotating or deleting the file. Events are not
 distributed. Session IDs are regenerated on each page load.
 
 ## Data Sharing
@@ -49,8 +52,8 @@ Aggregated, anonymized metrics may be shared publicly (e.g. open dashboard).
 
 To disable analytics tracking:
 
-- Set `DNT: 1` in your browser headers, or
-- Use the `--no-analytics` flag if using the CLI.
+Opt-out via the `DNT` header or a CLI `--no-analytics` flag is not yet
+implemented.
 
 ## Contact
 
