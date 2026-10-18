@@ -1,5 +1,4 @@
 import * as fs from 'node:fs';
-import * as path from 'node:path';
 import { getCacheDir, getHistoryFile } from '../config/env.js';
 
 export interface HistoryEntry {
