@@ -25,7 +25,7 @@ export { NoopEmitter } from './emitter/NoopEmitter.js';
 // ── Sinks ────────────────────────────────────────────────────────────────────
 export { MultiSink, FanOutSink } from './sinks/MultiSink.js';
 export { ConsoleSink } from './sinks/ConsoleSink.js';
-export { HttpSink, FetchUnavailableError } from './sinks/HttpSink.js';
+export { HttpSink, FetchUnavailableError, CircuitOpenError } from './sinks/HttpSink.js';
 export type { FetchLike, HttpSinkOptions } from './sinks/HttpSink.js';
 
 // ── Client ───────────────────────────────────────────────────────────────────

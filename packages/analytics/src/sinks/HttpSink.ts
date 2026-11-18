@@ -2,6 +2,10 @@ import type { AnalyticsEvent } from '../types.js';
 import type { Emitter } from '../emitter/index.js';
 import { CircuitBreaker, type CircuitState, type CircuitBreakerOptions } from '../lib/circuitBreaker.js';
 
+function utf8ByteLength(value: string): number {
+  return new TextEncoder().encode(value).length;
+}
+
 /**
  * Raised when no `fetch` implementation is available at all.
  *
@@ -13,6 +17,14 @@ export class FetchUnavailableError extends Error {
   constructor(message = 'Fetch is unavailable in this environment') {
     super(message);
     this.name = 'FetchUnavailableError';
+  }
+}
+
+/** Raised when delivery is skipped because this sink's circuit breaker is open. */
+export class CircuitOpenError extends Error {
+  constructor(message = 'HttpSink circuit is open') {
+    super(message);
+    this.name = 'CircuitOpenError';
   }
 }
 
@@ -51,6 +63,13 @@ export interface HttpSinkOptions {
   useBeacon?: boolean;
   /** Maximum events per request in {@link HttpSink.sendBatch}. Default 50. */
   batchSize?: number;
+  /**
+   * Maximum serialized UTF-8 bytes per batch body. Default 500 KiB, below the
+   * 512KB ingest limit. A single event larger than this is still sent alone.
+   */
+  maxBatchBytes?: number;
+  /** Alias of {@link HttpSinkOptions.maxBatchBytes}. */
+  maxBatchBodyBytes?: number;
   /** Inject a `fetch` implementation (tests, or non-standard transports). */
   fetchImpl?: FetchLike;
 }
@@ -84,6 +103,7 @@ export class HttpSink implements Emitter {
   private readonly baseDelayMs: number;
   private readonly useBeacon: boolean;
   private readonly batchSize: number;
+  private readonly maxBatchBytes: number;
   private readonly fetchImpl?: FetchLike;
   private readonly deadLetters: AnalyticsEvent[] = [];
 
@@ -106,6 +126,7 @@ export class HttpSink implements Emitter {
     this.baseDelayMs = options.baseDelayMs ?? 200;
     this.useBeacon = options.useBeacon ?? false;
     this.batchSize = options.batchSize ?? 50;
+    this.maxBatchBytes = options.maxBatchBytes ?? options.maxBatchBodyBytes ?? 500 * 1024;
     this.fetchImpl = options.fetchImpl;
   }
 
@@ -129,8 +150,27 @@ export class HttpSink implements Emitter {
    * events that already succeeded.
    */
   async sendBatch(events: readonly AnalyticsEvent[]): Promise<void> {
-    for (let offset = 0; offset < events.length; offset += this.batchSize) {
-      const batch = events.slice(offset, offset + this.batchSize);
+    const batches: AnalyticsEvent[][] = [];
+    let current: AnalyticsEvent[] = [];
+    let bytes = 2;
+
+    for (const event of events) {
+      const eventBytes = utf8ByteLength(JSON.stringify(event));
+      const added = eventBytes + (current.length > 0 ? 1 : 0);
+      if (
+        current.length > 0 &&
+        (current.length >= this.batchSize || bytes + added > this.maxBatchBytes)
+      ) {
+        batches.push(current);
+        current = [];
+        bytes = 2;
+      }
+      current.push(event);
+      bytes += eventBytes + (current.length > 1 ? 1 : 0);
+    }
+    if (current.length > 0) batches.push(current);
+
+    for (const batch of batches) {
       await this.request(this.endpoint, this.batchBody(batch), batch);
     }
   }
@@ -193,9 +233,10 @@ export class HttpSink implements Emitter {
   ): Promise<void> {
     if (!this.circuitBreaker.canProceed()) {
       // Circuit open — record the event rather than dropping it silently, so an
-      // outage is recoverable instead of lossy.
+      // outage is recoverable instead of lossy. Surface the skip as a failure so
+      // callers do not mistake it for a successful delivery.
       this.deadLetterAll(deadLetterOnFailure);
-      return;
+      throw new CircuitOpenError();
     }
 
     const doFetch = this.resolveFetch();
