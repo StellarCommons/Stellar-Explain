@@ -88,13 +88,6 @@ export {
 export { isBrowser } from './env.js';
 export { OptOutManager, optOutManager } from './optout.js';
 
-// ── React bindings ──────────────────────────────────────────────────────────
-export { AnalyticsProvider, AnalyticsContext } from './react/provider.js';
-export type { AnalyticsProviderProps } from './react/provider.js';
-export { useAnalytics } from './react/useAnalytics.js';
-export { useTrackEvent } from './react/useTrackEvent.js';
-export { usePageView } from './react/usePageView.js';
-
 // ── Environment detection (#1084/#1085/#1086) ───────────────────────────────
 export { getDeviceType } from './device.js';
 export type { DeviceType } from './device.js';
