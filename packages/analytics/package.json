@@ -8,6 +8,22 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "import": "./dist/react/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "sideEffects": [
+    "./dist/index.js",
+    "./dist/utils/node-check.js",
+    "./dist/optout.js"
+  ],
   "files": [
     "dist"
   ],

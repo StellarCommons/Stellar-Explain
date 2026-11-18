@@ -103,12 +103,11 @@ export class AnalyticsClient {
     // #86 — restore any queue persisted by #85 across a page unload.
     const restored = loadPersistedQueue();
     if (restored.length > 0) {
-      clearPersistedQueue();
       for (const event of restored) {
         this.queue.enqueue(event);
       }
       this.logger.debug(`restored ${restored.length} persisted events`);
-      void this.flush();
+      void this.flushRestoredQueue();
     }
 
     // #72/#1072 — start the auto-flush timer if configured.
@@ -282,6 +281,14 @@ export class AnalyticsClient {
         }
       }),
     );
+  }
+
+  private async flushRestoredQueue(): Promise<void> {
+    const deadLettersBefore = this.deadLetter.size;
+    await this.flush();
+    if (this.deadLetter.size === deadLettersBefore && this.queue.size === 0) {
+      clearPersistedQueue();
+    }
   }
 
   /**
