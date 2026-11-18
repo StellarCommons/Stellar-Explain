@@ -1,4 +1,5 @@
 import type { AnalyticsEvent } from './types.js';
+import type { CircuitBreakerOptions } from './lib/circuitBreaker.js';
 
 /**
  * Configuration options for the Analytics client.
@@ -26,6 +27,8 @@ export interface AnalyticsConfig {
   endpointConfig?: Record<string, string>;
   /** #93 — client-side send rate cap (events per second). Default: 100. */
   maxEventsPerSecond?: number;
+  /** #94 — tuning for the client-owned circuit breaker. */
+  circuitBreaker?: CircuitBreakerOptions;
   /** #89 — when true (default) track() scrubs PII from event properties. */
   scrubPii?: boolean;
   /**

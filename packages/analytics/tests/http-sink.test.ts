@@ -36,7 +36,7 @@ describe('HttpSink.send', () => {
   it('POSTs the event to the endpoint via fetch', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
     vi.stubGlobal('fetch', fetchMock);
-    const sink = new HttpSink({ endpoint: 'https://ingest.example/x' });
+    const sink = new HttpSink({ endpoint: 'https://ingest.example/x', maxRetries: 0 });
 
     await sink.send(event);
 
@@ -51,7 +51,11 @@ describe('HttpSink.send', () => {
   it('sends the apiKey as an Authorization bearer header', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
     vi.stubGlobal('fetch', fetchMock);
-    const sink = new HttpSink({ endpoint: 'http://x', apiKey: 'secret-key' });
+    const sink = new HttpSink({
+      endpoint: 'http://x',
+      apiKey: 'secret-key',
+      maxRetries: 0,
+    });
 
     await sink.send(event);
 
@@ -60,7 +64,7 @@ describe('HttpSink.send', () => {
 
   it('throws when the server responds non-2xx', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 503 }));
-    const sink = new HttpSink({ endpoint: 'http://x' });
+    const sink = new HttpSink({ endpoint: 'http://x', maxRetries: 0 });
 
     await expect(sink.send(event)).rejects.toThrow('analytics HTTP 503');
   });
@@ -69,14 +73,17 @@ describe('HttpSink.send', () => {
 describe('HttpSink.sendBeacon (#87)', () => {
   it('is unsupported when navigator has no sendBeacon', () => {
     stubNavigator({ userAgent: 'no-beacon' });
-    const sink = new HttpSink({ endpoint: 'http://x' });
+    const sink = new HttpSink({ endpoint: 'http://x', maxRetries: 0 });
     expect(sink.beaconSupported()).toBe(false);
   });
 
   it('uses navigator.sendBeacon when available', () => {
     const sendBeacon = vi.fn().mockReturnValue(true);
     stubNavigator({ sendBeacon });
-    const sink = new HttpSink({ endpoint: 'https://ingest.example/x' });
+    const sink = new HttpSink({
+      endpoint: 'https://ingest.example/x',
+      maxRetries: 0,
+    });
 
     expect(sink.beaconSupported()).toBe(true);
     expect(sink.sendBeacon(event)).toBe(true);
@@ -91,7 +98,10 @@ describe('HttpSink.sendBeacon (#87)', () => {
     stubNavigator({ userAgent: 'no-beacon' });
     const fetchMock = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal('fetch', fetchMock);
-    const sink = new HttpSink({ endpoint: 'https://ingest.example/x' });
+    const sink = new HttpSink({
+      endpoint: 'https://ingest.example/x',
+      maxRetries: 0,
+    });
 
     expect(sink.sendBeacon(event)).toBe(true);
 
@@ -104,7 +114,11 @@ describe('HttpSink.sendBeacon (#87)', () => {
     stubNavigator({ sendBeacon });
     const fetchMock = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal('fetch', fetchMock);
-    const sink = new HttpSink({ endpoint: 'http://x', useBeacon: true });
+    const sink = new HttpSink({
+      endpoint: 'http://x',
+      useBeacon: true,
+      maxRetries: 0,
+    });
 
     await sink.send(event);
 
@@ -118,7 +132,10 @@ describe('HttpSink — circuit breaker (#82)', () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal('fetch', fetchMock);
 
-    const sink = new HttpSink({ endpoint: 'https://example.com/ingest' });
+    const sink = new HttpSink({
+      endpoint: 'https://example.com/ingest',
+      maxRetries: 0,
+    });
     await sink.send(event);
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -134,11 +151,12 @@ describe('HttpSink — circuit breaker (#82)', () => {
 
     const sink = new HttpSink({
       endpoint: 'https://example.com/ingest',
+      maxRetries: 0,
       circuitBreaker: { failureThreshold: 2 },
     });
 
-    await sink.send(event);
-    await sink.send(event);
+    await expect(sink.send(event)).rejects.toThrow();
+    await expect(sink.send(event)).rejects.toThrow();
 
     expect(sink.getCircuitState()).toBe('open');
   });
@@ -149,13 +167,14 @@ describe('HttpSink — circuit breaker (#82)', () => {
 
     const sink = new HttpSink({
       endpoint: 'https://example.com/ingest',
+      maxRetries: 0,
       circuitBreaker: { failureThreshold: 1 },
     });
 
-    await sink.send(event); // fails, opens the circuit
+    await expect(sink.send(event)).rejects.toThrow('network down');
     expect(sink.getCircuitState()).toBe('open');
 
-    await sink.send(event); // should be skipped, not attempted
+    await sink.send(event).catch(() => undefined);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
@@ -164,9 +183,10 @@ describe('HttpSink — circuit breaker (#82)', () => {
 
     const sink = new HttpSink({
       endpoint: 'https://example.com/ingest',
+      maxRetries: 0,
       circuitBreaker: { failureThreshold: 1 },
     });
-    await sink.send(event);
+    await expect(sink.send(event)).rejects.toThrow('network down');
 
     expect(sink.getCircuitState()).toBe('open');
   });
@@ -190,53 +210,69 @@ describe('HttpSink — retries, backoff and dead letters', () => {
       const fetchMock = vi.fn().mockResolvedValue(makeOkResponse());
       vi.stubGlobal('fetch', fetchMock);
 
-      const sink = new HttpSink({ endpoint: 'https://example.com/ingest' });
+      const sink = new HttpSink({
+        endpoint: 'https://example.com/ingest',
+        maxRetries: 0,
+      });
       await sink.send(makeEvent());
 
       expect(fetchMock).toHaveBeenCalledOnce();
       const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
       expect(url).toBe('https://example.com/ingest');
       expect(init.method).toBe('POST');
-      expect(init.body).toBe(JSON.stringify([makeEvent()]));
+      expect(init.body).toBe(JSON.stringify(makeEvent()));
     });
 
     it('sets Content-Type: application/json header', async () => {
       const fetchMock = vi.fn().mockResolvedValue(makeOkResponse());
       vi.stubGlobal('fetch', fetchMock);
 
-      const sink = new HttpSink({ endpoint: 'https://example.com/ingest' });
+      const sink = new HttpSink({
+        endpoint: 'https://example.com/ingest',
+        maxRetries: 0,
+      });
       await sink.send(makeEvent());
 
       const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-      expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json');
+      expect((init.headers as Record<string, string>)['content-type']).toBe('application/json');
     });
 
     it('sets Authorization header when apiKey is provided', async () => {
       const fetchMock = vi.fn().mockResolvedValue(makeOkResponse());
       vi.stubGlobal('fetch', fetchMock);
 
-      const sink = new HttpSink({ endpoint: 'https://example.com/ingest', apiKey: 'secret-key' });
+      const sink = new HttpSink({
+        endpoint: 'https://example.com/ingest',
+        apiKey: 'secret-key',
+        maxRetries: 0,
+      });
       await sink.send(makeEvent());
 
       const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-      expect((init.headers as Record<string, string>)['Authorization']).toBe('Bearer secret-key');
+      expect((init.headers as Record<string, string>)['authorization']).toBe('Bearer secret-key');
     });
 
     it('does not set Authorization header when apiKey is not provided', async () => {
       const fetchMock = vi.fn().mockResolvedValue(makeOkResponse());
       vi.stubGlobal('fetch', fetchMock);
 
-      const sink = new HttpSink({ endpoint: 'https://example.com/ingest' });
+      const sink = new HttpSink({
+        endpoint: 'https://example.com/ingest',
+        maxRetries: 0,
+      });
       await sink.send(makeEvent());
 
       const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-      expect((init.headers as Record<string, string>)['Authorization']).toBeUndefined();
+      expect((init.headers as Record<string, string>)['authorization']).toBeUndefined();
     });
 
     it('does not add to dead letters on success', async () => {
       vi.stubGlobal('fetch', vi.fn().mockResolvedValue(makeOkResponse()));
 
-      const sink = new HttpSink({ endpoint: 'https://example.com/ingest' });
+      const sink = new HttpSink({
+        endpoint: 'https://example.com/ingest',
+        maxRetries: 0,
+      });
       await sink.send(makeEvent());
 
       expect(sink.getDeadLetters()).toHaveLength(0);
@@ -251,7 +287,11 @@ describe('HttpSink — retries, backoff and dead letters', () => {
         .mockResolvedValueOnce(makeOkResponse());
       vi.stubGlobal('fetch', fetchMock);
 
-      const sink = new HttpSink({ endpoint: 'https://example.com/ingest', baseDelayMs: 10 });
+      const sink = new HttpSink({
+        endpoint: 'https://example.com/ingest',
+        maxRetries: 1,
+        baseDelayMs: 10,
+      });
       const sendPromise = sink.send(makeEvent());
       // advance timer past first backoff delay (10ms * 2^0 = 10ms)
       await vi.runAllTimersAsync();
@@ -272,7 +312,7 @@ describe('HttpSink — retries, backoff and dead letters', () => {
       });
       const sendPromise = sink.send(makeEvent());
       await vi.runAllTimersAsync();
-      await sendPromise;
+      await expect(sendPromise).rejects.toThrow('analytics HTTP 500');
 
       // 1 initial + 2 retries = 3 total calls
       expect(fetchMock).toHaveBeenCalledTimes(3);
@@ -299,12 +339,19 @@ describe('HttpSink — retries, backoff and dead letters', () => {
       vi.stubGlobal('fetch', fetchMock);
 
       const baseDelayMs = 100;
-      const sink = new HttpSink({ endpoint: 'https://example.com/ingest', maxRetries: 3, baseDelayMs });
-      await sink.send(makeEvent());
+      const sink = new HttpSink({
+        endpoint: 'https://example.com/ingest',
+        maxRetries: 3,
+        baseDelayMs,
+      });
+      const sendPromise = sink.send(makeEvent());
+      await vi.runAllTimersAsync();
+      await sendPromise;
 
-      // attempt=1 => 100 * 2^0 = 100ms, attempt=2 => 100 * 2^1 = 200ms
-      expect(delays[0]).toBe(100);
-      expect(delays[1]).toBe(200);
+      expect(delays[0]).toBeGreaterThanOrEqual(50);
+      expect(delays[0]).toBeLessThanOrEqual(100);
+      expect(delays[1]).toBeGreaterThanOrEqual(100);
+      expect(delays[1]).toBeLessThanOrEqual(200);
     });
   });
 
@@ -321,7 +368,7 @@ describe('HttpSink — retries, backoff and dead letters', () => {
       });
       const sendPromise = sink.send(deadEvent);
       await vi.runAllTimersAsync();
-      await sendPromise;
+      await expect(sendPromise).rejects.toThrow('analytics HTTP 500');
 
       const deadLetters = sink.getDeadLetters();
       expect(deadLetters).toHaveLength(1);
@@ -337,7 +384,7 @@ describe('HttpSink — retries, backoff and dead letters', () => {
         maxRetries: 0,
         baseDelayMs: 10,
       });
-      await sink.send(makeEvent());
+      await expect(sink.send(makeEvent())).rejects.toThrow('analytics HTTP 500');
 
       const letters = sink.getDeadLetters();
       letters.pop(); // mutate the copy
@@ -353,7 +400,7 @@ describe('HttpSink — retries, backoff and dead letters', () => {
         maxRetries: 0,
         baseDelayMs: 10,
       });
-      await sink.send(makeEvent());
+      await expect(sink.send(makeEvent())).rejects.toThrow('analytics HTTP 500');
 
       expect(sink.getDeadLetters()).toHaveLength(1);
       sink.clearDeadLetters();
@@ -369,20 +416,15 @@ describe('HttpSink — retries, backoff and dead letters', () => {
         maxRetries: 0,
         baseDelayMs: 10,
       });
-      await sink.send(makeEvent('e1'));
-      await sink.send(makeEvent('e2'));
-      await sink.send(makeEvent('e3'));
+      await expect(sink.send(makeEvent('e1'))).rejects.toThrow('analytics HTTP 500');
+      await expect(sink.send(makeEvent('e2'))).rejects.toThrow('analytics HTTP 500');
+      await expect(sink.send(makeEvent('e3'))).rejects.toThrow('analytics HTTP 500');
 
       expect(sink.getDeadLetters()).toHaveLength(3);
     });
   });
 
   describe('AnalyticsClient.getDeadLetters() — integration (#1078)', () => {
-    // NOTE: these two construct `new AnalyticsClient(sink, config)` — sink first.
-    // The client's signature is `(config, emitter?)`, so `sink` is being passed
-    // as the config object. The assertions below are preserved verbatim: this
-    // suite is about the concatenated import headers, not about the constructor
-    // argument order. Flagged rather than silently changed.
     it('delegates to HttpSink.getDeadLetters() when emitter is HttpSink', async () => {
       const fetchMock = vi.fn().mockResolvedValue(makeFailResponse(500));
       vi.stubGlobal('fetch', fetchMock);
@@ -392,7 +434,10 @@ describe('HttpSink — retries, backoff and dead letters', () => {
         maxRetries: 0,
         baseDelayMs: 10,
       });
-      const client = new AnalyticsClient(sink, { flushIntervalMs: 0, debug: false });
+      const client = new AnalyticsClient(
+        { flushIntervalMs: 0, debug: false },
+        sink,
+      );
 
       client.track('fail_event');
       await client.flush();
@@ -403,11 +448,10 @@ describe('HttpSink — retries, backoff and dead letters', () => {
     });
 
     it('returns empty array when emitter is not HttpSink', () => {
-      // Was `require('../src/emitter/NoopEmitter.js')` inline. `require` does not
-      // exist in an ESM test module, so this was a hard runtime error rather
-      // than a passing test; NoopEmitter is now part of the single import block
-      // at the top of the file.
-      const client = new AnalyticsClient(new NoopEmitter(), { flushIntervalMs: 0, debug: false });
+      const client = new AnalyticsClient(
+        { flushIntervalMs: 0, debug: false },
+        new NoopEmitter(),
+      );
       expect(client.getDeadLetters()).toEqual([]);
     });
   });

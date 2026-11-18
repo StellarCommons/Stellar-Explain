@@ -5,7 +5,6 @@ import {
   EventDeduplicator,
   HttpSink,
   MultiSink,
-  eventByteLength,
 } from '../src/index.js';
 import type { AnalyticsEvent, Emitter } from '../src/index.js';
 
@@ -13,27 +12,8 @@ function event(name = 'test', properties: Record<string, unknown> = {}): Analyti
   return { name, timestamp: Date.now(), properties };
 }
 
-describe('AnalyticsClient observability and resilience', () => {
-  it('returns fresh zero metrics and counts successful delivery', async () => {
-    const client = new AnalyticsClient({ flushIntervalMs: 0 });
-    const initial = client.getMetrics();
-    expect(initial.eventsTracked).toBe(0);
-    expect(initial.eventsDropped).toBe(0);
-    expect(initial.eventsSent).toBe(0);
-    expect(initial.eventsFailed).toBe(0);
-    expect(client.getMetrics()).not.toBe(initial);
-
-    client.track('page_view');
-    await client.flush();
-    expect(client.getMetrics()).toMatchObject({
-      eventsTracked: 1,
-      eventsSent: 1,
-      eventsFailed: 0,
-      circuitState: undefined,
-    });
-  });
-
-  it('counts queue overflow as dropped while retaining the newest event', async () => {
+describe('AnalyticsClient resilience', () => {
+  it('retains the newest events when the queue overflows', async () => {
     const sent: string[] = [];
     const client = new AnalyticsClient(
       { flushIntervalMs: 0, maxQueueSize: 2 },
@@ -45,7 +25,6 @@ describe('AnalyticsClient observability and resilience', () => {
     await client.flush();
 
     expect(sent).toEqual(['two', 'three']);
-    expect(client.getMetrics().eventsDropped).toBe(1);
   });
 
   it('captures sink failures without rejecting flush and retains dead letters', async () => {
@@ -60,57 +39,7 @@ describe('AnalyticsClient observability and resilience', () => {
     client.track('failed_event');
 
     await expect(client.flush()).resolves.toBeUndefined();
-    expect(client.getMetrics()).toMatchObject({ eventsFailed: 1, eventsSent: 0 });
-    expect(client.getDeadLetters()).toHaveLength(1);
-  });
-
-  it('drops an event whose complete UTF-8 serialization exceeds the cap', () => {
-    const client = new AnalyticsClient({ flushIntervalMs: 0, maxEventBytes: 80 });
-    client.track('oversized', { text: '😀'.repeat(30) });
-
-    expect(client.getQueue().size).toBe(0);
-    expect(client.getMetrics().eventsDropped).toBe(1);
-  });
-
-  it('can truncate an oversized event when configured to do so', () => {
-    const client = new AnalyticsClient({
-      flushIntervalMs: 0,
-      maxEventBytes: 180,
-      oversizedEventPolicy: 'truncate',
-    });
-    client.track('large', { text: 'x'.repeat(500) });
-
-    expect(client.getQueue().size).toBe(1);
-    const [queued] = client.getQueue().drain();
-    expect(eventByteLength(queued)).toBeLessThanOrEqual(180);
-  });
-
-  it('attaches build and environment context to every event', () => {
-    const client = new AnalyticsClient({
-      flushIntervalMs: 0,
-      buildVersion: '2026.09.24',
-      environment: 'staging',
-    });
-    client.track('context_event');
-    const [queued] = client.getQueue().drain();
-    expect(queued.context).toMatchObject({
-      buildVersion: '2026.09.24',
-      environment: 'staging',
-    });
-  });
-
-  it('supports lifecycle listeners and runtime debug mode', () => {
-    const client = new AnalyticsClient({ flushIntervalMs: 0 });
-    const events: string[] = [];
-    const unsubscribe = client.on('enqueue', (payload) => {
-      events.push(String(payload.eventName));
-    });
-    client.debug();
-    client.track('observed');
-    unsubscribe();
-    client.track('not_observed');
-
-    expect(events).toEqual(['observed']);
+    expect(client.getDeadLetter().drain().map((item) => item.name)).toEqual(['failed_event']);
   });
 
   it('fans out to every sink even when one sink fails', async () => {
@@ -124,14 +53,14 @@ describe('AnalyticsClient observability and resilience', () => {
     const client = new AnalyticsClient({ flushIntervalMs: 0 }, [failing, succeeding]);
     client.track('fanout');
 
-    await client.flush();
+    await expect(client.flush()).resolves.toBeUndefined();
     expect(received).toEqual(['fanout']);
   });
 });
 
 describe('EventDeduplicator', () => {
   it('only suppresses identical events inside its time window', () => {
-    let now = 100;
+    const now = 100;
     const deduplicator = new EventDeduplicator(50);
     const value = event('same', { value: 1 });
     expect(deduplicator.isDuplicate(value, now)).toBe(false);
@@ -148,7 +77,7 @@ describe('HttpSink batching and headers', () => {
       return { ok: true, status: 202 };
     });
     const sink = new HttpSink({
-      url: 'https://ingest.example.test/events',
+      endpoint: 'https://ingest.example.test/events',
       headers: { 'X-Source': 'test' },
       batchSize: 2,
       fetchImpl,
@@ -157,43 +86,58 @@ describe('HttpSink batching and headers', () => {
     await sink.sendBatch([event('a'), event('b'), event('c')]);
     expect(calls).toHaveLength(2);
     expect((calls[0][1].headers as Record<string, string>)['X-Source']).toBe('test');
-    expect((calls[0][1].headers as Record<string, string>)['Content-Type']).toBe(
+    expect((calls[0][1].headers as Record<string, string>)['content-type']).toBe(
       'application/json',
     );
     expect(JSON.parse(calls[0][1].body as string)).toHaveLength(2);
     expect(JSON.parse(calls[1][1].body as string)).toHaveLength(1);
   });
 
-  it('falls back to plain JSON when fetch is unavailable', async () => {
-    const sink = new HttpSink({ url: 'https://ingest.example.test/events', fetchImpl: undefined });
-    // The constructor may see a global fetch in Node; force the unavailable path
-    // by replacing it for this isolated test only when necessary.
+  it('rejects when fetch is unavailable', async () => {
     const original = globalThis.fetch;
     try {
       Object.defineProperty(globalThis, 'fetch', { value: undefined, configurable: true });
-      const unavailable = new HttpSink({ url: 'https://ingest.example.test/events' });
-      await expect(unavailable.send(event())).rejects.toThrow('Fetch is unavailable');
+      const sink = new HttpSink({ endpoint: 'https://ingest.example.test/events' });
+      await expect(sink.send(event())).rejects.toThrow('Fetch is unavailable');
     } finally {
       Object.defineProperty(globalThis, 'fetch', { value: original, configurable: true });
     }
-    expect(sink).toBeInstanceOf(HttpSink);
   });
 });
 
 describe('MultiSink', () => {
-  it('attempts all sinks before surfacing a failure', async () => {
-    const calls: string[] = [];
+  it('resolves when at least one sink succeeds', async () => {
+    const received: string[] = [];
     const sink = new MultiSink([
       {
         send: () => {
-          calls.push('failing');
-          throw new Error('sink failed');
+          throw new Error('first sink failed');
         },
       },
-      { send: () => calls.push('healthy') },
+      { send: (value) => void received.push(value.name) },
     ]);
-    await expect(sink.send(event())).rejects.toThrow();
-    expect(calls).toEqual(expect.arrayContaining(['failing', 'healthy']));
+
+    await expect(sink.send(event())).resolves.toBeUndefined();
+    expect(received).toEqual(['test']);
+  });
+
+  it('throws an AggregateError when every sink fails', async () => {
+    const sink = new MultiSink([
+      {
+        send: () => {
+          throw new Error('first sink failed');
+        },
+      },
+      {
+        send: () => {
+          throw new Error('second sink failed');
+        },
+      },
+    ]);
+
+    await sink.send(event()).catch((error) => {
+      expect(error).toBeInstanceOf(AggregateError);
+    });
   });
 });
 

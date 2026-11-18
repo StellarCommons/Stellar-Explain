@@ -95,7 +95,7 @@ export class AnalyticsClient {
     this.queue = new EventQueue(this.config.maxQueueSize, this.logger);
     this.deadLetter = new DeadLetterQueue(100, this.logger);
     this.rateLimiter = new RateLimiter(this.config.maxEventsPerSecond);
-    this.circuitBreaker = new CircuitBreaker();
+    this.circuitBreaker = new CircuitBreaker(this.config.circuitBreaker);
 
     this.isOffline =
       typeof navigator !== 'undefined' && 'onLine' in navigator ? !navigator.onLine : false;
