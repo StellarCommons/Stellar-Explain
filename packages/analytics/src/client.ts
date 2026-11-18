@@ -289,25 +289,47 @@ export class AnalyticsClient {
    *
    * With an event argument the event is sent directly (never enqueued).
    * Without an argument the pending queue is drained and sent as-is.
-   * Failures are swallowed (best-effort) and routed to the dead-letter.
+   * Middleware hooks run synchronously; an async hook is rejected and the event
+   * is dead-lettered instead of being sent without its redaction. Events that
+   * cannot pass the circuit breaker, or that fail to emit, are also dead-lettered.
    */
   flushSync(event?: AnalyticsEvent): void {
     const pending = event ? [event] : this.queue.drain();
 
     for (const item of pending) {
+      let prepared: AnalyticsEvent;
       try {
-        const result = this.emitter.send(item);
-        // An emitter may be sync (void) or async (Promise<void>); only the
-        // latter can reject, and a rejection cannot be caught synchronously.
+        prepared = this.middleware.processSync(item);
+      } catch (error) {
+        this.logger.error(`sync middleware failed for "${item.name}"`, error);
+        this.deadLetter.push(item);
+        continue;
+      }
+
+      if (!this.circuitBreaker.canProceed()) {
+        this.logger.warn(`circuit open — "${prepared.name}" routed to dead-letter`);
+        this.deadLetter.push(prepared);
+        continue;
+      }
+
+      const fail = (error: unknown): void => {
+        this.circuitBreaker.recordFailure();
+        this.logger.error(`emit failed for "${prepared.name}"`, error);
+        this.deadLetter.push(prepared);
+      };
+
+      try {
+        const result = this.emitter.send(prepared);
         if (result && typeof (result as Promise<void>).then === 'function') {
-          void (result as Promise<void>).catch((error: unknown) => {
-            this.logger.error(`emit failed for "${item.name}"`, error);
-            this.deadLetter.push(item);
-          });
+          void (result as Promise<void>).then(
+            () => this.circuitBreaker.recordSuccess(),
+            fail,
+          );
+        } else {
+          this.circuitBreaker.recordSuccess();
         }
       } catch (error) {
-        this.logger.error(`emit failed for "${item.name}"`, error);
-        this.deadLetter.push(item);
+        fail(error);
       }
     }
   }
@@ -326,6 +348,7 @@ export class AnalyticsClient {
     this.unbindConnectivityHandlers();
     this.unbindGlobalErrorHandler();
     void this.flush();
+    this.emitter.destroy?.();
   }
 
   /**

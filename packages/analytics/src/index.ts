@@ -26,7 +26,7 @@ export { NoopEmitter } from './emitter/NoopEmitter.js';
 export { MultiSink, FanOutSink } from './sinks/MultiSink.js';
 export { ConsoleSink } from './sinks/ConsoleSink.js';
 export { HttpSink, FetchUnavailableError } from './sinks/HttpSink.js';
-export type { FetchLike, HttpSinkOptions } from './sinks/HttpSink.js';
+export type { FetchLike, FetchLikeResponse, HttpSinkOptions } from './sinks/HttpSink.js';
 
 // ── Client ───────────────────────────────────────────────────────────────────
 export { AnalyticsClient } from './client.js';

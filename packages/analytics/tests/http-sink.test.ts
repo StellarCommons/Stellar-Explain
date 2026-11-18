@@ -280,7 +280,7 @@ describe('HttpSink — retries, backoff and dead letters', () => {
   });
 
   describe('exponential backoff (#1077)', () => {
-    it('waits baseDelayMs * 2^(attempt-1) between retries', async () => {
+    it('waits a jittered baseDelayMs * 2^(attempt-1) between retries', async () => {
       const delays: number[] = [];
       const realSetTimeout = globalThis.setTimeout;
 
@@ -302,9 +302,10 @@ describe('HttpSink — retries, backoff and dead letters', () => {
       const sink = new HttpSink({ endpoint: 'https://example.com/ingest', maxRetries: 3, baseDelayMs });
       await sink.send(makeEvent());
 
-      // attempt=1 => 100 * 2^0 = 100ms, attempt=2 => 100 * 2^1 = 200ms
-      expect(delays[0]).toBe(100);
-      expect(delays[1]).toBe(200);
+      expect(delays[0]).toBeGreaterThanOrEqual(50);
+      expect(delays[0]).toBeLessThanOrEqual(100);
+      expect(delays[1]).toBeGreaterThanOrEqual(100);
+      expect(delays[1]).toBeLessThanOrEqual(200);
     });
   });
 
