@@ -1,3 +1,5 @@
+import { isLocalStorageAvailable } from './lib/storageAvailability.js';
+
 const OPT_OUT_KEY = 'stellar_analytics_opt_out';
 
 export class OptOutManager {
@@ -8,7 +10,7 @@ export class OptOutManager {
   }
 
   private loadState(): boolean {
-    if (typeof localStorage !== 'undefined') {
+    if (isLocalStorageAvailable()) {
       try {
         return localStorage.getItem(OPT_OUT_KEY) === 'true';
       } catch {
@@ -24,7 +26,7 @@ export class OptOutManager {
 
   public optOut(): void {
     this.optedOut = true;
-    if (typeof localStorage !== 'undefined') {
+    if (isLocalStorageAvailable()) {
       try {
         localStorage.setItem(OPT_OUT_KEY, 'true');
       } catch {
@@ -36,7 +38,7 @@ export class OptOutManager {
 
   public optIn(): void {
     this.optedOut = false;
-    if (typeof localStorage !== 'undefined') {
+    if (isLocalStorageAvailable()) {
       try {
         localStorage.removeItem(OPT_OUT_KEY);
       } catch {
