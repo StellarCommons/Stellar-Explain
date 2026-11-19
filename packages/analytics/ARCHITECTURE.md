@@ -9,100 +9,91 @@ host call
    │
    ▼
 AnalyticsClient.track()
-   │  validate → context/plugins (middleware) → size limit → dedup/sample
+   │  validate → limitPayload → scrubPii → rate limit → beforeSend
    ▼
 EventQueue (bounded FIFO)
-   │  flush()/timer
+   │  flush()
    ▼
-delivery middleware + sink fan-out
+middleware → emitter send
    ├── ConsoleSink
-   ├── HttpSink ── fetch + optional gzip + circuit breaker
+   ├── HttpSink ── fetch + circuit breaker
    └── NoopEmitter
 ```
 
 ## Module responsibilities
 
-| Module                         | Responsibility                                                                                                                                                                                |
-| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `client.ts`                    | Public entry point. Validates events, enriches context, applies middleware, queues events, coordinates delivery, exposes metrics/lifecycle listeners, and owns the circuit/dead-letter state. |
-| `types.ts`                     | Shared event, lifecycle, and metrics contracts.                                                                                                                                               |
-| `config.ts`                    | Resolves safe defaults and normalizes transport/pipeline options.                                                                                                                             |
-| `validate.ts`                  | Rejects functions, cycles, and other values that cannot be represented in JSON.                                                                                                               |
-| `queue.ts`                     | In-memory FIFO storage with an optional oldest-event eviction cap.                                                                                                                            |
-| `dedup.ts`                     | Optional short-window duplicate suppression.                                                                                                                                                  |
-| `sampling.ts`                  | Probabilistic pre-queue sampling.                                                                                                                                                             |
-| `plugins.ts` / `middleware.ts` | Ordered event transformation and cancellation hooks.                                                                                                                                          |
-| `emitter/index.ts`             | Transport contract shared by all sinks.                                                                                                                                                       |
-| `sinks/ConsoleSink.ts`         | Development logger sink.                                                                                                                                                                      |
-| `sinks/HttpSink.ts`            | JSON ingest transport with batching, headers, retries, compression, and HTTP failure reporting.                                                                                               |
-| `sinks/MultiSink.ts`           | Fan-out transport that attempts every configured sink.                                                                                                                                        |
-| `lib/logger.ts`                | Normal console methods plus `{ level, event, meta }` structured records.                                                                                                                      |
-| `lib/circuitBreaker.ts`        | Closed/open/half-open delivery circuit with cooldown and open-count metrics.                                                                                                                  |
+| Module                         | Responsibility                                                                                       |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| `client.ts`                    | Runs the intake pipeline, queues events, drains them on flush, and exposes inspection helpers.        |
+| `types.ts`                     | Shared event and configuration contracts.                                                            |
+| `config.ts`                    | Resolves defaults (`maxQueueSize: 100`, `maxPropertyBytes: 1024`) and normalizes options.              |
+| `validate.ts`                  | Rejects functions, cycles, and other values that cannot be represented in JSON.                       |
+| `queue.ts`                     | In-memory FIFO storage with an oldest-event eviction cap.                                            |
+| `sampling.ts`                  | Optional pre-queue probabilistic sampling.                                                           |
+| `plugins.ts` / `middleware.ts` | Ordered `beforeSend` and delivery hooks.                                                             |
+| `emitter/index.ts`             | Emitter contract shared by all sinks.                                                                |
+| `sinks/ConsoleSink.ts`         | Development logger sink.                                                                             |
+| `sinks/HttpSink.ts`            | JSON fetch transport with custom headers, retries, optional beacon, and circuit state.               |
+| `sinks/MultiSink.ts`           | Fan-out transport that sends to every configured emitter.                                            |
+| `lib/logger.ts`                | Console and structured logging; enabled by `debug: true`.                                            |
+| `lib/circuitBreaker.ts`        | Closed/open/half-open delivery guard with cooldown and open-count state.                              |
 
 ## Delivery lifecycle
 
-1. `track()` validates the event and attaches configured environment/build
-   context. The complete event is then size-checked in UTF-8 bytes.
-2. Optional deduplication and sampling run before queue insertion. Events
-   discarded at either boundary are reflected in `getMetrics().eventsDropped`.
-3. `flush()` drains the FIFO queue. A sink with `sendBatch()` receives a batch;
-   legacy sinks receive one event at a time. Plugins and `beforeSend` are
-   intake middleware and run before queueing; a future delivery middleware
-   layer can be inserted at the fan-out boundary without changing the queue
-   contract.
-4. A sink failure is caught, logged without event properties, counted in
-   `eventsFailed`, and retained in the bounded dead-letter list. Other sinks
-   still receive the event.
-5. Consecutive failures open the circuit. During cooldown, delivery is skipped;
-   after cooldown one half-open probe is allowed. A successful probe closes the
-   circuit and a failed probe reopens it.
+1. After the optional sampling gate, `track()` validates the event name and
+   properties, bounds each property value with `limitPayload()`
+   (`maxPropertyBytes: 1024`), scrubs PII by default, applies the token-bucket
+   rate limit (`maxEventsPerSecond: 100`), and calls `beforeSend`. Returning
+   `null` from `beforeSend` cancels the event; otherwise it is enqueued.
+ 2. `flush()` drains the FIFO queue. Each event passes through the middleware
+    pipeline, then the configured emitter's `sendBatch()` method receives the
+    processed events when available; emitters without batch support receive
+    one `send()` call per event.
+3. A delivery failure is logged, counted by the circuit breaker, and retained
+   in the bounded dead-letter list. When the client-side circuit is open,
+   queued events are routed to the dead-letter without a send attempt.
+4. Consecutive failures open the circuit. During cooldown, delivery is
+   skipped; after cooldown one half-open probe is allowed. A successful probe
+   closes the circuit and a failed probe reopens it.
 
 ## Runtime considerations
 
 The package is safe to import during SSR: no browser globals are read at module
-load, and `fetch` is feature-detected only when an HTTP sink is requested.
-`CompressionStream` is likewise detected at send time, so older runtimes fall
-back to plain JSON. In Node.js, the auto-flush interval is unreferenced where
-supported, preventing analytics from keeping a process alive.
+load, and `fetch` is resolved only when an HTTP sink sends. In Node.js, the
+auto-flush interval is unreferenced where supported, preventing analytics from
+keeping a process alive.
 
-`getMetrics()` returns a fresh snapshot with these primary counters:
+## Inspection helpers
 
-- `eventsTracked`
-- `eventsDropped`
-- `eventsSent`
-- `eventsFailed`
-- `circuitState` (`undefined` when the configured sink has no circuit)
-- `circuitOpenCount`
-
-For compatibility, the snapshot also exposes non-enumerable `tracked`,
-`dropped`, `sent`, `failed`, `queueSize`, and `deadLetterCount` aliases.
+- `client.getQueue().size` — events currently queued.
+- `client.getDeadLetter().size` — failed events retained by the client.
+- `client.getCircuitState()` — the configured emitter's circuit state, or
+  `undefined` when the emitter has no circuit.
 
 ## HTTP ingest contract
 
-`HttpSink` sends `POST` requests to the configured endpoint with a JSON array:
+`HttpSink` sends `POST` requests to the configured endpoint with a single
+event object, or a bounded JSON array when batch delivery is used:
 
 ```json
-[
-  {
-    "name": "page_view",
-    "timestamp": 1700000000000,
-    "properties": { "path": "/" },
-    "context": { "environment": "production", "buildVersion": "1.0.0" }
-  }
-]
+{
+  "name": "page_view",
+  "timestamp": 1700000000,
+  "properties": { "path": "/" }
+}
 ```
 
 The backend accepts a single object or an array and acknowledges accepted
-payloads with a 2xx response such as `{ "status": "accepted" }`. Non-2xx
-responses and network errors are delivery failures. `Content-Encoding: gzip`
-is added only when `CompressionStream` is available and compression succeeds.
+payloads with a 2xx response such as `{ "status": "accepted" }`. Timestamps
+are Unix seconds: the client converts `Date.now()` to seconds before sending,
+and millisecond timestamps are not accepted. Non-2xx responses and network
+errors are delivery failures.
 
 ## Extending the pipeline
 
-A custom sink only needs to implement `send(event)`. Implement the optional
-`sendBatch(events)` method when the transport can efficiently accept multiple
-events. Use `client.on()` for lifecycle observations and `client.debug()` to
-enable structured stage logging during development.
+A custom emitter only needs to implement `send(event)`. Register plugins with
+`client.registerPlugin()` to add ordered `beforeSend` hooks. Set `debug: true`
+in the client configuration to enable stage logging.
 
 ## Release discipline
 

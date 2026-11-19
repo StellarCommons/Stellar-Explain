@@ -122,6 +122,8 @@ describe('MultiSink', () => {
   });
 
   it('throws an AggregateError when every sink fails', async () => {
+  it('attempts all sinks and resolves when one succeeds', async () => {
+    const calls: string[] = [];
     const sink = new MultiSink([
       {
         send: () => {
@@ -138,6 +140,8 @@ describe('MultiSink', () => {
     await sink.send(event()).catch((error) => {
       expect(error).toBeInstanceOf(AggregateError);
     });
+    await expect(sink.send(event())).resolves.toBeUndefined();
+    expect(calls).toEqual(expect.arrayContaining(['failing', 'healthy']));
   });
 });
 

@@ -9,7 +9,7 @@
 // level: the transport suites above run on real timers, and hoisting
 // `vi.useFakeTimers()` to the top of the file would change their behaviour.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { HttpSink } from '../src/sinks/HttpSink.js';
+import { CircuitOpenError, HttpSink } from '../src/sinks/HttpSink.js';
 import { AnalyticsClient } from '../src/client.js';
 import { NoopEmitter } from '../src/emitter/NoopEmitter.js';
 import type { AnalyticsEvent } from '../src/types.js';
@@ -175,7 +175,9 @@ describe('HttpSink — circuit breaker (#82)', () => {
     expect(sink.getCircuitState()).toBe('open');
 
     await sink.send(event).catch(() => undefined);
+    await expect(sink.send(event)).rejects.toThrow(CircuitOpenError);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(sink.getDeadLetters()).toHaveLength(2);
   });
 
   it('records a failure when fetch rejects', async () => {
@@ -320,7 +322,7 @@ describe('HttpSink — retries, backoff and dead letters', () => {
   });
 
   describe('exponential backoff (#1077)', () => {
-    it('waits baseDelayMs * 2^(attempt-1) between retries', async () => {
+    it('waits a jittered baseDelayMs * 2^(attempt-1) between retries', async () => {
       const delays: number[] = [];
       const realSetTimeout = globalThis.setTimeout;
 

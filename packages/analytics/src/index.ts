@@ -26,6 +26,8 @@ export { NoopEmitter } from './emitter/NoopEmitter.js';
 export { MultiSink, FanOutSink } from './sinks/MultiSink.js';
 export { ConsoleSink } from './sinks/ConsoleSink.js';
 export { HttpSink, FetchUnavailableError } from './sinks/HttpSink.js';
+export type { FetchLike, FetchLikeResponse, HttpSinkOptions } from './sinks/HttpSink.js';
+export { HttpSink, FetchUnavailableError, CircuitOpenError } from './sinks/HttpSink.js';
 export type { FetchLike, HttpSinkOptions } from './sinks/HttpSink.js';
 
 // ── Client ───────────────────────────────────────────────────────────────────
@@ -87,13 +89,6 @@ export {
 // compile error rather than a helpful placeholder.
 export { isBrowser } from './env.js';
 export { OptOutManager, optOutManager } from './optout.js';
-
-// ── React bindings ──────────────────────────────────────────────────────────
-export { AnalyticsProvider, AnalyticsContext } from './react/provider.js';
-export type { AnalyticsProviderProps } from './react/provider.js';
-export { useAnalytics } from './react/useAnalytics.js';
-export { useTrackEvent } from './react/useTrackEvent.js';
-export { usePageView } from './react/usePageView.js';
 
 // ── Environment detection (#1084/#1085/#1086) ───────────────────────────────
 export { getDeviceType } from './device.js';

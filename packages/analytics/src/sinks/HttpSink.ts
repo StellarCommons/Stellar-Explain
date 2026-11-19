@@ -2,6 +2,10 @@ import type { AnalyticsEvent } from '../types.js';
 import type { Emitter } from '../emitter/index.js';
 import { CircuitBreaker, type CircuitState, type CircuitBreakerOptions } from '../lib/circuitBreaker.js';
 
+function utf8ByteLength(value: string): number {
+  return new TextEncoder().encode(value).length;
+}
+
 /**
  * Raised when no `fetch` implementation is available at all.
  *
@@ -16,11 +20,21 @@ export class FetchUnavailableError extends Error {
   }
 }
 
+/** Minimal `fetch` response shape used by {@link FetchLike}. */
+export interface FetchLikeResponse {
+  ok: boolean;
+  status: number;
+  headers?: { get(name: string): string | null };
+/** Raised when delivery is skipped because this sink's circuit breaker is open. */
+export class CircuitOpenError extends Error {
+  constructor(message = 'HttpSink circuit is open') {
+    super(message);
+    this.name = 'CircuitOpenError';
+  }
+}
+
 /** Minimal `fetch` shape, so a stub can be injected in tests. */
-export type FetchLike = (
-  url: string,
-  init?: RequestInit,
-) => Promise<{ ok: boolean; status: number }>;
+export type FetchLike = (url: string, init?: RequestInit) => Promise<FetchLikeResponse>;
 
 /** Options for the {@link HttpSink}. */
 export interface HttpSinkOptions {
@@ -51,6 +65,13 @@ export interface HttpSinkOptions {
   useBeacon?: boolean;
   /** Maximum events per request in {@link HttpSink.sendBatch}. Default 50. */
   batchSize?: number;
+  /**
+   * Maximum serialized UTF-8 bytes per batch body. Default 500 KiB, below the
+   * 512KB ingest limit. A single event larger than this is still sent alone.
+   */
+  maxBatchBytes?: number;
+  /** Alias of {@link HttpSinkOptions.maxBatchBytes}. */
+  maxBatchBodyBytes?: number;
   /** Inject a `fetch` implementation (tests, or non-standard transports). */
   fetchImpl?: FetchLike;
 }
@@ -84,8 +105,11 @@ export class HttpSink implements Emitter {
   private readonly baseDelayMs: number;
   private readonly useBeacon: boolean;
   private readonly batchSize: number;
+  private readonly maxBatchBytes: number;
   private readonly fetchImpl?: FetchLike;
   private readonly deadLetters: AnalyticsEvent[] = [];
+  private readonly pendingDelays = new Map<ReturnType<typeof setTimeout>, () => void>();
+  private destroyed = false;
 
   constructor(options: HttpSinkOptions) {
     // `endpoint` is the documented name; `url` is accepted as an alias because
@@ -106,6 +130,7 @@ export class HttpSink implements Emitter {
     this.baseDelayMs = options.baseDelayMs ?? 200;
     this.useBeacon = options.useBeacon ?? false;
     this.batchSize = options.batchSize ?? 50;
+    this.maxBatchBytes = options.maxBatchBytes ?? options.maxBatchBodyBytes ?? 500 * 1024;
     this.fetchImpl = options.fetchImpl;
   }
 
@@ -129,8 +154,27 @@ export class HttpSink implements Emitter {
    * events that already succeeded.
    */
   async sendBatch(events: readonly AnalyticsEvent[]): Promise<void> {
-    for (let offset = 0; offset < events.length; offset += this.batchSize) {
-      const batch = events.slice(offset, offset + this.batchSize);
+    const batches: AnalyticsEvent[][] = [];
+    let current: AnalyticsEvent[] = [];
+    let bytes = 2;
+
+    for (const event of events) {
+      const eventBytes = utf8ByteLength(JSON.stringify(event));
+      const added = eventBytes + (current.length > 0 ? 1 : 0);
+      if (
+        current.length > 0 &&
+        (current.length >= this.batchSize || bytes + added > this.maxBatchBytes)
+      ) {
+        batches.push(current);
+        current = [];
+        bytes = 2;
+      }
+      current.push(event);
+      bytes += eventBytes + (current.length > 1 ? 1 : 0);
+    }
+    if (current.length > 0) batches.push(current);
+
+    for (const batch of batches) {
       await this.request(this.endpoint, this.batchBody(batch), batch);
     }
   }
@@ -174,6 +218,17 @@ export class HttpSink implements Emitter {
     this.deadLetters.length = 0;
   }
 
+  /** Cancel pending retry delays. Subsequent calls are no-ops. */
+  destroy(): void {
+    if (this.destroyed) return;
+    this.destroyed = true;
+    for (const [timer, resolve] of this.pendingDelays) {
+      clearTimeout(timer);
+      resolve();
+    }
+    this.pendingDelays.clear();
+  }
+
   // ── internals ───────────────────────────────────────────────────────────────
 
   private resolveFetch(): FetchLike | undefined {
@@ -193,9 +248,10 @@ export class HttpSink implements Emitter {
   ): Promise<void> {
     if (!this.circuitBreaker.canProceed()) {
       // Circuit open — record the event rather than dropping it silently, so an
-      // outage is recoverable instead of lossy.
+      // outage is recoverable instead of lossy. Surface the skip as a failure so
+      // callers do not mistake it for a successful delivery.
       this.deadLetterAll(deadLetterOnFailure);
-      return;
+      throw new CircuitOpenError();
     }
 
     const doFetch = this.resolveFetch();
@@ -206,10 +262,12 @@ export class HttpSink implements Emitter {
 
     let lastStatus = 0;
     let lastError: unknown;
+    let lastResponse: FetchLikeResponse | undefined;
 
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       if (attempt > 0) {
-        await this.delay(this.baseDelayMs * Math.pow(2, attempt - 1));
+        await this.delay(this.retryDelay(attempt, lastResponse));
+        if (this.destroyed) throw new Error('HttpSink destroyed');
       }
 
       try {
@@ -218,18 +276,36 @@ export class HttpSink implements Emitter {
           this.circuitBreaker.recordSuccess();
           return;
         }
+        lastResponse = response;
         lastStatus = response.status;
         lastError = new Error(`analytics HTTP ${response.status}`);
+        if (!this.isRetryable(response.status)) break;
       } catch (error) {
+        lastResponse = undefined;
         lastError = error;
       }
-      this.circuitBreaker.recordFailure();
     }
 
-    // Budget exhausted: record for later, then surface the failure.
+    this.circuitBreaker.recordFailure();
     this.deadLetterAll(deadLetterOnFailure);
     if (lastStatus > 0) throw new Error(`analytics HTTP ${lastStatus}`);
     throw lastError;
+  }
+
+  private isRetryable(status: number): boolean {
+    return status === 408 || status === 429 || (status >= 500 && status < 600);
+  }
+
+  private retryDelay(attempt: number, response?: FetchLikeResponse): number {
+    const retryAfter = response?.headers?.get('retry-after');
+    if (retryAfter) {
+      const seconds = Number(retryAfter);
+      if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+      const at = Date.parse(retryAfter);
+      if (!Number.isNaN(at)) return Math.max(0, at - Date.now());
+    }
+    const exponential = this.baseDelayMs * Math.pow(2, attempt - 1);
+    return Math.floor(exponential / 2 + Math.random() * (exponential / 2));
   }
 
   private deadLetterAll(events: readonly AnalyticsEvent[]): void {
@@ -237,7 +313,15 @@ export class HttpSink implements Emitter {
   }
 
   private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    if (this.destroyed) return Promise.reject(new Error('HttpSink destroyed'));
+    return new Promise((resolve) => {
+      const complete = (): void => resolve();
+      const timer = setTimeout(() => {
+        this.pendingDelays.delete(timer);
+        complete();
+      }, ms);
+      this.pendingDelays.set(timer, complete);
+    });
   }
 
   private batchBody(events: readonly AnalyticsEvent[]): string {
