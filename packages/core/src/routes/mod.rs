@@ -15,6 +15,8 @@ use utoipa::OpenApi;
             account::AccountExplanationResponse,
             account::AccountHistoryTransaction,
             account::AccountHistoryResponse,
+            crate::errors::ApiError,
+            crate::errors::ErrorBody,
         )
     ),
     tags(
