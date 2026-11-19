@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { AnalyticsClient } from '../src/index.js';
 import type { Plugin } from '../src/plugins.js';
 import { PluginRegistry } from '../src/plugins.js';
