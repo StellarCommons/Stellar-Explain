@@ -181,7 +181,7 @@ describe('HttpSink batching and headers', () => {
 });
 
 describe('MultiSink', () => {
-  it('attempts all sinks before surfacing a failure', async () => {
+  it('attempts all sinks and resolves when one succeeds', async () => {
     const calls: string[] = [];
     const sink = new MultiSink([
       {
@@ -192,7 +192,7 @@ describe('MultiSink', () => {
       },
       { send: () => calls.push('healthy') },
     ]);
-    await expect(sink.send(event())).rejects.toThrow();
+    await expect(sink.send(event())).resolves.toBeUndefined();
     expect(calls).toEqual(expect.arrayContaining(['failing', 'healthy']));
   });
 });

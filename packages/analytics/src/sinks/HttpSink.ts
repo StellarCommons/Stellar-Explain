@@ -20,6 +20,11 @@ export class FetchUnavailableError extends Error {
   }
 }
 
+/** Minimal `fetch` response shape used by {@link FetchLike}. */
+export interface FetchLikeResponse {
+  ok: boolean;
+  status: number;
+  headers?: { get(name: string): string | null };
 /** Raised when delivery is skipped because this sink's circuit breaker is open. */
 export class CircuitOpenError extends Error {
   constructor(message = 'HttpSink circuit is open') {
@@ -29,10 +34,7 @@ export class CircuitOpenError extends Error {
 }
 
 /** Minimal `fetch` shape, so a stub can be injected in tests. */
-export type FetchLike = (
-  url: string,
-  init?: RequestInit,
-) => Promise<{ ok: boolean; status: number }>;
+export type FetchLike = (url: string, init?: RequestInit) => Promise<FetchLikeResponse>;
 
 /** Options for the {@link HttpSink}. */
 export interface HttpSinkOptions {
@@ -106,6 +108,8 @@ export class HttpSink implements Emitter {
   private readonly maxBatchBytes: number;
   private readonly fetchImpl?: FetchLike;
   private readonly deadLetters: AnalyticsEvent[] = [];
+  private readonly pendingDelays = new Map<ReturnType<typeof setTimeout>, () => void>();
+  private destroyed = false;
 
   constructor(options: HttpSinkOptions) {
     // `endpoint` is the documented name; `url` is accepted as an alias because
@@ -214,6 +218,17 @@ export class HttpSink implements Emitter {
     this.deadLetters.length = 0;
   }
 
+  /** Cancel pending retry delays. Subsequent calls are no-ops. */
+  destroy(): void {
+    if (this.destroyed) return;
+    this.destroyed = true;
+    for (const [timer, resolve] of this.pendingDelays) {
+      clearTimeout(timer);
+      resolve();
+    }
+    this.pendingDelays.clear();
+  }
+
   // ── internals ───────────────────────────────────────────────────────────────
 
   private resolveFetch(): FetchLike | undefined {
@@ -247,10 +262,12 @@ export class HttpSink implements Emitter {
 
     let lastStatus = 0;
     let lastError: unknown;
+    let lastResponse: FetchLikeResponse | undefined;
 
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       if (attempt > 0) {
-        await this.delay(this.baseDelayMs * Math.pow(2, attempt - 1));
+        await this.delay(this.retryDelay(attempt, lastResponse));
+        if (this.destroyed) throw new Error('HttpSink destroyed');
       }
 
       try {
@@ -259,18 +276,36 @@ export class HttpSink implements Emitter {
           this.circuitBreaker.recordSuccess();
           return;
         }
+        lastResponse = response;
         lastStatus = response.status;
         lastError = new Error(`analytics HTTP ${response.status}`);
+        if (!this.isRetryable(response.status)) break;
       } catch (error) {
+        lastResponse = undefined;
         lastError = error;
       }
-      this.circuitBreaker.recordFailure();
     }
 
-    // Budget exhausted: record for later, then surface the failure.
+    this.circuitBreaker.recordFailure();
     this.deadLetterAll(deadLetterOnFailure);
     if (lastStatus > 0) throw new Error(`analytics HTTP ${lastStatus}`);
     throw lastError;
+  }
+
+  private isRetryable(status: number): boolean {
+    return status === 408 || status === 429 || (status >= 500 && status < 600);
+  }
+
+  private retryDelay(attempt: number, response?: FetchLikeResponse): number {
+    const retryAfter = response?.headers?.get('retry-after');
+    if (retryAfter) {
+      const seconds = Number(retryAfter);
+      if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+      const at = Date.parse(retryAfter);
+      if (!Number.isNaN(at)) return Math.max(0, at - Date.now());
+    }
+    const exponential = this.baseDelayMs * Math.pow(2, attempt - 1);
+    return Math.floor(exponential / 2 + Math.random() * (exponential / 2));
   }
 
   private deadLetterAll(events: readonly AnalyticsEvent[]): void {
@@ -278,7 +313,15 @@ export class HttpSink implements Emitter {
   }
 
   private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    if (this.destroyed) return Promise.reject(new Error('HttpSink destroyed'));
+    return new Promise((resolve) => {
+      const complete = (): void => resolve();
+      const timer = setTimeout(() => {
+        this.pendingDelays.delete(timer);
+        complete();
+      }, ms);
+      this.pendingDelays.set(timer, complete);
+    });
   }
 
   private batchBody(events: readonly AnalyticsEvent[]): string {
