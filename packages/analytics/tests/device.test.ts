@@ -1,7 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { getDeviceType } from '../src/device.js';
 
 describe('getDeviceType()', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('returns "mobile" for an iPhone UA', () => {
     const ua = 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148';
     expect(getDeviceType(ua)).toBe('mobile');
@@ -37,7 +41,8 @@ describe('getDeviceType()', () => {
   });
 
   it('returns "unknown" when called with no argument and not in a browser', () => {
-    // In the vitest (Node) environment there is no navigator, so isBrowser() returns false.
+    vi.stubGlobal('window', undefined);
+    vi.stubGlobal('navigator', undefined);
     expect(getDeviceType(undefined)).toBe('unknown');
   });
 });
