@@ -1,8 +1,13 @@
 use crate::middleware::request_id::RequestId;
 use crate::services::horizon::HorizonClient;
-use axum::{Json, extract::Extension, http::StatusCode};
+use crate::config::network::StellarNetwork;
+use axum::{
+    Json,
+    extract::{Extension, State},
+    http::StatusCode,
+};
 use serde::Serialize;
-use std::time::Instant;
+use std::{sync::Arc, time::Instant};
 use tracing::{info, info_span, warn};
 use utoipa::ToSchema;
 
@@ -23,6 +28,7 @@ pub struct HealthResponse {
     )
 )]
 pub async fn health(
+    State(horizon_client): State<Arc<HorizonClient>>,
     Extension(request_id): Extension<RequestId>,
 ) -> Result<Json<HealthResponse>, (StatusCode, Json<HealthResponse>)> {
     let span = info_span!("health_request", request_id = %request_id);
@@ -31,14 +37,12 @@ pub async fn health(
 
     info!(request_id = %request_id, "incoming_request");
 
-    let horizon_url = std::env::var("HORIZON_URL")
-        .unwrap_or_else(|_| "https://horizon-testnet.stellar.org".into());
-
-    let network = std::env::var("NETWORK").unwrap_or_else(|_| "testnet".into());
+    let network = match StellarNetwork::from_env() {
+        StellarNetwork::Public => "public".to_string(),
+        StellarNetwork::Testnet => "testnet".to_string(),
+    };
 
     let version = env!("CARGO_PKG_VERSION").to_string();
-
-    let horizon_client = HorizonClient::new(horizon_url);
 
     let horizon_started_at = Instant::now();
     let horizon_reachable = horizon_client.is_reachable().await;
