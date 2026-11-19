@@ -71,8 +71,8 @@ async fn main() {
 
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::exact(allowed_origin))
-        .allow_methods([Method::GET, Method::OPTIONS])
-        .allow_headers([header::CONTENT_TYPE, header::ACCEPT]);
+        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+        .allow_headers([header::CONTENT_TYPE, header::ACCEPT, header::AUTHORIZATION]);
 
     let horizon_client = Arc::new(HorizonClient::new(horizon_url));
 
