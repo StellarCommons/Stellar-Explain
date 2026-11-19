@@ -60,7 +60,7 @@ By default the server runs on port **4000**.
 - `GET /health` – returns JSON: `status`, `network`, `horizon_reachable`, `version`
 - `GET /tx/:hash` – human-readable explanation of a transaction
 - `GET /account/:address` – account explanation
-- `GET /account/:address/history` – account transactions (`limit` 1-50, `cursor`, `order`)
+- `GET /account/:address/history` – account transactions (`limit` 1-50, `cursor`)
 - `POST /analytics/events` – ingest an analytics event
 - `GET /analytics/summary` – analytics summary
 - `GET /docs` – Swagger UI (OpenAPI spec at `/openapi.json`)
