@@ -252,7 +252,7 @@ async fn create_account_transaction_returns_create_account_explanation() {
         .expect("operations should be an array");
     let create_account = operations
         .iter()
-        .find(|op| op["operation_type"] == "create_account")
+        .find(|op| op["type"] == "create_account")
         .expect("create_account operation explanation missing");
     assert!(
         create_account["summary"]
@@ -274,7 +274,7 @@ async fn invalid_hash_format_returns_400_json_error() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
     let payload: Value = response.json().await.expect("json parse failed");
-    assert_eq!(payload["error"]["code"], "BAD_REQUEST");
+    assert_eq!(payload["error"]["code"], "INVALID_TRANSACTION_HASH");
 }
 
 #[tokio::test]
@@ -497,7 +497,7 @@ async fn account_history_limit_zero_returns_400() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
     let payload: Value = response.json().await.expect("json parse failed");
-    assert_eq!(payload["error"]["code"], "BAD_REQUEST");
+    assert_eq!(payload["error"]["code"], "INVALID_LIMIT");
 }
 
 #[tokio::test]
@@ -511,6 +511,9 @@ async fn account_history_limit_over_max_returns_400() {
         .expect("request failed");
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let payload: Value = response.json().await.expect("json parse failed");
+    assert_eq!(payload["error"]["code"], "INVALID_LIMIT");
 }
 
 #[tokio::test]
