@@ -28,7 +28,6 @@ The ingest endpoint receives individual events or batches of events from the bro
   |--------|----------|-------|-------|
   | `Content-Type` | **Yes** | `application/json` | Payloads must be valid JSON |
   | `Accept` | Optional | `application/json` | Response is JSON |
-  | `Content-Encoding` | Optional | `gzip` | Supported by `HttpSink` via `CompressionStream` |
   | `Authorization` | Optional | `Bearer <ANALYTICS_WRITE_TOKEN>` | Required when write auth is enabled |
 
 ---
@@ -37,13 +36,13 @@ The ingest endpoint receives individual events or batches of events from the bro
 
 The ingest endpoint accepts either a **single event JSON object** or a **batch of events (JSON array)**.
 
-#### Format A: Batch Payload (Preferred by `HttpSink`)
+#### Format A: Batch Payload
 
 ```json
 [
   {
     "name": "page_view",
-    "timestamp": 1758877200000,
+    "timestamp": 1758877200,
     "properties": {
       "url": "/tx/0x1a2b3c",
       "title": "Transaction Details",
@@ -61,7 +60,7 @@ The ingest endpoint accepts either a **single event JSON object** or a **batch o
   },
   {
     "name": "button_click",
-    "timestamp": 1758877202500,
+    "timestamp": 1758877202,
     "properties": {
       "id": "copy-tx-hash",
       "section": "summary-card"
@@ -78,7 +77,7 @@ The ingest endpoint accepts either a **single event JSON object** or a **batch o
 ```json
 {
   "name": "search_performed",
-  "timestamp": 1758877210000,
+  "timestamp": 1758877210,
   "properties": {
     "queryLength": 56,
     "filterType": "account"
@@ -96,7 +95,7 @@ The ingest endpoint accepts either a **single event JSON object** or a **batch o
 | Field | Type | Required | Description | Constraints |
 |---|---|---|---|---|
 | `name` | `string` | **Yes** | The canonical event identifier (e.g. `page_view`, `button_click`, `api_error`) | Must be non-empty string |
-| `timestamp` | `number` | **Yes** | Unix timestamp in milliseconds (or seconds) | Cannot be > 1 hour in the future |
+| `timestamp` | `number` | **Yes** | Unix timestamp in seconds | The client sends seconds; millisecond values are not accepted and timestamps cannot be > 1 hour in the future |
 | `properties` | `object` | No | Arbitrary JSON key-value pairs specific to the event | Plain JSON object. PII is scrubbed before transmission. |
 | `context` | `object` | No | Environment, system, device, and version metadata | Plain JSON object. |
 
@@ -227,7 +226,6 @@ Before events are transmitted to the ingest endpoint, `@stellar-explain/analytic
 
 1. **Email Addresses**: Any pattern resembling an email address is scrubbed to `[email]`.
 2. **Account / Card / Phone Numbers**: Any sequence of 12 or more consecutive digits is scrubbed to `[long-number]`.
-3. **Opt-Out & Do Not Track**: If `optOutManager.isOptedOut()` is true or the user's browser sends `DNT: 1`, no events are emitted or ingested.
 
 Dashboard consumers can safely store and display aggregate data without risk of exposing personally identifiable information.
 
@@ -242,7 +240,7 @@ curl -X POST "http://localhost:4000/analytics/events" \
   -d '[
     {
       "name": "page_view",
-      "timestamp": '$(date +%s%3N)',
+      "timestamp": '$(date +%s)',
       "properties": { "url": "/tx/0xabc" }
     }
   ]'

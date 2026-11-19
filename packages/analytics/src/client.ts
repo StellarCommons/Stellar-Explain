@@ -8,6 +8,7 @@ import { validateProperties } from './validate.js';
 import type { Emitter } from './emitter/index.js';
 import { NoopEmitter } from './emitter/NoopEmitter.js';
 import { MultiSink } from './sinks/MultiSink.js';
+import { HttpSink } from './sinks/HttpSink.js';
 import { Logger } from './lib/logger.js';
 import { RateLimiter } from './lib/rateLimiter.js';
 import { CircuitBreaker } from './lib/circuitBreaker.js';
@@ -88,14 +89,18 @@ export class AnalyticsClient {
   private offlineHandler: (() => void) | undefined;
   private globalErrorHandler: ((event: ErrorEvent) => void) | undefined;
 
-  constructor(config: Partial<AnalyticsConfig> = {}, emitter?: Emitter | Emitter[]) {
+  constructor(
+    config: Partial<AnalyticsConfig> = {},
+    emitter?: Emitter | Emitter[],
+    options: { skipSideEffects?: boolean } = {},
+  ) {
     this.config = resolveConfig(config) as ResolvedConfig;
     this.logger = new Logger(this.config.debug);
     this.emitter = this.buildEmitter(emitter);
     this.queue = new EventQueue(this.config.maxQueueSize, this.logger);
     this.deadLetter = new DeadLetterQueue(100, this.logger);
     this.rateLimiter = new RateLimiter(this.config.maxEventsPerSecond);
-    this.circuitBreaker = new CircuitBreaker();
+    this.circuitBreaker = new CircuitBreaker(this.config.circuitBreaker);
 
     this.isOffline =
       typeof navigator !== 'undefined' && 'onLine' in navigator ? !navigator.onLine : false;
@@ -109,29 +114,41 @@ export class AnalyticsClient {
       this.logger.debug(`restored ${restored.length} persisted events`);
       void this.flushRestoredQueue();
     }
-
-    // #72/#1072 — start the auto-flush timer if configured.
-    if (this.config.flushIntervalMs > 0) {
-      this.timer = setInterval(() => {
+    if (!options.skipSideEffects) {
+      // #86 — restore any queue persisted by #85 across a page unload.
+      const restored = loadPersistedQueue();
+      if (restored.length > 0) {
+        clearPersistedQueue();
+        for (const event of restored) {
+          this.queue.enqueue(event);
+        }
+        this.logger.debug(`restored ${restored.length} persisted events`);
         void this.flush();
-      }, this.config.flushIntervalMs);
-      // Unref the timer where supported (Node) so it does not keep the process
-      // alive; browsers return a numeric id with no unref, which is a no-op.
-      (this.timer as { unref?: () => void }).unref?.();
-    }
+      }
 
-    // Analytics #66 — opt-in global error capture.
-    if (this.config.captureGlobalErrors) {
-      this.bindGlobalErrorHandler();
-    }
+      // #72/#1072 — start the auto-flush timer if configured.
+      if (this.config.flushIntervalMs > 0) {
+        this.timer = setInterval(() => {
+          void this.flush();
+        }, this.config.flushIntervalMs);
+        // Unref the timer where supported (Node) so it does not keep the process
+        // alive; browsers return a numeric id with no unref, which is a no-op.
+        (this.timer as { unref?: () => void }).unref?.();
+      }
 
-    // #85 — persist the pending queue when the page is torn down.
-    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
-      window.addEventListener('beforeunload', this.handleBeforeUnload);
-    }
+      // Analytics #66 — opt-in global error capture.
+      if (this.config.captureGlobalErrors) {
+        this.bindGlobalErrorHandler();
+      }
 
-    // Analytics #84 — pause flushing while offline, resume on reconnect.
-    this.bindConnectivityHandlers();
+      // #85 — persist the pending queue when the page is torn down.
+      if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+        window.addEventListener('beforeunload', this.handleBeforeUnload);
+      }
+
+      // Analytics #84 — pause flushing while offline, resume on reconnect.
+      this.bindConnectivityHandlers();
+    }
   }
 
   private readonly handleBeforeUnload = (): void => {
@@ -139,8 +156,8 @@ export class AnalyticsClient {
   };
 
   /**
-   * #97 — normalize the emitter argument: no emitter → NoopEmitter,
-   * a single emitter → itself, an array → MultiSink fan-out.
+   * #97 — normalize the emitter argument: a single emitter → itself, an
+   * array → MultiSink fan-out, otherwise an endpoint builds an HttpSink.
    *
    * A one-element array is unwrapped to that emitter rather than wrapped in a
    * MultiSink, so `getEmitter()` returns what the caller passed.
@@ -151,7 +168,15 @@ export class AnalyticsClient {
       if (emitter.length === 1) return emitter[0];
       return new MultiSink(emitter);
     }
-    return emitter ?? new NoopEmitter();
+    if (emitter) return emitter;
+
+    const { endpoint, apiKey, fetchImpl } = this.config;
+    if (!endpoint) return new NoopEmitter();
+    if (!fetchImpl && typeof fetch !== 'function') {
+      console.warn('[analytics] no fetch implementation available', 'fetch.unavailable');
+      return new NoopEmitter();
+    }
+    return new HttpSink({ endpoint, apiKey, fetchImpl });
   }
 
   /**
@@ -253,34 +278,59 @@ export class AnalyticsClient {
     const events = this.queue.drain();
     if (events.length === 0) return;
 
-    await Promise.all(
-      events.map(async (event) => {
-        let prepared: AnalyticsEvent;
-        try {
-          prepared = await this.middleware.process(event);
-        } catch (error) {
-          // A throwing middleware hook must not lose the event.
-          this.logger.error(`middleware failed for "${event.name}"`, error);
-          this.deadLetter.push(event);
-          return;
-        }
+    const prepared: AnalyticsEvent[] = [];
+    for (const event of events) {
+      let result: AnalyticsEvent;
+      try {
+        result = await this.middleware.process(event);
+      } catch (error) {
+        this.logger.error(`middleware failed for "${event.name}"`, error);
+        this.deadLetter.push(event);
+        continue;
+      }
+      prepared.push(result);
+    }
+    if (prepared.length === 0) return;
 
-        if (!this.circuitBreaker.canProceed()) {
-          this.logger.warn(`circuit open — "${prepared.name}" routed to dead-letter`);
-          this.deadLetter.push(prepared);
-          return;
-        }
+    const sendBatch = this.emitter.sendBatch;
+    if (typeof sendBatch === 'function') {
+      if (!this.circuitBreaker.canProceed()) {
+        this.logger.warn('circuit open — batch routed to dead-letter');
+        this.deadLetterAll(prepared);
+        return;
+      }
 
-        try {
-          await this.emitter.send(prepared);
-          this.circuitBreaker.recordSuccess();
-        } catch (error) {
-          this.circuitBreaker.recordFailure();
-          this.logger.error(`emit failed for "${prepared.name}"`, error);
-          this.deadLetter.push(prepared);
-        }
-      }),
-    );
+      try {
+        await sendBatch.call(this.emitter, prepared);
+        this.circuitBreaker.recordSuccess();
+      } catch (error) {
+        this.circuitBreaker.recordFailure();
+        this.logger.error(`emit failed for batch of ${prepared.length}`, error);
+        this.deadLetterAll(prepared);
+      }
+      return;
+    }
+
+    for (const event of prepared) {
+      if (!this.circuitBreaker.canProceed()) {
+        this.logger.warn(`circuit open — "${event.name}" routed to dead-letter`);
+        this.deadLetter.push(event);
+        continue;
+      }
+
+      try {
+        await this.emitter.send(event);
+        this.circuitBreaker.recordSuccess();
+      } catch (error) {
+        this.circuitBreaker.recordFailure();
+        this.logger.error(`emit failed for "${event.name}"`, error);
+        this.deadLetter.push(event);
+      }
+    }
+  }
+
+  private deadLetterAll(events: readonly AnalyticsEvent[]): void {
+    for (const event of events) this.deadLetter.push(event);
   }
 
   private async flushRestoredQueue(): Promise<void> {
@@ -296,25 +346,47 @@ export class AnalyticsClient {
    *
    * With an event argument the event is sent directly (never enqueued).
    * Without an argument the pending queue is drained and sent as-is.
-   * Failures are swallowed (best-effort) and routed to the dead-letter.
+   * Middleware hooks run synchronously; an async hook is rejected and the event
+   * is dead-lettered instead of being sent without its redaction. Events that
+   * cannot pass the circuit breaker, or that fail to emit, are also dead-lettered.
    */
   flushSync(event?: AnalyticsEvent): void {
     const pending = event ? [event] : this.queue.drain();
 
     for (const item of pending) {
+      let prepared: AnalyticsEvent;
       try {
-        const result = this.emitter.send(item);
-        // An emitter may be sync (void) or async (Promise<void>); only the
-        // latter can reject, and a rejection cannot be caught synchronously.
+        prepared = this.middleware.processSync(item);
+      } catch (error) {
+        this.logger.error(`sync middleware failed for "${item.name}"`, error);
+        this.deadLetter.push(item);
+        continue;
+      }
+
+      if (!this.circuitBreaker.canProceed()) {
+        this.logger.warn(`circuit open — "${prepared.name}" routed to dead-letter`);
+        this.deadLetter.push(prepared);
+        continue;
+      }
+
+      const fail = (error: unknown): void => {
+        this.circuitBreaker.recordFailure();
+        this.logger.error(`emit failed for "${prepared.name}"`, error);
+        this.deadLetter.push(prepared);
+      };
+
+      try {
+        const result = this.emitter.send(prepared);
         if (result && typeof (result as Promise<void>).then === 'function') {
-          void (result as Promise<void>).catch((error: unknown) => {
-            this.logger.error(`emit failed for "${item.name}"`, error);
-            this.deadLetter.push(item);
-          });
+          void (result as Promise<void>).then(
+            () => this.circuitBreaker.recordSuccess(),
+            fail,
+          );
+        } else {
+          this.circuitBreaker.recordSuccess();
         }
       } catch (error) {
-        this.logger.error(`emit failed for "${item.name}"`, error);
-        this.deadLetter.push(item);
+        fail(error);
       }
     }
   }
@@ -333,6 +405,7 @@ export class AnalyticsClient {
     this.unbindConnectivityHandlers();
     this.unbindGlobalErrorHandler();
     void this.flush();
+    this.emitter.destroy?.();
   }
 
   /**

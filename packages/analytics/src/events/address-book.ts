@@ -1,4 +1,4 @@
-import { AnalyticsEvent } from '../types';
+import type { AnalyticsEvent } from '../types.js';
 
 export type AddressBookAction = 'add' | 'remove' | 'load';
 

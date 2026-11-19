@@ -13,6 +13,8 @@
     "@changesets/cli": "^2.27.0"
   },
   "overrides": {
-    "human-id": "3.0.1"
+    "human-id": "3.0.1",
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
   }
 }

@@ -1,4 +1,4 @@
-import { AnalyticsEvent } from '../types.js';
+import type { AnalyticsEvent } from '../types.js';
 
 /**
  * Builds a `network_error` event for a failed `fetch`/network call

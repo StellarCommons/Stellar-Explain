@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { AnalyticsClient } from '../src/client.js';
 import type { AnalyticsEvent } from '../src/types.js';
 import type { Emitter } from '../src/emitter/index.js';
