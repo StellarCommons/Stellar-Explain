@@ -8,6 +8,7 @@ import { validateProperties } from './validate.js';
 import type { Emitter } from './emitter/index.js';
 import { NoopEmitter } from './emitter/NoopEmitter.js';
 import { MultiSink } from './sinks/MultiSink.js';
+import { HttpSink } from './sinks/HttpSink.js';
 import { Logger } from './lib/logger.js';
 import { RateLimiter } from './lib/rateLimiter.js';
 import { CircuitBreaker } from './lib/circuitBreaker.js';
@@ -146,8 +147,8 @@ export class AnalyticsClient {
   };
 
   /**
-   * #97 — normalize the emitter argument: no emitter → NoopEmitter,
-   * a single emitter → itself, an array → MultiSink fan-out.
+   * #97 — normalize the emitter argument: a single emitter → itself, an
+   * array → MultiSink fan-out, otherwise an endpoint builds an HttpSink.
    *
    * A one-element array is unwrapped to that emitter rather than wrapped in a
    * MultiSink, so `getEmitter()` returns what the caller passed.
@@ -158,7 +159,15 @@ export class AnalyticsClient {
       if (emitter.length === 1) return emitter[0];
       return new MultiSink(emitter);
     }
-    return emitter ?? new NoopEmitter();
+    if (emitter) return emitter;
+
+    const { endpoint, apiKey, fetchImpl } = this.config;
+    if (!endpoint) return new NoopEmitter();
+    if (!fetchImpl && typeof fetch !== 'function') {
+      console.warn('[analytics] no fetch implementation available', 'fetch.unavailable');
+      return new NoopEmitter();
+    }
+    return new HttpSink({ endpoint, apiKey, fetchImpl });
   }
 
   /**

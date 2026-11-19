@@ -1,4 +1,4 @@
-import { AnalyticsEvent } from '../types.js';
+import type { AnalyticsEvent } from '../types.js';
 
 export function createVisibilityChangeEvent(state?: 'visible' | 'hidden'): AnalyticsEvent {
   const isVisible =

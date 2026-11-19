@@ -186,12 +186,13 @@ export class HttpSink implements Emitter {
    * @returns `true` if the event was handed to the browser, else `false`.
    */
   sendBeacon(event: AnalyticsEvent): boolean {
+    const normalized = this.toIngestEvent(event);
     if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
-      const blob = new Blob([JSON.stringify(event)], { type: 'application/json' });
+      const blob = new Blob([JSON.stringify(normalized)], { type: 'application/json' });
       return navigator.sendBeacon(this.endpoint, blob);
     }
     if (this.resolveFetch()) {
-      void this.resolveFetch()!(this.endpoint, this.requestInit(event, true));
+      void this.resolveFetch()!(this.endpoint, this.requestInit(normalized, true));
       return true;
     }
     return false;
@@ -231,13 +232,18 @@ export class HttpSink implements Emitter {
 
   // ── internals ───────────────────────────────────────────────────────────────
 
+  private toIngestEvent(event: AnalyticsEvent): AnalyticsEvent {
+    const timestamp = event.timestamp >= 1_000_000_000_000 ? Math.floor(event.timestamp / 1000) : Math.floor(event.timestamp);
+    return { ...event, timestamp };
+  }
+
   private resolveFetch(): FetchLike | undefined {
     const candidate = this.fetchImpl ?? (typeof fetch === 'function' ? (fetch as unknown as FetchLike) : undefined);
     return candidate;
   }
 
   private async post(event: AnalyticsEvent): Promise<void> {
-    await this.request(this.endpoint, JSON.stringify(event), [event]);
+    await this.request(this.endpoint, JSON.stringify(this.toIngestEvent(event)), [event]);
   }
 
   /** POST `body`, applying the circuit breaker, retries and dead-lettering. */
@@ -325,7 +331,7 @@ export class HttpSink implements Emitter {
   }
 
   private batchBody(events: readonly AnalyticsEvent[]): string {
-    return JSON.stringify(events);
+    return JSON.stringify(events.map((event) => this.toIngestEvent(event)));
   }
 
   private init(body: string, keepalive = false): RequestInit {

@@ -1,4 +1,4 @@
-import { AnalyticsEvent } from '../types';
+import type { AnalyticsEvent } from '../types.js';
 
 export interface HeatmapPointOptions {
   /** Raw click x-coordinate in pixels. */

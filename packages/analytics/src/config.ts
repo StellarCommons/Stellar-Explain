@@ -1,4 +1,5 @@
 import type { AnalyticsEvent } from './types.js';
+import type { FetchLike } from './sinks/HttpSink.js';
 import type { CircuitBreakerOptions } from './lib/circuitBreaker.js';
 
 /**
@@ -9,6 +10,8 @@ export interface AnalyticsConfig {
   endpoint: string;
   /** Optional API key included with every request. */
   apiKey?: string;
+  /** Optional fetch implementation used by the default HTTP transport. */
+  fetchImpl?: FetchLike;
   /** When true, debug logging is enabled. Default: false. */
   debug: boolean;
   /** How often (ms) the event queue is flushed. Default: 5000. */
