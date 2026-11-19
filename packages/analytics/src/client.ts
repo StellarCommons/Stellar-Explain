@@ -88,7 +88,11 @@ export class AnalyticsClient {
   private offlineHandler: (() => void) | undefined;
   private globalErrorHandler: ((event: ErrorEvent) => void) | undefined;
 
-  constructor(config: Partial<AnalyticsConfig> = {}, emitter?: Emitter | Emitter[]) {
+  constructor(
+    config: Partial<AnalyticsConfig> = {},
+    emitter?: Emitter | Emitter[],
+    options: { skipSideEffects?: boolean } = {},
+  ) {
     this.config = resolveConfig(config) as ResolvedConfig;
     this.logger = new Logger(this.config.debug);
     this.emitter = this.buildEmitter(emitter);
@@ -100,39 +104,41 @@ export class AnalyticsClient {
     this.isOffline =
       typeof navigator !== 'undefined' && 'onLine' in navigator ? !navigator.onLine : false;
 
-    // #86 — restore any queue persisted by #85 across a page unload.
-    const restored = loadPersistedQueue();
-    if (restored.length > 0) {
-      clearPersistedQueue();
-      for (const event of restored) {
-        this.queue.enqueue(event);
-      }
-      this.logger.debug(`restored ${restored.length} persisted events`);
-      void this.flush();
-    }
-
-    // #72/#1072 — start the auto-flush timer if configured.
-    if (this.config.flushIntervalMs > 0) {
-      this.timer = setInterval(() => {
+    if (!options.skipSideEffects) {
+      // #86 — restore any queue persisted by #85 across a page unload.
+      const restored = loadPersistedQueue();
+      if (restored.length > 0) {
+        clearPersistedQueue();
+        for (const event of restored) {
+          this.queue.enqueue(event);
+        }
+        this.logger.debug(`restored ${restored.length} persisted events`);
         void this.flush();
-      }, this.config.flushIntervalMs);
-      // Unref the timer where supported (Node) so it does not keep the process
-      // alive; browsers return a numeric id with no unref, which is a no-op.
-      (this.timer as { unref?: () => void }).unref?.();
-    }
+      }
 
-    // Analytics #66 — opt-in global error capture.
-    if (this.config.captureGlobalErrors) {
-      this.bindGlobalErrorHandler();
-    }
+      // #72/#1072 — start the auto-flush timer if configured.
+      if (this.config.flushIntervalMs > 0) {
+        this.timer = setInterval(() => {
+          void this.flush();
+        }, this.config.flushIntervalMs);
+        // Unref the timer where supported (Node) so it does not keep the process
+        // alive; browsers return a numeric id with no unref, which is a no-op.
+        (this.timer as { unref?: () => void }).unref?.();
+      }
 
-    // #85 — persist the pending queue when the page is torn down.
-    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
-      window.addEventListener('beforeunload', this.handleBeforeUnload);
-    }
+      // Analytics #66 — opt-in global error capture.
+      if (this.config.captureGlobalErrors) {
+        this.bindGlobalErrorHandler();
+      }
 
-    // Analytics #84 — pause flushing while offline, resume on reconnect.
-    this.bindConnectivityHandlers();
+      // #85 — persist the pending queue when the page is torn down.
+      if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+        window.addEventListener('beforeunload', this.handleBeforeUnload);
+      }
+
+      // Analytics #84 — pause flushing while offline, resume on reconnect.
+      this.bindConnectivityHandlers();
+    }
   }
 
   private readonly handleBeforeUnload = (): void => {
