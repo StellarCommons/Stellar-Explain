@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { AnalyticsClient } from '../src/client.js';
 import { EventQueue } from '../src/queue.js';
 import { Logger } from '../src/lib/logger.js';

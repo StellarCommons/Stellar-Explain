@@ -177,14 +177,6 @@ describe('CircuitBreaker', () => {
 });
 
 // #94: the breaker's behaviour as wired into the client.
-//
-// NOTE: `AnalyticsClient` constructs `new CircuitBreaker()` with no options, so
-// the default failureThreshold of 5 applies — but this test expects the circuit
-// to be open after 3 failures. The threshold this test assumes is not the one
-// the client uses. The assertions below are preserved verbatim from before the
-// merge (this issue is about the concatenated suites, not about what the
-// breaker threshold should be); whoever owns the breaker configuration needs to
-// reconcile the two. Flagged rather than silently changed.
 describe('#94 breaker wired into the client', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -197,7 +189,7 @@ describe('#94 breaker wired into the client', () => {
   it('trip the breaker and short-circuit subsequent sends to the dead-letter', async () => {
     const failing = { send: vi.fn().mockRejectedValue(new Error('down')) };
     const client = new AnalyticsClient(
-      { maxEventsPerSecond: 50 },
+      { maxEventsPerSecond: 50, circuitBreaker: { failureThreshold: 3 } },
       failing,
     );
 
