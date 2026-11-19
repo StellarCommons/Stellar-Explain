@@ -6,13 +6,14 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct ApiError {
     pub error: ErrorBody,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct ErrorBody {
     pub code: String,
     pub message: String,
