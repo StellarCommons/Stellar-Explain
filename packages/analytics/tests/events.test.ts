@@ -7,6 +7,12 @@ import { createPageViewEvent } from '../src/events/page-view';
 import { createScrollDepthEvent } from '../src/events/scroll-depth';
 import { createSearchEvent } from '../src/events/search';
 import { createVisibilityChangeEvent } from '../src/events/visibility';
+import { createErrorEvent } from '../src/events/error';
+import { createNetworkErrorEvent } from '../src/events/network-error';
+import { createRetryEvent } from '../src/events/retry';
+import { createFunnelStepEvent } from '../src/events/funnel';
+import { createQRShareEvent } from '../src/events/qr-share';
+import { createGroupEvent } from '../src/group';
 
 describe('createClickEvent', () => {
   it('builds a click event from tagName/id/textContent', () => {
@@ -125,5 +131,58 @@ describe('createVisibilityChangeEvent', () => {
     expect(event.name).toBe('visibility_change');
     expect(event.properties.state).toBe('hidden');
     expect(event.properties.isVisible).toBe(false);
+  });
+});
+
+describe('createErrorEvent', () => {
+  it('truncates stacks to 500 characters', () => {
+    const event = createErrorEvent('boom', 'x'.repeat(900));
+    expect(event.name).toBe('error');
+    expect(event.properties.message).toBe('boom');
+    expect((event.properties.stack as string).length).toBe(500);
+  });
+
+  it('omits stack when not provided', () => {
+    expect('stack' in createErrorEvent('boom').properties).toBe(false);
+  });
+});
+
+describe('createNetworkErrorEvent', () => {
+  it('includes only the provided optional fields', () => {
+    const event = createNetworkErrorEvent('/api', 500);
+    expect(event.name).toBe('network_error');
+    expect(event.properties).toEqual({ url: '/api', status: 500 });
+  });
+});
+
+describe('createRetryEvent', () => {
+  it('supports positional and options forms', () => {
+    expect(createRetryEvent('fetch', 2).properties).toEqual({ action: 'fetch', attempt: 2 });
+    expect(createRetryEvent({ action: 'fetch', attempt: 3 }).name).toBe('retry');
+  });
+});
+
+describe('createFunnelStepEvent', () => {
+  it('builds a funnel_step event with optional stepName', () => {
+    const event = createFunnelStepEvent({ funnel: 'onboarding', step: 1, stepName: 'email' });
+    expect(event.name).toBe('funnel_step');
+    expect(event.properties).toEqual({ funnel: 'onboarding', step: 1, stepName: 'email' });
+    expect('stepName' in createFunnelStepEvent('onboarding', 0).properties).toBe(false);
+  });
+});
+
+describe('createQRShareEvent', () => {
+  it('builds a qr_share event', () => {
+    const event = createQRShareEvent('generated', 'account');
+    expect(event.name).toBe('qr_share');
+    expect(event.properties).toEqual({ action: 'generated', context: 'account' });
+  });
+});
+
+describe('createGroupEvent', () => {
+  it('defaults traits to an empty object', () => {
+    const event = createGroupEvent('g1');
+    expect(event.name).toBe('group');
+    expect(event.properties).toEqual({ groupId: 'g1', traits: {} });
   });
 });
