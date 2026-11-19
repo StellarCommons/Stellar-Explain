@@ -181,15 +181,26 @@ impl HorizonClient {
             .get(url)
             .send()
             .await
-            .map_err(|_| HorizonError::NetworkError)?;
+            .map_err(|e| {
+                tracing::warn!(error = %e, "Horizon request failed");
+                HorizonError::NetworkError
+            })?;
 
         match res.status().as_u16() {
             200 => res
                 .json::<HorizonTransaction>()
                 .await
-                .map_err(|_| HorizonError::InvalidResponse),
+                .map_err(|e| {
+                    tracing::warn!(error = %e, "Failed to parse Horizon transaction response");
+                    HorizonError::InvalidResponse
+                }),
             404 => Err(HorizonError::TransactionNotFound),
-            _ => Err(HorizonError::InvalidResponse),
+            429 => Err(HorizonError::RateLimited),
+            503 => Err(HorizonError::Unavailable),
+            status => {
+                tracing::warn!(status, "Unexpected Horizon status for transaction");
+                Err(HorizonError::InvalidResponse)
+            }
         }
     }
 
@@ -204,18 +215,29 @@ impl HorizonClient {
             .get(url)
             .send()
             .await
-            .map_err(|_| HorizonError::NetworkError)?;
+            .map_err(|e| {
+                tracing::warn!(error = %e, "Horizon request failed");
+                HorizonError::NetworkError
+            })?;
 
         match res.status().as_u16() {
             200 => {
                 let wrapper: HorizonOperationsResponse = res
                     .json()
                     .await
-                    .map_err(|_| HorizonError::InvalidResponse)?;
+                    .map_err(|e| {
+                        tracing::warn!(error = %e, "Failed to parse Horizon operations response");
+                        HorizonError::InvalidResponse
+                    })?;
                 Ok(wrapper._embedded.records)
             }
             404 => Err(HorizonError::TransactionNotFound),
-            _ => Err(HorizonError::InvalidResponse),
+            429 => Err(HorizonError::RateLimited),
+            503 => Err(HorizonError::Unavailable),
+            status => {
+                tracing::warn!(status, "Unexpected Horizon status for operations");
+                Err(HorizonError::InvalidResponse)
+            }
         }
     }
 
@@ -230,18 +252,29 @@ impl HorizonClient {
             .get(url)
             .send()
             .await
-            .map_err(|_| HorizonError::NetworkError)?;
+            .map_err(|e| {
+                tracing::warn!(error = %e, "Horizon request failed");
+                HorizonError::NetworkError
+            })?;
 
         match res.status().as_u16() {
             200 => {
                 let raw: HorizonAccount = res
                     .json()
                     .await
-                    .map_err(|_| HorizonError::InvalidResponse)?;
+                    .map_err(|e| {
+                        tracing::warn!(error = %e, "Failed to parse Horizon account response");
+                        HorizonError::InvalidResponse
+                    })?;
                 Ok(raw.into_domain())
             }
             404 => Err(HorizonError::AccountNotFound),
-            _ => Err(HorizonError::InvalidResponse),
+            429 => Err(HorizonError::RateLimited),
+            503 => Err(HorizonError::Unavailable),
+            status => {
+                tracing::warn!(status, "Unexpected Horizon status for account");
+                Err(HorizonError::InvalidResponse)
+            }
         }
     }
 
@@ -322,14 +355,20 @@ impl HorizonClient {
             .get(&url)
             .send()
             .await
-            .map_err(|_| HorizonError::NetworkError)?;
+            .map_err(|e| {
+                tracing::warn!(error = %e, "Horizon request failed");
+                HorizonError::NetworkError
+            })?;
 
         match res.status().as_u16() {
             200 => {
                 let wrapper: HorizonAccountTransactionsResponse = res
                     .json()
                     .await
-                    .map_err(|_| HorizonError::InvalidResponse)?;
+                    .map_err(|e| {
+                        tracing::warn!(error = %e, "Failed to parse Horizon account transactions response");
+                        HorizonError::InvalidResponse
+                    })?;
 
                 let next_cursor =
                     extract_cursor(wrapper._links.next.as_ref().and_then(|l| l.href.as_deref()));
@@ -339,7 +378,12 @@ impl HorizonClient {
                 Ok((wrapper._embedded.records, next_cursor, prev_cursor))
             }
             404 => Err(HorizonError::AccountNotFound),
-            _ => Err(HorizonError::InvalidResponse),
+            429 => Err(HorizonError::RateLimited),
+            503 => Err(HorizonError::Unavailable),
+            status => {
+                tracing::warn!(status, "Unexpected Horizon status for account transactions");
+                Err(HorizonError::InvalidResponse)
+            }
         }
     }
 
