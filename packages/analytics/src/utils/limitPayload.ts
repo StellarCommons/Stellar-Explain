@@ -1,5 +1,24 @@
 import type { Logger } from '../lib/logger.js';
 
+const encoder = new TextEncoder();
+
+function byteLength(text: string): number {
+  return encoder.encode(text).length;
+}
+
+/** Truncates to at most `maxBytes` UTF-8 bytes, never splitting a code point. */
+function truncateUtf8(text: string, maxBytes: number): string {
+  let out = '';
+  let bytes = 0;
+  for (const ch of text) {
+    const size = byteLength(ch);
+    if (bytes + size > maxBytes) break;
+    out += ch;
+    bytes += size;
+  }
+  return out;
+}
+
 /**
  * Bounds the serialized size of each property value.
  *
@@ -28,9 +47,10 @@ export function limitPayload(
     // this is belt-and-braces for direct callers.)
     const serialized = JSON.stringify(value);
 
-    if (serialized !== undefined && serialized.length > maxBytes) {
+    if (serialized !== undefined && byteLength(serialized) > maxBytes) {
       logger.warn(`Property "${key}" exceeds ${maxBytes} bytes, truncating`);
-      result[key] = serialized.slice(0, maxBytes);
+      // Truncate the raw string for string values so no JSON quote is left behind.
+      result[key] = truncateUtf8(typeof value === 'string' ? value : serialized, maxBytes);
     } else {
       result[key] = value;
     }
