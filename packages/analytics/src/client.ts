@@ -254,34 +254,59 @@ export class AnalyticsClient {
     const events = this.queue.drain();
     if (events.length === 0) return;
 
-    await Promise.all(
-      events.map(async (event) => {
-        let prepared: AnalyticsEvent;
-        try {
-          prepared = await this.middleware.process(event);
-        } catch (error) {
-          // A throwing middleware hook must not lose the event.
-          this.logger.error(`middleware failed for "${event.name}"`, error);
-          this.deadLetter.push(event);
-          return;
-        }
+    const prepared: AnalyticsEvent[] = [];
+    for (const event of events) {
+      let result: AnalyticsEvent;
+      try {
+        result = await this.middleware.process(event);
+      } catch (error) {
+        this.logger.error(`middleware failed for "${event.name}"`, error);
+        this.deadLetter.push(event);
+        continue;
+      }
+      prepared.push(result);
+    }
+    if (prepared.length === 0) return;
 
-        if (!this.circuitBreaker.canProceed()) {
-          this.logger.warn(`circuit open — "${prepared.name}" routed to dead-letter`);
-          this.deadLetter.push(prepared);
-          return;
-        }
+    const sendBatch = this.emitter.sendBatch;
+    if (typeof sendBatch === 'function') {
+      if (!this.circuitBreaker.canProceed()) {
+        this.logger.warn('circuit open — batch routed to dead-letter');
+        this.deadLetterAll(prepared);
+        return;
+      }
 
-        try {
-          await this.emitter.send(prepared);
-          this.circuitBreaker.recordSuccess();
-        } catch (error) {
-          this.circuitBreaker.recordFailure();
-          this.logger.error(`emit failed for "${prepared.name}"`, error);
-          this.deadLetter.push(prepared);
-        }
-      }),
-    );
+      try {
+        await sendBatch.call(this.emitter, prepared);
+        this.circuitBreaker.recordSuccess();
+      } catch (error) {
+        this.circuitBreaker.recordFailure();
+        this.logger.error(`emit failed for batch of ${prepared.length}`, error);
+        this.deadLetterAll(prepared);
+      }
+      return;
+    }
+
+    for (const event of prepared) {
+      if (!this.circuitBreaker.canProceed()) {
+        this.logger.warn(`circuit open — "${event.name}" routed to dead-letter`);
+        this.deadLetter.push(event);
+        continue;
+      }
+
+      try {
+        await this.emitter.send(event);
+        this.circuitBreaker.recordSuccess();
+      } catch (error) {
+        this.circuitBreaker.recordFailure();
+        this.logger.error(`emit failed for "${event.name}"`, error);
+        this.deadLetter.push(event);
+      }
+    }
+  }
+
+  private deadLetterAll(events: readonly AnalyticsEvent[]): void {
+    for (const event of events) this.deadLetter.push(event);
   }
 
   /**

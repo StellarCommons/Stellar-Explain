@@ -9,7 +9,7 @@
 // level: the transport suites above run on real timers, and hoisting
 // `vi.useFakeTimers()` to the top of the file would change their behaviour.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { HttpSink } from '../src/sinks/HttpSink.js';
+import { CircuitOpenError, HttpSink } from '../src/sinks/HttpSink.js';
 import { AnalyticsClient } from '../src/client.js';
 import { NoopEmitter } from '../src/emitter/NoopEmitter.js';
 import type { AnalyticsEvent } from '../src/types.js';
@@ -155,8 +155,9 @@ describe('HttpSink — circuit breaker (#82)', () => {
     await sink.send(event); // fails, opens the circuit
     expect(sink.getCircuitState()).toBe('open');
 
-    await sink.send(event); // should be skipped, not attempted
+    await expect(sink.send(event)).rejects.toThrow(CircuitOpenError);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(sink.getDeadLetters()).toHaveLength(2);
   });
 
   it('records a failure when fetch rejects', async () => {
