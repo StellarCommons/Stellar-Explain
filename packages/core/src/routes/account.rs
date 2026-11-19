@@ -9,7 +9,7 @@ use tracing::{error, info, info_span};
 use utoipa::ToSchema;
 
 use crate::{
-    errors::{AppError, ValidationError},
+    errors::{ApiError, AppError, ValidationError},
     explain::account::explain_account_with_org_name,
     explain::transaction::explain_fee,
     middleware::request_id::RequestId,
@@ -27,6 +27,20 @@ pub struct AccountExplanationResponse {
     pub home_domain: Option<String>,
     pub org_name: Option<String>,
     pub flag_descriptions: Vec<String>,
+}
+
+const DEFAULT_LIMIT: u32 = 10;
+const MAX_LIMIT: u32 = 50;
+
+/// Applies the default and validates the requested history page size.
+fn validate_limit(limit: Option<u32>) -> Result<u32, ValidationError> {
+    let limit = limit.unwrap_or(DEFAULT_LIMIT);
+    if limit == 0 || limit > MAX_LIMIT {
+        return Err(ValidationError::InvalidLimit(format!(
+            "must be between 1 and {MAX_LIMIT}"
+        )));
+    }
+    Ok(limit)
 }
 
 #[derive(Debug, Deserialize)]
@@ -64,8 +78,9 @@ pub struct AccountHistoryResponse {
     ),
     responses(
         (status = 200, description = "Account transaction history", body = AccountHistoryResponse),
-        (status = 400, description = "Invalid address or limit"),
-        (status = 404, description = "Account not found on the Stellar network"),
+        (status = 400, description = "Invalid address or limit", body = ApiError),
+        (status = 404, description = "Account not found on the Stellar network", body = ApiError),
+        (status = 502, description = "Upstream Horizon error (UPSTREAM_ERROR)", body = ApiError),
     )
 )]
 pub async fn get_account_transactions(
@@ -102,12 +117,10 @@ pub async fn get_account_transactions(
         app_error
     })?;
 
-    let limit = params.limit.unwrap_or(10);
-
-    if limit == 0 || limit > 50 {
-        let app_error = AppError::Validation(ValidationError::InvalidLimit(
-            "must be between 1 and 50".to_string(),
-        ));
+    let limit = match validate_limit(params.limit) {
+        Ok(limit) => limit,
+        Err(e) => {
+        let app_error = AppError::Validation(e);
         info!(
             request_id = %request_id,
             address = %address,
@@ -117,7 +130,8 @@ pub async fn get_account_transactions(
             "request_completed"
         );
         return Err(app_error);
-    }
+        }
+    };
 
     let order = "desc";
 
@@ -152,11 +166,16 @@ pub async fn get_account_transactions(
         "horizon_fetch_completed"
     );
 
-    // Horizon includes `_links.next` on essentially every page — even the
-    // true last page — so next_cursor presence is not a reliable end-of-
-    // collection signal.  The standard Horizon indicator is whether the
-    // response contained fewer records than we asked for.
-    let has_more = records.len() as u32 == limit;
+    // Horizon includes `_links.next` on essentially every page, so a full page
+    // does not prove more records exist. Peek one record past the cursor.
+    let has_more = match (records.len() as u32 == limit, next_cursor.as_deref()) {
+        (true, Some(c)) => client
+            .fetch_account_transactions(&address, 1, Some(c), order)
+            .await
+            .map(|(r, _, _)| !r.is_empty())
+            .unwrap_or(true),
+        _ => false,
+    };
 
     let transactions = records
         .into_iter()
@@ -216,8 +235,9 @@ pub async fn get_account_transactions(
     ),
     responses(
         (status = 200, description = "Account explanation", body = AccountExplanationResponse),
-        (status = 400, description = "Invalid Stellar address"),
-        (status = 404, description = "Account not found on the Stellar network"),
+        (status = 400, description = "Invalid Stellar address", body = ApiError),
+        (status = 404, description = "Account not found on the Stellar network", body = ApiError),
+        (status = 502, description = "Upstream Horizon error (UPSTREAM_ERROR)", body = ApiError),
     )
 )]
 pub async fn get_account_explanation(
@@ -304,14 +324,8 @@ pub async fn get_account_explanation(
 mod tests {
     use super::*;
 
-    fn validate(limit: Option<u32>) -> Result<u32, AppError> {
-        let limit = limit.unwrap_or(10);
-        if limit == 0 || limit > 50 {
-            return Err(AppError::BadRequest(
-                "limit must be between 1 and 50".to_string(),
-            ));
-        }
-        Ok(limit)
+    fn validate(limit: Option<u32>) -> Result<u32, ValidationError> {
+        validate_limit(limit)
     }
 
     #[test]
@@ -334,12 +348,12 @@ mod tests {
 
     #[test]
     fn test_limit_zero_rejected() {
-        assert!(matches!(validate(Some(0)), Err(AppError::BadRequest(_))));
+        assert!(matches!(validate(Some(0)), Err(ValidationError::InvalidLimit(_))));
     }
 
     #[test]
     fn test_limit_over_max_rejected() {
-        assert!(matches!(validate(Some(51)), Err(AppError::BadRequest(_))));
+        assert!(matches!(validate(Some(51)), Err(ValidationError::InvalidLimit(_))));
     }
 
     #[test]
