@@ -13,7 +13,14 @@ impl StellarNetwork {
             .as_str()
         {
             "testnet" => StellarNetwork::Testnet,
-            _ => StellarNetwork::Public,
+            "public" | "mainnet" => StellarNetwork::Public,
+            other => {
+                tracing::warn!(
+                    value = %other,
+                    "unrecognized STELLAR_NETWORK value; falling back to public"
+                );
+                StellarNetwork::Public
+            }
         }
     }
 

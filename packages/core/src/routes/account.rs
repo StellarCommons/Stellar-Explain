@@ -1,6 +1,6 @@
 use axum::{
     Json,
-    extract::{Extension, Path, Query, State},
+    extract::{Extension, Path, Query, State, rejection::QueryRejection},
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -85,7 +85,7 @@ pub struct AccountHistoryResponse {
 )]
 pub async fn get_account_transactions(
     Path(address): Path<String>,
-    Query(params): Query<AccountTransactionsQuery>,
+    params: Result<Query<AccountTransactionsQuery>, QueryRejection>,
     State(client): State<Arc<HorizonClient>>,
     Extension(request_id): Extension<RequestId>,
 ) -> Result<Json<AccountHistoryResponse>, AppError> {
@@ -121,6 +121,16 @@ pub async fn get_account_transactions(
         Ok(limit) => limit,
         Err(e) => {
         let app_error = AppError::Validation(e);
+    let Query(params) = params.map_err(|e| {
+        AppError::Validation(ValidationError::InvalidLimit(e.body_text()))
+    })?;
+
+    let limit = params.limit.unwrap_or(10);
+
+    if limit == 0 || limit > 50 {
+        let app_error = AppError::Validation(ValidationError::InvalidLimit(
+            "must be between 1 and 50".to_string(),
+        ));
         info!(
             request_id = %request_id,
             address = %address,

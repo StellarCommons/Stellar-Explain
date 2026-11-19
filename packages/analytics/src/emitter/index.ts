@@ -22,6 +22,8 @@ export interface Emitter {
    * assumed.
    */
   sendBatch?(events: readonly AnalyticsEvent[]): void | Promise<void>;
+  /** Optional cleanup hook for emitters that hold timers or other resources. */
+  destroy?(): void;
 }
 
 /**

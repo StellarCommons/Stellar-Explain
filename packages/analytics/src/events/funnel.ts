@@ -1,4 +1,4 @@
-import { AnalyticsEvent } from '../types';
+import type { AnalyticsEvent } from '../types.js';
 
 export interface FunnelStepOptions {
   /** Name identifying the funnel, e.g. "onboarding", "checkout". */

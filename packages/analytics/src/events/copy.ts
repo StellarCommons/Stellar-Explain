@@ -1,4 +1,4 @@
-import { AnalyticsEvent } from '../types.js';
+import type { AnalyticsEvent } from '../types.js';
 
 export function createCopyEvent(copiedTextLength: number): AnalyticsEvent {
   return {
