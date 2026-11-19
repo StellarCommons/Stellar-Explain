@@ -27,10 +27,19 @@ pub fn map_transaction_to_domain(
         operations: rc.operations.clone(),
     });
 
+    let fee_charged = tx.fee_charged.parse().unwrap_or_else(|_| {
+        tracing::warn!(
+            hash = %tx.hash,
+            fee_charged = %tx.fee_charged,
+            "unparseable fee_charged from Horizon; defaulting to 0"
+        );
+        0
+    });
+
     Transaction::new(
         tx.hash,
         tx.successful,
-        tx.fee_charged.parse().unwrap_or(0),
+        fee_charged,
         ops,
         memo,
         result_codes,
