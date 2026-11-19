@@ -1,4 +1,4 @@
-import { AnalyticsEvent } from '../types.js';
+import type { AnalyticsEvent } from '../types.js';
 
 /** Stack traces are truncated to this many characters before being attached. */
 const MAX_STACK_LENGTH = 500;
