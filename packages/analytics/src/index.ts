@@ -39,6 +39,25 @@ export { EventDeduplicator } from './dedup.js';
 export { shouldSample } from './sampling.js';
 export { limitPayload } from './utils/limitPayload.js';
 
+// ── Event builders and context helpers ──────────────────────────────────────
+export { getAnonymousUserId } from './user.js';
+export type { GroupTraits } from './group.js';
+export { createGroupEvent } from './group.js';
+export type { LocaleInfo } from './locale.js';
+export { getLocaleInfo } from './locale.js';
+export type { PageContext } from './context/page.js';
+export { getPageContext } from './context/page.js';
+export type { ColorScheme, ColorSchemeContext } from './context/color-scheme.js';
+export { getColorSchemeContext } from './context/color-scheme.js';
+export { createErrorEvent } from './events/error.js';
+export { createNetworkErrorEvent } from './events/network-error.js';
+export type { RetryOptions } from './events/retry.js';
+export { createRetryEvent } from './events/retry.js';
+export type { FunnelStepOptions } from './events/funnel.js';
+export { createFunnelStepEvent } from './events/funnel.js';
+export type { QRShareAction, QRShareOptions } from './events/qr-share.js';
+export { createQRShareEvent } from './events/qr-share.js';
+
 // ── Validation ───────────────────────────────────────────────────────────────
 export { validateProperties } from './validate.js';
 
