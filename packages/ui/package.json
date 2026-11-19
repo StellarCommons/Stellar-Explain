@@ -24,7 +24,7 @@
     "eslint": "^9",
     "eslint-config-next": "15.5.3",
     "eslint-config-prettier": "^9.1.0",
-    "tailwindcss": "^4",
+    "tailwindcss": "^4.3.3",
     "typescript": "^5"
   }
 }
