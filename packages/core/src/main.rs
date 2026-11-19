@@ -114,6 +114,9 @@ async fn main() {
     }
 
     let cors = CorsLayer::new()
+        .allow_origin(AllowOrigin::exact(allowed_origin))
+        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+        .allow_headers([header::CONTENT_TYPE, header::ACCEPT, header::AUTHORIZATION]);
         .allow_origin(AllowOrigin::list(allowed_origins))
         .allow_methods([Method::GET, Method::OPTIONS])
         .allow_headers([header::CONTENT_TYPE, header::ACCEPT]);
