@@ -105,6 +105,15 @@ export class AnalyticsClient {
     this.isOffline =
       typeof navigator !== 'undefined' && 'onLine' in navigator ? !navigator.onLine : false;
 
+    // #86 — restore any queue persisted by #85 across a page unload.
+    const restored = loadPersistedQueue();
+    if (restored.length > 0) {
+      for (const event of restored) {
+        this.queue.enqueue(event);
+      }
+      this.logger.debug(`restored ${restored.length} persisted events`);
+      void this.flushRestoredQueue();
+    }
     if (!options.skipSideEffects) {
       // #86 — restore any queue persisted by #85 across a page unload.
       const restored = loadPersistedQueue();
@@ -322,6 +331,14 @@ export class AnalyticsClient {
 
   private deadLetterAll(events: readonly AnalyticsEvent[]): void {
     for (const event of events) this.deadLetter.push(event);
+  }
+
+  private async flushRestoredQueue(): Promise<void> {
+    const deadLettersBefore = this.deadLetter.size;
+    await this.flush();
+    if (this.deadLetter.size === deadLettersBefore && this.queue.size === 0) {
+      clearPersistedQueue();
+    }
   }
 
   /**
