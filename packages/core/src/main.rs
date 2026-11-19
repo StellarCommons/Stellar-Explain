@@ -12,6 +12,7 @@ mod state;
 use axum::{
     Router,
     http::{HeaderValue, Method, header},
+    response::IntoResponse,
     middleware as axum_middleware,
     routing::get,
 };
@@ -51,6 +52,36 @@ fn init_tracing() {
     }
 }
 
+async fn not_found_fallback() -> impl IntoResponse {
+    errors::AppError::NotFound("Route not found".to_string())
+}
+
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        let _ = tokio::signal::ctrl_c().await;
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        if let Ok(mut sig) =
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+        {
+            sig.recv().await;
+        } else {
+            std::future::pending::<()>().await;
+        }
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+    info!("shutdown_signal_received");
+}
+
 #[tokio::main]
 async fn main() {
     dotenvy::dotenv().ok();
@@ -67,12 +98,28 @@ async fn main() {
 
     info!(cors_origin = %cors_origin, "cors_origin_selected");
 
-    let allowed_origin: HeaderValue = cors_origin.parse().expect("CORS_ORIGIN is not valid");
+    let mut allowed_origins: Vec<HeaderValue> = Vec::new();
+    for origin in cors_origin.split(',').map(str::trim).filter(|o| !o.is_empty()) {
+        match origin.parse::<HeaderValue>() {
+            Ok(v) => allowed_origins.push(v),
+            Err(err) => {
+                tracing::error!(cors_origin = %origin, error = %err, "invalid CORS_ORIGIN; must be a comma-separated list of valid origins");
+                std::process::exit(1);
+            }
+        }
+    }
+    if allowed_origins.is_empty() {
+        tracing::error!(cors_origin = %cors_origin, "invalid CORS_ORIGIN; no origins specified");
+        std::process::exit(1);
+    }
 
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::exact(allowed_origin))
         .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
         .allow_headers([header::CONTENT_TYPE, header::ACCEPT, header::AUTHORIZATION]);
+        .allow_origin(AllowOrigin::list(allowed_origins))
+        .allow_methods([Method::GET, Method::OPTIONS])
+        .allow_headers([header::CONTENT_TYPE, header::ACCEPT]);
 
     let horizon_client = Arc::new(HorizonClient::new(horizon_url));
 
@@ -95,6 +142,7 @@ async fn main() {
             get(routes::account::get_account_transactions),
         )
         .merge(SwaggerUi::new("/docs").url("/openapi.json", openapi))
+        .fallback(not_found_fallback)
         .with_state(horizon_client)
         .layer(cors)
         .layer(ServiceBuilder::new().layer(axum_middleware::from_fn(request_id_middleware)));
@@ -126,7 +174,10 @@ async fn main() {
         }
     };
 
-    if let Err(err) = axum::serve(listener, app).await {
+    if let Err(err) = axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await
+    {
         tracing::error!(bind_addr = %addr, error = %err, "server terminated with an error");
         std::process::exit(1);
     }

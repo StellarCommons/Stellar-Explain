@@ -1,4 +1,4 @@
-import { AnalyticsEvent } from '../types';
+import type { AnalyticsEvent } from '../types.js';
 
 export interface RetryOptions {
   /** What is being retried, e.g. "fetch_leaderboard", "submit_form". */

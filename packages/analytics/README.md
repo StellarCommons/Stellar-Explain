@@ -8,8 +8,8 @@ the one before it, starting from this foundation.
 
 ## Documentation
 
-- [Architecture](./ARCHITECTURE.md) — pipeline, module boundaries, metrics, and
-  HTTP ingest contract.
+- [Architecture](./ARCHITECTURE.md) — pipeline, module boundaries, and HTTP
+  ingest contract.
 - [Dashboard API](./DASHBOARD_API.md) — ingest endpoint request/response contract
   and summary query interface.
 - [Runbook](./RUNBOOK.md) — diagnosing stuck circuit breakers, growing dead-letter
@@ -26,7 +26,8 @@ npm test
 npm run lint
 ```
 
-The client validates and enriches events before queueing, then delivers them
-through one or more sinks. `HttpSink` supports bounded batches, custom headers,
-optional gzip compression, retries, and a circuit breaker. Use
-`client.getMetrics()` and `client.on()` to inspect pipeline health.
+After optional sampling, `track()` validates properties, applies
+`limitPayload` and PII scrubbing, enforces the rate limit, calls `beforeSend`,
+and enqueues the event. `flush()` runs queued events through middleware and
+sends each one through the configured emitter(s). Inspect state with
+`getQueue().size`, `getDeadLetter().size`, and `getCircuitState()`.

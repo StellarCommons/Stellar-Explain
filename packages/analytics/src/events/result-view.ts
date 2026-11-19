@@ -1,4 +1,4 @@
-import { AnalyticsEvent } from '../types';
+import type { AnalyticsEvent } from '../types.js';
 
 export interface ResultViewOptions {
   /** Zero-based index of the result within the results list. */

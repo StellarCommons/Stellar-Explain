@@ -94,7 +94,7 @@ describe('#95 outage → dead-letter → recovery', () => {
     const fetchMock = outagedFetch(3); // calls 1..3 fail, then succeed
     vi.stubGlobal('fetch', fetchMock);
     const client = new AnalyticsClient(
-      { maxEventsPerSecond: 50 },
+      { maxEventsPerSecond: 50, circuitBreaker: { failureThreshold: 3 } },
       new HttpSink({ endpoint: 'https://ingest.example/x' }),
     );
 
@@ -136,7 +136,7 @@ describe('#95 offline persistence across an unload boundary', () => {
 
     // Simulate a fresh page: network is healthy again.
     const sent: AnalyticsEvent[] = [];
-    const clientB = new AnalyticsClient(
+    new AnalyticsClient(
       { maxEventsPerSecond: 50 },
       { send: (e: AnalyticsEvent) => sent.push(e) },
     );

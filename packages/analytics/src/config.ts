@@ -1,4 +1,6 @@
 import type { AnalyticsEvent } from './types.js';
+import type { FetchLike } from './sinks/HttpSink.js';
+import type { CircuitBreakerOptions } from './lib/circuitBreaker.js';
 
 /**
  * Configuration options for the Analytics client.
@@ -8,6 +10,8 @@ export interface AnalyticsConfig {
   endpoint: string;
   /** Optional API key included with every request. */
   apiKey?: string;
+  /** Optional fetch implementation used by the default HTTP transport. */
+  fetchImpl?: FetchLike;
   /** When true, debug logging is enabled. Default: false. */
   debug: boolean;
   /** How often (ms) the event queue is flushed. Default: 5000. */
@@ -26,6 +30,8 @@ export interface AnalyticsConfig {
   endpointConfig?: Record<string, string>;
   /** #93 — client-side send rate cap (events per second). Default: 100. */
   maxEventsPerSecond?: number;
+  /** #94 — tuning for the client-owned circuit breaker. */
+  circuitBreaker?: CircuitBreakerOptions;
   /** #89 — when true (default) track() scrubs PII from event properties. */
   scrubPii?: boolean;
   /**
@@ -100,12 +106,25 @@ const DEFAULTS: ConfigDefaults = {
   captureGlobalErrors: false,
 };
 
+function validateNumericOption(
+  name: string,
+  value: unknown,
+  min: number,
+  max: number = Number.POSITIVE_INFINITY,
+): void {
+  if (value === undefined) return;
+  const expected =
+    max === Number.POSITIVE_INFINITY ? `>= ${min}` : `between ${min} and ${max}`;
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) {
+    throw new TypeError(`Invalid ${name}: expected a finite number ${expected}.`);
+  }
+}
+
 /**
  * Merges caller-supplied options with sensible defaults.
  *
- * When every required field is already present (i.e. the input was produced
- * by a previous `resolveConfig` call) the input is returned as-is so that
- * downstream identity checks hold.
+ * Explicit `undefined` values are treated as absent, and the caller's object is
+ * always copied so endpoint derivation and later mutations cannot affect it.
  *
  * #100 — when `endpoint` is empty and `environment` + `endpointConfig`
  * are provided, the endpoint for the active environment is applied.
@@ -118,25 +137,31 @@ const DEFAULTS: ConfigDefaults = {
  * @returns A fully-resolved config with every field but `apiKey` populated.
  */
 export function resolveConfig(options: Partial<AnalyticsConfig> = {}): AnalyticsConfig {
+  const definedOptions = Object.fromEntries(
+    Object.entries(options).filter(([, value]) => value !== undefined),
+  ) as Partial<AnalyticsConfig>;
+
   const isComplete =
-    'endpoint' in options &&
-    'debug' in options &&
-    'flushIntervalMs' in options &&
-    'maxQueueSize' in options &&
-    'sampleRate' in options;
+    'endpoint' in definedOptions &&
+    'debug' in definedOptions &&
+    'flushIntervalMs' in definedOptions &&
+    'maxQueueSize' in definedOptions &&
+    'sampleRate' in definedOptions;
 
-  const resolved = isComplete ? (options as AnalyticsConfig) : { ...DEFAULTS, ...options };
+  const resolved: AnalyticsConfig = isComplete
+    ? ({ ...definedOptions } as AnalyticsConfig)
+    : { ...DEFAULTS, ...definedOptions };
 
-  // #100 — derive the endpoint from the environment map when no explicit
-  // endpoint was given.
-  if (
+  validateNumericOption('sampleRate', resolved.sampleRate, 0, 1);
+  validateNumericOption('flushIntervalMs', resolved.flushIntervalMs, 0);
+  validateNumericOption('maxQueueSize', resolved.maxQueueSize, 1);
+  validateNumericOption('maxPropertyBytes', resolved.maxPropertyBytes, 1);
+  validateNumericOption('maxEventsPerSecond', resolved.maxEventsPerSecond, 1);
+
+  const environmentEndpoint =
     !resolved.endpoint &&
     resolved.environment &&
-    resolved.endpointConfig &&
-    resolved.endpointConfig[resolved.environment]
-  ) {
-    resolved.endpoint = resolved.endpointConfig[resolved.environment];
-  }
+    resolved.endpointConfig?.[resolved.environment];
 
-  return resolved;
+  return environmentEndpoint ? { ...resolved, endpoint: environmentEndpoint } : resolved;
 }
