@@ -27,7 +27,17 @@ export function persistPendingQueue(events: AnalyticsEvent[]): boolean {
   if (optOutManager.isOptedOut()) return false;
   if (!isLocalStorageAvailable()) return false;
   try {
-    const slice = events.slice(0, MAX_PERSISTED_EVENTS);
+    // Merge with whatever another tab already stored (dropping duplicates),
+    // then keep the newest events: EventQueue evicts oldest first.
+    const merged: AnalyticsEvent[] = [];
+    const seen = new Set<string>();
+    for (const event of [...loadPersistedQueue(), ...events]) {
+      const key = JSON.stringify([event.name, event.timestamp, event.properties]);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push(event);
+    }
+    const slice = merged.slice(-MAX_PERSISTED_EVENTS);
     localStorage.setItem(PENDING_QUEUE_STORAGE_KEY, JSON.stringify(slice));
     return true;
   } catch {
@@ -47,7 +57,7 @@ export function loadPersistedQueue(): AnalyticsEvent[] {
     if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isAnalyticsEvent).slice(0, MAX_PERSISTED_EVENTS);
+    return parsed.filter(isAnalyticsEvent).slice(-MAX_PERSISTED_EVENTS);
   } catch {
     return [];
   }

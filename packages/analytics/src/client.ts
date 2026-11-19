@@ -136,6 +136,12 @@ export class AnalyticsClient {
         (this.timer as { unref?: () => void }).unref?.();
       }
 
+    // #85 — persist the pending queue when the page is torn down.
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      window.addEventListener('beforeunload', this.handleBeforeUnload);
+      window.addEventListener('pagehide', this.handleBeforeUnload);
+      window.addEventListener('visibilitychange', this.handleVisibilityChange);
+    }
       // Analytics #66 — opt-in global error capture.
       if (this.config.captureGlobalErrors) {
         this.bindGlobalErrorHandler();
@@ -153,6 +159,12 @@ export class AnalyticsClient {
 
   private readonly handleBeforeUnload = (): void => {
     this.persistQueueNow();
+  };
+
+  private readonly handleVisibilityChange = (): void => {
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+      this.persistQueueNow();
+    }
   };
 
   /**
@@ -401,6 +413,8 @@ export class AnalyticsClient {
     }
     if (typeof window !== 'undefined' && typeof window.removeEventListener === 'function') {
       window.removeEventListener('beforeunload', this.handleBeforeUnload);
+      window.removeEventListener('pagehide', this.handleBeforeUnload);
+      window.removeEventListener('visibilitychange', this.handleVisibilityChange);
     }
     this.unbindConnectivityHandlers();
     this.unbindGlobalErrorHandler();
