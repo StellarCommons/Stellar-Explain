@@ -168,7 +168,7 @@ impl HorizonClient {
     pub fn new(base_url: impl Into<String>) -> Self {
         Self {
             client: Client::new(),
-            base_url: base_url.into(),
+            base_url: base_url.into().trim_end_matches('/').to_string(),
             toml_cache: Arc::new(RwLock::new(HashMap::new())),
         }
     }
