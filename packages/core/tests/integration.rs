@@ -780,3 +780,103 @@ fn snapshot_account_history() {
     let actual = serde_json::to_value(&response).unwrap();
     assert_eq!(fixture, actual);
 }
+
+#[tokio::test]
+async fn horizon_500_on_transaction_returns_502_upstream_error() {
+    let horizon_mock = MockServer::start().await;
+    let hash = test_hash('e');
+    Mock::given(method("GET"))
+        .and(path(format!("/transactions/{hash}")))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(&horizon_mock)
+        .await;
+
+    let app_url = spawn_app(&horizon_mock.uri()).await;
+    let response = reqwest::get(format!("{app_url}/tx/{hash}"))
+        .await
+        .expect("request failed");
+
+    assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+    let payload: Value = response.json().await.expect("json parse failed");
+    assert_eq!(payload["error"]["code"], "UPSTREAM_ERROR");
+}
+
+#[tokio::test]
+async fn horizon_malformed_json_on_transaction_returns_502_upstream_error() {
+    let horizon_mock = MockServer::start().await;
+    let hash = test_hash('f');
+    Mock::given(method("GET"))
+        .and(path(format!("/transactions/{hash}")))
+        .respond_with(ResponseTemplate::new(200).set_body_string("not json"))
+        .mount(&horizon_mock)
+        .await;
+
+    let app_url = spawn_app(&horizon_mock.uri()).await;
+    let response = reqwest::get(format!("{app_url}/tx/{hash}"))
+        .await
+        .expect("request failed");
+
+    assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+    let payload: Value = response.json().await.expect("json parse failed");
+    assert_eq!(payload["error"]["code"], "UPSTREAM_ERROR");
+}
+
+#[tokio::test]
+async fn horizon_429_on_transaction_returns_429_rate_limited() {
+    let horizon_mock = MockServer::start().await;
+    let hash = test_hash('a');
+    Mock::given(method("GET"))
+        .and(path(format!("/transactions/{hash}")))
+        .respond_with(ResponseTemplate::new(429))
+        .mount(&horizon_mock)
+        .await;
+
+    let app_url = spawn_app(&horizon_mock.uri()).await;
+    let response = reqwest::get(format!("{app_url}/tx/{hash}"))
+        .await
+        .expect("request failed");
+
+    assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+    let payload: Value = response.json().await.expect("json parse failed");
+    assert_eq!(payload["error"]["code"], "UPSTREAM_RATE_LIMITED");
+}
+
+#[tokio::test]
+async fn horizon_500_on_account_history_returns_502_upstream_error() {
+    let horizon_mock = MockServer::start().await;
+    let address = valid_stellar_address();
+    Mock::given(method("GET"))
+        .and(path(format!("/accounts/{address}/transactions")))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(&horizon_mock)
+        .await;
+
+    let app_url = spawn_app(&horizon_mock.uri()).await;
+    let response = reqwest::get(format!("{app_url}/account/{address}/history"))
+        .await
+        .expect("request failed");
+
+    assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+    let payload: Value = response.json().await.expect("json parse failed");
+    assert_eq!(payload["error"]["code"], "UPSTREAM_ERROR");
+}
+
+#[tokio::test]
+async fn horizon_malformed_json_on_account_history_returns_502_upstream_error() {
+    let horizon_mock = MockServer::start().await;
+    let address = valid_stellar_address();
+    Mock::given(method("GET"))
+        .and(path(format!("/accounts/{address}/transactions")))
+        .respond_with(ResponseTemplate::new(200).set_body_string("not json"))
+        .mount(&horizon_mock)
+        .await;
+
+    let app_url = spawn_app(&horizon_mock.uri()).await;
+    let response = reqwest::get(format!("{app_url}/account/{address}/history"))
+        .await
+        .expect("request failed");
+
+    assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+    let payload: Value = response.json().await.expect("json parse failed");
+    assert_eq!(payload["error"]["code"], "UPSTREAM_ERROR");
+}

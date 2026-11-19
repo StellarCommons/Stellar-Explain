@@ -25,6 +25,8 @@ pub enum HorizonError {
     TransactionNotFound,
     AccountNotFound,
     InvalidResponse,
+    RateLimited,
+    Unavailable,
 }
 
 /// Structured validation-error vocabulary with stable machine-readable codes.
@@ -86,6 +88,8 @@ pub enum AppError {
     BadRequest(String),
     Validation(ValidationError),
     UpstreamFailure(String),
+    RateLimited(String),
+    Unavailable(String),
     Internal(String),
 }
 
@@ -116,6 +120,18 @@ impl AppError {
                     message: msg.clone(),
                 },
             },
+            AppError::RateLimited(msg) => ApiError {
+                error: ErrorBody {
+                    code: "UPSTREAM_RATE_LIMITED".into(),
+                    message: msg.clone(),
+                },
+            },
+            AppError::Unavailable(msg) => ApiError {
+                error: ErrorBody {
+                    code: "UPSTREAM_UNAVAILABLE".into(),
+                    message: msg.clone(),
+                },
+            },
             AppError::Internal(msg) => ApiError {
                 error: ErrorBody {
                     code: "INTERNAL_ERROR".into(),
@@ -131,6 +147,8 @@ impl AppError {
             AppError::BadRequest(_) => StatusCode::BAD_REQUEST,
             AppError::Validation(_) => StatusCode::BAD_REQUEST,
             AppError::UpstreamFailure(_) => StatusCode::BAD_GATEWAY,
+            AppError::RateLimited(_) => StatusCode::TOO_MANY_REQUESTS,
+            AppError::Unavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
             AppError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -164,6 +182,12 @@ impl From<HorizonError> for AppError {
             ),
             HorizonError::InvalidResponse => AppError::UpstreamFailure(
                 "Received an invalid response from the Stellar network.".into(),
+            ),
+            HorizonError::RateLimited => AppError::RateLimited(
+                "The Stellar network is rate limiting requests. Please try again shortly.".into(),
+            ),
+            HorizonError::Unavailable => AppError::Unavailable(
+                "The Stellar network is temporarily unavailable. Please try again later.".into(),
             ),
         }
     }
