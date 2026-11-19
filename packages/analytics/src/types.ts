@@ -7,10 +7,9 @@ export interface AnalyticsEvent {
   /**
    * Epoch milliseconds at which `track()` was called.
    *
-   * A number rather than an ISO string: the ingest API, `tests/types.test.ts`
-   * and ARCHITECTURE.md all treat this as epoch millis, and `Date.now()` is what
-   * the client actually has. Converting to a string at the boundary would make
-   * every consumer parse it back.
+   * A number rather than an ISO string: the client and its tests treat this as
+   * epoch millis, and `Date.now()` is what the client actually has; HttpSink
+   * converts it to Unix seconds on the wire.
    */
   timestamp: number;
   /** Arbitrary key/value properties attached to the event. */

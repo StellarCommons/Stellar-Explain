@@ -50,6 +50,24 @@ export class Middleware {
     return current;
   }
 
+  /**
+   * Run hooks synchronously for `flushSync()`. An async hook cannot be awaited
+   * here, so an error is raised rather than silently skipping its redaction.
+   */
+  processSync(event: AnalyticsEvent): AnalyticsEvent {
+    let current: AnalyticsEvent = event;
+    for (const hook of this.hooks) {
+      const result = hook(current);
+      if (result !== undefined && typeof (result as Promise<AnalyticsEvent>).then === 'function') {
+        throw new Error('async beforeSend hook cannot run in flushSync');
+      }
+      if (result !== undefined) {
+        current = result as AnalyticsEvent;
+      }
+    }
+    return current;
+  }
+
   get size(): number {
     return this.hooks.length;
   }

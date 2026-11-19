@@ -1,4 +1,4 @@
-import { AnalyticsEvent } from '../types.js';
+import type { AnalyticsEvent } from '../types.js';
 import { isLocalStorageAvailable } from '../lib/storageAvailability.js';
 
 const HEARTBEAT_STORAGE_KEY = 'stellar_analytics_last_heartbeat_date';

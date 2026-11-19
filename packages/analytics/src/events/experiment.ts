@@ -1,4 +1,4 @@
-import { AnalyticsEvent } from '../types';
+import type { AnalyticsEvent } from '../types.js';
 
 export interface ExperimentAssignmentOptions {
   /** Name of the experiment, e.g. "new_search_ranking". */

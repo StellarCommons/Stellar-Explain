@@ -14,7 +14,9 @@ export function usePageView(path: string, options?: Omit<PageViewOptions, 'url'>
   const client = useAnalytics();
 
   useEffect(() => {
-    const event = createPageViewEvent({ ...options, url: path });
+    const url = typeof window !== 'undefined' ? new URL(path, window.location.origin).href : path;
+    const event = createPageViewEvent({ ...options, url });
     client.track(event.name, event.properties);
-  }, [client, path]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client, path, options?.title, options?.referrer]);
 }

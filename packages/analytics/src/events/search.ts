@@ -1,4 +1,4 @@
-import { AnalyticsEvent } from '../types.js';
+import type { AnalyticsEvent } from '../types.js';
 
 export interface SearchEventOptions {
   query: string;

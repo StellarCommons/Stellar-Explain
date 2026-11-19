@@ -98,7 +98,7 @@ describe('#85 persist pending queue on unload', () => {
 });
 
 describe('#86 restore persisted queue on construction', () => {
-  it('re-enqueues a previously persisted queue and clears storage', async () => {
+  it('re-enqueues a previously persisted queue and clears storage after a successful flush', async () => {
     const storage = createFakeStorage();
     stubBrowser(storage);
     storage.setItem(
@@ -112,8 +112,6 @@ describe('#86 restore persisted queue on construction', () => {
     const emitter = { send: vi.fn().mockResolvedValue(undefined) };
     const client = new AnalyticsClient({}, emitter);
 
-    expect(storage.getItem(PENDING_QUEUE_STORAGE_KEY)).toBeNull();
-
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(emitter.send).toHaveBeenCalledTimes(2);
     expect(emitter.send).toHaveBeenCalledWith({
@@ -126,6 +124,24 @@ describe('#86 restore persisted queue on construction', () => {
       timestamp: 1,
       properties: {},
     });
+    expect(client.getQueue().size).toBe(0);
+    expect(storage.getItem(PENDING_QUEUE_STORAGE_KEY)).toBeNull();
+  });
+
+  it('keeps the persisted queue when flushing restored events fails', async () => {
+    const storage = createFakeStorage();
+    stubBrowser(storage);
+    const persisted = JSON.stringify([
+      { name: 'failed', timestamp: 0, properties: {} },
+    ]);
+    storage.setItem(PENDING_QUEUE_STORAGE_KEY, persisted);
+
+    const emitter = { send: vi.fn().mockRejectedValue(new Error('unavailable')) };
+    const client = new AnalyticsClient({}, emitter);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(emitter.send).toHaveBeenCalledTimes(1);
+    expect(storage.getItem(PENDING_QUEUE_STORAGE_KEY)).toBe(persisted);
     expect(client.getQueue().size).toBe(0);
   });
 

@@ -1,4 +1,4 @@
-import { createContext, useMemo, type ReactNode } from 'react';
+import { createContext, useEffect, useMemo, type ReactNode } from 'react';
 import type { AnalyticsConfig } from '../config.js';
 import type { Emitter } from '../emitter/index.js';
 import { AnalyticsClient } from '../client.js';
@@ -15,13 +15,23 @@ export const AnalyticsContext = createContext<AnalyticsClient | null>(null);
  * and Storybook stories never enqueue or emit real events.
  */
 class DisabledAnalyticsClient extends AnalyticsClient {
+  constructor(config?: Partial<AnalyticsConfig>, emitter?: Emitter | Emitter[]) {
+    super(config, emitter, { skipSideEffects: true });
+  }
+
   track(): void {
     // Intentional no-op — disabled.
   }
 
+  trackError(): void {}
+
+  trackNetworkError(): void {}
+
   async flush(): Promise<void> {
     // Intentional no-op — disabled.
   }
+
+  flushSync(): void {}
 }
 
 /**
@@ -32,7 +42,7 @@ class DisabledAnalyticsClient extends AnalyticsClient {
 class GlobalPropertiesAnalyticsClient extends AnalyticsClient {
   constructor(
     private readonly globalProperties: Record<string, unknown>,
-    config?: AnalyticsConfig,
+    config?: Partial<AnalyticsConfig>,
     emitter?: Emitter,
   ) {
     super(config, emitter);
@@ -44,7 +54,7 @@ class GlobalPropertiesAnalyticsClient extends AnalyticsClient {
 }
 
 export interface AnalyticsProviderProps {
-  config?: AnalyticsConfig;
+  config?: Partial<AnalyticsConfig>;
   emitter?: Emitter;
   /**
    * Analytics #76 — when true, fully disables tracking (no events are
@@ -71,11 +81,19 @@ export function AnalyticsProvider({
   // constructor or `track()`/`flush()` paths, so constructing it here is
   // safe during SSR (e.g. Next.js server render), and children always
   // render regardless of environment.
+  const configSignature = JSON.stringify(config);
+  const globalPropertiesSignature = JSON.stringify(globalProperties);
   const client = useMemo(() => {
     if (disabled) return new DisabledAnalyticsClient(config, emitter);
     if (globalProperties) return new GlobalPropertiesAnalyticsClient(globalProperties, config, emitter);
     return new AnalyticsClient(config, emitter);
-  }, [config, emitter, disabled, globalProperties]);
+  }, [configSignature, emitter, disabled, globalPropertiesSignature]);
+
+  useEffect(() => {
+    return () => {
+      client.destroy();
+    };
+  }, [client]);
 
   return <AnalyticsContext.Provider value={client}>{children}</AnalyticsContext.Provider>;
 }
