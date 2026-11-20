@@ -47,7 +47,6 @@ The CLI reads configuration from `.stellar-explain.json` in the current working 
 |-----|------|---------|-------------|
 | `url` | string | `https://stellar-explain-core.onrender.com` | Backend API base URL |
 | `noUpdateCheck` | boolean | `false` | Disable background update check |
-| `network` | string | `testnet` | Stellar network (`mainnet` or `testnet`) |
 | `cacheTtl.tx` | number | `300000` | Cache TTL for transaction lookups (ms) |
 | `cacheTtl.account` | number | `60000` | Cache TTL for account lookups (ms) |
 
@@ -56,7 +55,6 @@ Example:
 ```json
 {
   "url": "https://stellar-explain-core.onrender.com",
-  "network": "testnet",
   "noUpdateCheck": true,
   "cacheTtl": {
     "tx": 300000,
