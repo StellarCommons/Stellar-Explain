@@ -2,6 +2,25 @@
   "name": "@stellar-explain/cli",
   "version": "0.1.0",
   "description": "CLI for Stellar Explain - query the backend from your terminal",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/StellarCommons/Stellar-Explain.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/StellarCommons/Stellar-Explain/tree/main/packages/cli",
+  "keywords": [
+    "stellar",
+    "cli",
+    "blockchain",
+    "explainability"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": {
     "stellar-explain": "./bin/stellar-explain"
   },
