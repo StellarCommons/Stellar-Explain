@@ -1,37 +1,43 @@
-name: Keep Backend Alive
+name: Keep Alive
 
-# Pings the Render backend every 5 minutes so the free-tier instance
-# does not spin down due to inactivity (Render sleeps after ~15 min).
-#
-# Setup: add BACKEND_URL as a GitHub Actions variable in the repo:
-#   Settings → Secrets and variables → Actions → Variables → New variable
-#   Name:  BACKEND_URL
-#   Value: https://stellar-explain-core.onrender.com   (your Render URL)
+# Keep Render free-tier app awake by periodically hitting the health endpoint.
+# Note: GitHub Actions scheduled workflows can be delayed or skipped on
+# inactive repositories, so an external uptime pinger may still be required
+# for a strict 5-minute keep-alive guarantee.
 
 on:
   schedule:
     - cron: "*/5 * * * *"
-  workflow_dispatch: # allow manual trigger from Actions tab
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: keep-alive-ping
+  cancel-in-progress: false
 
 jobs:
   ping:
-    name: Ping /health
-    if: vars.BACKEND_URL != ''
+    name: Health ping
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+
     steps:
-      - name: Ping backend health endpoint
+      - name: Ping backend
+        env:
+          HEALTH_URL: ${{ vars.BACKEND_HEALTH_URL || secrets.BACKEND_HEALTH_URL || 'https://stellar-explain-core.onrender.com/health' }}
         run: |
-          echo "Pinging ${{ vars.BACKEND_URL }}/health ..."
-          # Render free-tier instances spin down after ~15 min idle and can take
-          # well over 10s to cold-start; give curl enough time to wait that out.
-          # curl already reports "000" via -w on any connection failure/timeout;
-          # `|| true` just stops that non-zero curl exit from aborting the script
-          # under `bash -e` before the warning below runs.
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 60 "${{ vars.BACKEND_URL }}/health" || true)
-          echo "Response: $STATUS"
-          if [ "$STATUS" != "200" ]; then
-            echo "Health check failed: $STATUS"
-            exit 1
-          else
-            echo "Backend is alive ✅"
-          fi
+          set -euo pipefail
+          echo "Pinging ${HEALTH_URL}"
+          # Retry a few times to reduce false negatives from cold starts/transient network issues.
+          for attempt in 1 2 3; do
+            if curl --fail --silent --show-error --max-time 30 --retry 2 --retry-delay 5 "${HEALTH_URL}" > /dev/null; then
+              echo "Health check passed (attempt ${attempt})"
+              exit 0
+            fi
+            echo "Attempt ${attempt} failed, retrying..."
+            sleep 10
+          done
+          echo "Health check failed after retries"
+          exit 1
