@@ -1,8 +1,7 @@
 import { Command } from 'commander';
-import { CLI_VERSION, DEFAULT_BASE_URL, isUpdateCheckDisabled } from './config/env.js';
+import { CLI_VERSION, DEFAULT_BASE_URL } from './config/env.js';
 import { ApiClient } from './client/api.js';
 import { cacheGet, cacheSet } from './utils/cache.js';
-import { checkForUpdate, getUpdateNotice } from './utils/update-check.js';
 import { printError } from './utils/errors.js';
 import { ExitCode, exitProcess } from './utils/exit.js';
 
@@ -124,12 +123,5 @@ program
       exitProcess(ExitCode.API_ERROR, `${failures} batch item(s) failed`);
     }
   });
-
-if (program.opts().updateCheck && !isUpdateCheckDisabled()) {
-  checkForUpdate().then(() => {
-    const notice = getUpdateNotice();
-    if (notice) console.error(notice);
-  });
-}
 
 program.parse();
