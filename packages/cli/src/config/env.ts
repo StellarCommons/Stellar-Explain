@@ -6,6 +6,8 @@ export const CLI_VERSION = '0.1.0';
 export const DEFAULT_BASE_URL = 'https://stellar-explain-core.onrender.com';
 
 export function getCacheDir(): string {
+  const override = process.env.STELLAR_EXPLAIN_CACHE_DIR;
+  if (override) return override;
   return path.join(os.homedir(), '.stellar-explain');
 }
 

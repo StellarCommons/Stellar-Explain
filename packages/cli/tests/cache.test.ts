@@ -1,4 +1,19 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+
+let tmpDir: string;
+
+beforeEach(() => {
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'stellar-explain-test-'));
+  vi.stubEnv('STELLAR_EXPLAIN_CACHE_DIR', tmpDir);
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
 
 describe('cacheGet / cacheSet round-trip', () => {
   beforeEach(() => {
@@ -10,6 +25,12 @@ describe('cacheGet / cacheSet round-trip', () => {
     cacheSet('test-key', { hello: 'world' }, 60_000);
     const result = cacheGet<{ hello: string }>('test-key');
     expect(result).toEqual({ hello: 'world' });
+  });
+
+  it('should write cache files only inside the overridden cache dir', async () => {
+    const { cacheSet } = await import('../src/utils/cache.js');
+    cacheSet('isolated-key', 1, 60_000);
+    expect(fs.readdirSync(tmpDir).length).toBeGreaterThan(0);
   });
 
   it('should return null for a missing key', async () => {
