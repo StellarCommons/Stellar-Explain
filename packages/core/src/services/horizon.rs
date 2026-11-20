@@ -564,17 +564,50 @@ fn extract_cursor(href: Option<&str>) -> Option<String> {
     Some(cursor_param.trim_start_matches("cursor=").to_string())
 }
 
+/// Reads `ORG_NAME` from a stellar.toml: exact key match, only at the top level or in
+/// `[DOCUMENTATION]`, with quotes and trailing inline comments removed.
 fn parse_org_name(toml: &str) -> Option<String> {
+    let mut in_documentation = true;
     for line in toml.lines() {
         let trimmed = line.trim();
-        if trimmed.starts_with("ORG_NAME")
-            && let Some(eq_pos) = trimmed.find('=')
-        {
-            let value = trimmed[eq_pos + 1..].trim().trim_matches('"').to_string();
-            if !value.is_empty() {
-                return Some(value);
-            }
+        if trimmed.starts_with('[') {
+            in_documentation = trimmed.starts_with("[DOCUMENTATION]");
+            continue;
+        }
+        if !in_documentation {
+            continue;
+        }
+        let Some((key, value)) = trimmed.split_once('=') else {
+            continue;
+        };
+        if key.trim() != "ORG_NAME" {
+            continue;
+        }
+        let value = value.trim();
+        let value = match value.strip_prefix('"') {
+            Some(rest) => rest.split('"').next().unwrap_or("").to_string(),
+            None => value.split('#').next().unwrap_or("").trim().to_string(),
+        };
+        if !value.is_empty() {
+            return Some(value);
         }
     }
     None
+}
+
+#[cfg(test)]
+mod parse_org_name_tests {
+    use super::parse_org_name;
+
+    #[test]
+    fn ignores_similar_keys_other_tables_and_comments() {
+        let toml = r#"
+[OTHER]
+ORG_NAME = "Wrong"
+[DOCUMENTATION]
+ORG_NAME_X = "No"
+ORG_NAME = "Right" # inline comment
+"#;
+        assert_eq!(parse_org_name(toml).as_deref(), Some("Right"));
+    }
 }

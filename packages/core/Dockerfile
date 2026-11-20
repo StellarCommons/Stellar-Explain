@@ -11,7 +11,7 @@ COPY packages/core/Cargo.toml packages/core/Cargo.lock ./
 COPY packages/core/src ./src
 
 RUN cargo fetch
-RUN cargo build --release
+RUN cargo build --release --locked
 
 # ── Runtime Stage ─────────────────────────────────────────────────────────────
 FROM alpine:3.22
@@ -21,6 +21,9 @@ RUN apk add --no-cache tini ca-certificates wget
 COPY --from=builder /app/target/release/stellar-explain-core /usr/local/bin/stellar-explain-core
 
 RUN chmod +x /usr/local/bin/stellar-explain-core
+
+RUN adduser -S -u 10001 app
+USER app
 
 EXPOSE 4000
 
