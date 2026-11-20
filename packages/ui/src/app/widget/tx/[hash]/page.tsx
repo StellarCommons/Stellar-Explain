@@ -1,6 +1,6 @@
 import { fetchTransaction } from "@/lib/api";
 import { isApiError } from "@/lib/api";
-import { formatLedgerTime } from "@/lib/utils";
+import { formatLedgerTime } from "@/lib/formatters";
 
 interface Props {
   params: Promise<{ hash: string }>;

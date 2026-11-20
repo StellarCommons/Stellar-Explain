@@ -2,7 +2,7 @@ import type { AccountExplanation } from "@/types";
 import { Card } from "@/components/Card";
 import { Label } from "@/components/Label";
 import { Pill } from "@/components/Pill";
-import { formatBalance } from "@/lib/utils";
+import { formatBalance } from "@/lib/formatters";
 
 interface AccountResultProps {
   data: AccountExplanation;
