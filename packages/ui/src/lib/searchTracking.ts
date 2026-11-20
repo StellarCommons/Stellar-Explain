@@ -1,17 +1,6 @@
-import { EventEmitter, ConsoleSink } from "@stellar-explain/analytics";
-import type { EventName } from "@stellar-explain/analytics";
+import { emit } from "@/lib/analytics";
 
-const emitter = new EventEmitter();
-const sink = new ConsoleSink();
-
-emitter.on("search.performed", (event) => sink.send(event));
-
-/** Fires `search.performed` when a user submits a hash or address search. */
+/** Fires `search.performed`. Only the query length is sent, never the raw hash/address. */
 export function searchPerformed(inputType: "tx" | "account", query: string): void {
-  emitter.track({
-    id: crypto.randomUUID(),
-    name: "search.performed" as EventName,
-    timestamp: new Date(),
-    properties: { inputType, query },
-  });
+  emit("search.performed", { inputType, queryLength: query.length });
 }
