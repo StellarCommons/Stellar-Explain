@@ -1,7 +1,7 @@
 use crate::models::memo::Memo;
 use crate::models::operation::Operation;
-use crate::models::transaction::Transaction;
-use crate::services::horizon::{HorizonOperation, HorizonTransaction};
+use crate::models::transaction::{ResultCodes, Transaction};
+use crate::services::horizon::{HorizonOperation, HorizonResultCodes, HorizonTransaction};
 
 pub fn map_transaction_to_domain(
     tx: HorizonTransaction,
@@ -14,7 +14,36 @@ pub fn map_transaction_to_domain(
     // The memo value itself is only present for non-none memo types.
     let memo = map_memo(tx.memo_type.as_deref(), tx.memo.as_deref());
 
-    Transaction::new(tx.hash, tx.successful, tx.fee_charged.parse().unwrap_or(0), ops, memo)
+    // Prefer result codes from `extras` (submission error shape), fall back to
+    // top-level `result_codes` (fetch-by-hash shape for failed transactions).
+    let raw_codes: Option<&HorizonResultCodes> = tx
+        .extras
+        .as_ref()
+        .and_then(|e| e.result_codes.as_ref())
+        .or(tx.result_codes.as_ref());
+
+    let result_codes = raw_codes.map(|rc| ResultCodes {
+        transaction: rc.transaction.clone(),
+        operations: rc.operations.clone(),
+    });
+
+    let fee_charged = tx.fee_charged.parse().unwrap_or_else(|_| {
+        tracing::warn!(
+            hash = %tx.hash,
+            fee_charged = %tx.fee_charged,
+            "unparseable fee_charged from Horizon; defaulting to 0"
+        );
+        0
+    });
+
+    Transaction::new(
+        tx.hash,
+        tx.successful,
+        fee_charged,
+        ops,
+        memo,
+        result_codes,
+    )
 }
 
 /// Converts raw Horizon memo fields into a domain Memo.
@@ -23,21 +52,10 @@ pub fn map_transaction_to_domain(
 fn map_memo(memo_type: Option<&str>, memo_value: Option<&str>) -> Option<Memo> {
     match memo_type {
         None | Some("none") => None,
-        Some("text") => {
-            memo_value.and_then(|v| Memo::text(v))
-        }
-        Some("id") => {
-            memo_value
-                .and_then(|v| v.parse::<u64>().ok())
-                .map(Memo::id)
-        }
-        Some("hash") => {
-            memo_value.map(|v| Memo::hash(v))
-        }
-        Some("return") => {
-            memo_value.map(|v| Memo::return_hash(v))
-        }
-        // Unknown memo type — treat as no memo rather than crashing
+        Some("text") => memo_value.and_then(Memo::text),
+        Some("id") => memo_value.and_then(|v| v.parse::<u64>().ok()).map(Memo::id),
+        Some("hash") => memo_value.map(Memo::hash),
+        Some("return") => memo_value.map(Memo::return_hash),
         Some(_) => None,
     }
 }
@@ -86,7 +104,6 @@ mod tests {
 
     #[test]
     fn test_map_memo_unknown_type() {
-        // Unknown types should degrade gracefully, not crash
         assert_eq!(map_memo(Some("unknown_future_type"), Some("value")), None);
     }
 }

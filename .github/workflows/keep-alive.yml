@@ -1,0 +1,43 @@
+name: Keep Alive
+
+# Keep Render free-tier app awake by periodically hitting the health endpoint.
+# Note: GitHub Actions scheduled workflows can be delayed or skipped on
+# inactive repositories, so an external uptime pinger may still be required
+# for a strict 5-minute keep-alive guarantee.
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: keep-alive-ping
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    name: Health ping
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Ping backend
+        env:
+          HEALTH_URL: ${{ vars.BACKEND_HEALTH_URL || secrets.BACKEND_HEALTH_URL || 'https://stellar-explain-core.onrender.com/health' }}
+        run: |
+          set -euo pipefail
+          echo "Pinging ${HEALTH_URL}"
+          # Retry a few times to reduce false negatives from cold starts/transient network issues.
+          for attempt in 1 2 3; do
+            if curl --fail --silent --show-error --max-time 30 --retry 2 --retry-delay 5 "${HEALTH_URL}" > /dev/null; then
+              echo "Health check passed (attempt ${attempt})"
+              exit 0
+            fi
+            echo "Attempt ${attempt} failed, retrying..."
+            sleep 10
+          done
+          echo "Health check failed after retries"
+          exit 1

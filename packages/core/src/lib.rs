@@ -2,7 +2,12 @@
 //!
 //! This file defines the top-level module structure.
 
+#![allow(dead_code)]
+
+pub mod analytics;
 pub mod errors;
 pub mod explain;
+pub mod middleware;
 pub mod models;
+pub mod routes;
 pub mod services;

@@ -1,0 +1,41 @@
+{
+  "failure_reason": null,
+  "fee_explanation": "A fee of 0.0000100 XLM was charged. This is a standard network fee.",
+  "ledger": 49823145,
+  "ledger_closed_at": "2024-01-15T14:32:00Z",
+  "memo_explanation": null,
+  "operation_failures": [],
+  "operations": [
+    {
+      "details": {
+        "amount": "500.0000000",
+        "asset": "XLM (native)",
+        "from": "GCOINBASEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "to": "GBINANCEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      },
+      "index": 0,
+      "summary": "Coinbase (GCOINBASEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA) sent 500.0000000 XLM (native) to Binance (GBINANCEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA)",
+      "type": "payment"
+    },
+    {
+      "details": {},
+      "index": 1,
+      "summary": "manage_data operation — full support coming soon",
+      "type": "manage_data"
+    }
+  ],
+  "payment_explanations": [
+    {
+      "amount": "500.0000000",
+      "asset": "XLM (native)",
+      "fee_note": "Fee paid: 0.0000100 XLM (standard).",
+      "from": "GCOINBASEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "summary": "Coinbase (GCOINBASEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA) sent 500.0000000 XLM (native) to Binance (GBINANCEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA)",
+      "to": "GBINANCEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    }
+  ],
+  "skipped_operations": 1,
+  "successful": true,
+  "summary": "This successful transaction contains 1 payment. 1 other operation was skipped. This transaction was confirmed on 2024-01-15 at 14:32 UTC (ledger #49823145).",
+  "transaction_hash": "abc123def456789012345678901234567890123456789012345678901234abcd"
+}

@@ -15,9 +15,11 @@ use serde::{Deserialize, Serialize};
 /// - Return: 32-byte hash for returns/refunds
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", content = "value")]
+#[derive(Default)]
 pub enum Memo {
     /// No memo attached to the transaction
     #[serde(rename = "none")]
+    #[default]
     None,
 
     /// Text memo: UTF-8 string up to 28 bytes
@@ -62,7 +64,7 @@ impl Memo {
     /// ```
     pub fn text(text: impl Into<String>) -> Option<Self> {
         let text = text.into();
-        if text.as_bytes().len() <= 28 {
+        if text.len() <= 28 {
             Some(Memo::Text(text))
         } else {
             None
@@ -167,20 +169,14 @@ impl Memo {
     }
 }
 
-impl Default for Memo {
-    fn default() -> Self {
-        Memo::None
-    }
-}
-
 impl std::fmt::Display for Memo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Memo::None => write!(f, "No memo"),
-            Memo::Text(text) => write!(f, "Text: {}", text),
-            Memo::Id(id) => write!(f, "ID: {}", id),
-            Memo::Hash(hash) => write!(f, "Hash: {}", hash),
-            Memo::Return(hash) => write!(f, "Return: {}", hash),
+            Memo::Text(text) => write!(f, "Text: {text}"),
+            Memo::Id(id) => write!(f, "ID: {id}"),
+            Memo::Hash(hash) => write!(f, "Hash: {hash}"),
+            Memo::Return(hash) => write!(f, "Return: {hash}"),
         }
     }
 }
@@ -244,10 +240,7 @@ mod tests {
     #[test]
     fn test_memo_display() {
         assert_eq!(Memo::None.to_string(), "No memo");
-        assert_eq!(
-            Memo::text("test").unwrap().to_string(),
-            "Text: test"
-        );
+        assert_eq!(Memo::text("test").unwrap().to_string(), "Text: test");
         assert_eq!(Memo::id(123).to_string(), "ID: 123");
         assert_eq!(Memo::hash("abc").to_string(), "Hash: abc");
         assert_eq!(Memo::return_hash("def").to_string(), "Return: def");

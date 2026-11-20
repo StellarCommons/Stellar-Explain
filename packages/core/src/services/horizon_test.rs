@@ -8,14 +8,12 @@ mod tests {
         let server = MockServer::start();
 
         server.mock(|when, then| {
-            when.method(GET)
-                .path("/transactions/abc123");
-            then.status(200)
-                .json_body(serde_json::json!({
-                    "hash": "abc123",
-                    "successful": true,
-                    "fee_charged": "100"
-                }));
+            when.method(GET).path("/transactions/abc123");
+            then.status(200).json_body(serde_json::json!({
+                "hash": "abc123",
+                "successful": true,
+                "fee_charged": "100"
+            }));
         });
 
         let client = HorizonClient::new(server.base_url());
@@ -31,8 +29,7 @@ mod tests {
         let server = MockServer::start();
 
         server.mock(|when, then| {
-            when.method(GET)
-                .path("/transactions/missing");
+            when.method(GET).path("/transactions/missing");
             then.status(404);
         });
 
@@ -47,10 +44,8 @@ mod tests {
         let server = MockServer::start();
 
         server.mock(|when, then| {
-            when.method(GET)
-                .path("/transactions/bad");
-            then.status(200)
-                .body("not-json");
+            when.method(GET).path("/transactions/bad");
+            then.status(200).body("not-json");
         });
 
         let client = HorizonClient::new(server.base_url());
@@ -82,7 +77,9 @@ mod tests {
                             "created_at": "2024-01-01T00:00:00Z",
                             "source_account": "GABC",
                             "operation_count": 1,
-                            "memo_type": "none"
+                            "memo_type": "none",
+                            "ledger": 12345,
+                            "fee_charged": "100"
                         }
                     ]
                 }
@@ -174,5 +171,30 @@ mod tests {
             .unwrap_err();
 
         matches!(err, crate::errors::HorizonError::AccountNotFound);
+    }
+
+    #[tokio::test]
+    async fn fetch_stellar_toml_org_name_with_cache() {
+        let server = MockServer::start();
+        let domain = server.base_url();
+
+        let stellar_toml_mock = server.mock(|when, then| {
+            when.method(GET).path("/.well-known/stellar.toml");
+            then.status(200).body(
+                r#"
+ORG_NAME="Anchorage Digital"
+NETWORK_PASSPHRASE="Test SDF Network ; September 2015"
+"#,
+            );
+        });
+
+        let client = HorizonClient::new(server.base_url());
+
+        let first = client.fetch_stellar_toml_org_name(&domain).await;
+        let second = client.fetch_stellar_toml_org_name(&domain).await;
+
+        assert_eq!(first.as_deref(), Some("Anchorage Digital"));
+        assert_eq!(second.as_deref(), Some("Anchorage Digital"));
+        stellar_toml_mock.assert_hits(1);
     }
 }

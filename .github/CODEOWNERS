@@ -1,0 +1,5 @@
+* @StellarCommons/maintainers
+/packages/core/ @StellarCommons/maintainers
+/packages/ui/ @StellarCommons/maintainers
+/packages/cli/ @StellarCommons/maintainers
+/packages/analytics/ @StellarCommons/maintainers

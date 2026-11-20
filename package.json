@@ -1,0 +1,20 @@
+{
+  "name": "stellar-explain",
+  "private": true,
+  "workspaces": [
+    "packages/analytics",
+    "packages/ui"
+  ],
+  "scripts": {
+    "version": "changeset version",
+    "publish": "changeset publish"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.27.0"
+  },
+  "overrides": {
+    "human-id": "3.0.1",
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  }
+}

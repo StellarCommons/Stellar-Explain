@@ -1,0 +1,175 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/core/**'
+      - 'packages/cli/**'
+      - 'packages/analytics/**'
+      - 'packages/ui/**'
+      - '.github/workflows/ci.yml'
+  pull_request:
+    paths:
+      - 'packages/core/**'
+      - 'packages/cli/**'
+      - 'packages/analytics/**'
+      - 'packages/ui/**'
+      - '.github/workflows/ci.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust-core:
+    name: Rust Core Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: packages/core
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.88.0
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            packages/core/target
+          key: ${{ runner.os }}-cargo-core-${{ hashFiles('packages/core/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-core-
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy (deny warnings)
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Run tests
+        run: cargo test --all-targets --all-features
+
+  cli:
+    name: CLI Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: packages/cli
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: packages/cli/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: TypeScript check
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Check binary size
+        run: bash scripts/check-size.sh
+
+      - name: Run tests
+        run: npm run test
+
+
+  analytics:
+    name: Analytics Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install workspace dependencies
+        run: npm install --ignore-scripts
+
+      - name: Lint
+        working-directory: packages/analytics
+        run: npm run lint
+
+      - name: TypeScript check
+        working-directory: packages/analytics
+        run: npm run typecheck
+
+      - name: Build
+        working-directory: packages/analytics
+        run: npm run build
+
+      - name: Run tests
+        working-directory: packages/analytics
+        run: npm test
+
+      - name: Require an analytics changeset for package changes
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          git fetch --no-tags --depth=1 origin "${{ github.event.pull_request.base.sha }}"
+          changed_files="$(git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.sha }}")"
+          if grep -q '^packages/analytics/' <<< "$changed_files" \
+            && ! grep -qE '^\.changeset/[^/]+\.md$' <<< "$changed_files"; then
+            echo "A changeset is required for changes to packages/analytics."
+            exit 1
+          fi
+
+  ui:
+    name: UI Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install workspace dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Lint
+        working-directory: packages/ui
+        run: npm run lint
+
+      - name: TypeScript check
+        working-directory: packages/ui
+        run: npm run typecheck
+
+      - name: Build
+        working-directory: packages/ui
+        run: npm run build

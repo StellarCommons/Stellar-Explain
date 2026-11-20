@@ -1,6 +1,5 @@
 
 
-````markdown
 # Contributing to StellarCommons
 
 First off, thanks for your interest in contributing! 🚀  
@@ -22,7 +21,7 @@ Contributions of all kinds are welcome — from code to docs, design, or testing
    git checkout -b feature/your-feature-name
    ```
 3. **Make your changes** in small, logical commits.
-4. **Test your changes** locally (Rust, Next.js, or NestJS).
+4. **Test your changes** locally (Rust core, Next.js ui, CLI, or analytics).
 5. **Push to your fork** and open a Pull Request (PR) to `main`.
 
 ---
@@ -33,9 +32,10 @@ This is a **monorepo** containing multiple packages:
 
 ```
 packages/
-  core/         # Rust backend (transaction explain API)
-  frontend/     # Next.js frontend (UI for Stellar Explain)
-  web2-backend/ # NestJS backend (Web2 demo service)
+  core/         # Rust/Axum backend (transaction explain API)
+  ui/           # Next.js frontend (UI for Stellar Explain)
+  cli/          # Node.js CLI
+  analytics/    # TypeScript analytics client
 ```
 
 Each package has its own README and setup instructions.
@@ -51,12 +51,20 @@ cd packages/core
 cargo run
 ```
 
-### Next.js Frontend
+### Next.js UI
 
 ```bash
-cd packages/frontend
+cd packages/ui
 npm install
 npm run dev
+```
+
+### CLI and analytics
+
+```bash
+cd packages/cli        # or packages/analytics
+npm install
+npm test
 ```
 
 ---
@@ -99,4 +107,69 @@ Here are some helpful resources:
 
 Thanks again for helping make **StellarCommons** better! ✨
 
+---
+
+## 📦 CLI Version Management (Changesets)
+
+The `@stellar-explain/cli` package uses [Changesets](https://github.com/changesets/changesets)
+to manage semantic versioning and auto-generate `CHANGELOG.md` entries.
+
+### When do I need a changeset?
+
+Any PR that modifies `packages/cli/` **and** changes the CLI's behaviour
+visible to end users needs a changeset. This includes:
+
+| Change type | Semver bump |
+|---|---|
+| Breaking CLI change (flag removal, output format change) | `major` |
+| New command, new option, new feature (backwards-compatible) | `minor` |
+| Bug fix, dependency update, documentation only | `patch` |
+
+Pure internal refactors with no observable difference to users do not
+require a changeset.
+
+### Step-by-step: adding a changeset to your PR
+
+1. **Install dependencies** (first time only):
+   ```bash
+   cd packages/cli
+   npm install
+   ```
+
+2. **Run the interactive prompt** from the CLI package directory:
+   ```bash
+   cd packages/cli
+   npm run changeset
+   ```
+
+3. The CLI will ask you:
+   - Which package is affected → select `@stellar-explain/cli`
+   - What type of bump → `patch`, `minor`, or `major`
+   - A short summary of the change (this becomes the changelog entry)
+
+4. A new file is created in `packages/cli/.changeset/` (e.g.
+   `packages/cli/.changeset/teal-lions-laugh.md`).
+   **Commit this file as part of your PR.**
+
+   ```bash
+   git add packages/cli/.changeset/
+   git commit -m "chore: add changeset for <your change>"
+   ```
+
+5. Open your Pull Request as normal. The changeset file is reviewed along with
+   your code.
+
+### Release flow (maintainers only)
+
+When a new version of the CLI is ready for release, a maintainer pushes a
+tag matching `cli-v*` (e.g. `cli-v0.1.1`). The
+[CLI Publish workflow](.github/workflows/cli-publish.yml) runs automatically:
+
+1. Checks out the tag, installs dependencies, builds the CLI, and runs tests.
+2. Publishes `@stellar-explain/cli` to npm using the `NPM_TOKEN` secret.
+
+> The workflow requires one repository secret:
+> - `NPM_TOKEN` — a granular npm access token with publish rights for
+>   `@stellar-explain/cli`. Add it in **Settings → Secrets and variables →
+>   Actions**.
 

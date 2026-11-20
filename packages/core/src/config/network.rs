@@ -13,7 +13,14 @@ impl StellarNetwork {
             .as_str()
         {
             "testnet" => StellarNetwork::Testnet,
-            _ => StellarNetwork::Public,
+            "public" | "mainnet" => StellarNetwork::Public,
+            other => {
+                tracing::warn!(
+                    value = %other,
+                    "unrecognized STELLAR_NETWORK value; falling back to public"
+                );
+                StellarNetwork::Public
+            }
         }
     }
 
@@ -30,19 +37,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn defaults_to_public_network() {
-    unsafe {
-        std::env::remove_var("STELLAR_NETWORK");
-    }       
-     assert_eq!(StellarNetwork::from_env(), StellarNetwork::Public);
-    }
+    fn env_var_configuration() {
+        unsafe {
+            std::env::remove_var("STELLAR_NETWORK");
+        }
+        assert_eq!(StellarNetwork::from_env(), StellarNetwork::Public);
 
-    #[test]
-    fn resolves_testnet_network() {
-    unsafe {
-        std::env::set_var("STELLAR_NETWORK", "testnet");
-    }       
-     assert_eq!(StellarNetwork::from_env(), StellarNetwork::Testnet);
+        unsafe {
+            std::env::set_var("STELLAR_NETWORK", "testnet");
+        }
+        assert_eq!(StellarNetwork::from_env(), StellarNetwork::Testnet);
+
+        unsafe {
+            std::env::remove_var("STELLAR_NETWORK");
+        }
     }
 
     #[test]
@@ -54,9 +62,6 @@ mod tests {
     #[test]
     fn testnet_network_url() {
         let net = StellarNetwork::Testnet;
-        assert_eq!(
-            net.horizon_url(),
-            "https://horizon-testnet.stellar.org"
-        );
+        assert_eq!(net.horizon_url(), "https://horizon-testnet.stellar.org");
     }
 }

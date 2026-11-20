@@ -16,7 +16,10 @@ pub struct ManageOfferExplanation {
 pub fn explain_manage_offer(op: &ManageOfferOperation) -> ManageOfferExplanation {
     if op.amount == "0" && op.offer_id > 0 {
         return ManageOfferExplanation {
-            summary: format!("{} cancelled their existing offer #{}", op.seller, op.offer_id),
+            summary: format!(
+                "{} cancelled their existing offer #{}",
+                op.seller, op.offer_id
+            ),
             seller: op.seller.clone(),
             selling_asset: op.selling_asset.clone(),
             buying_asset: op.buying_asset.clone(),
@@ -82,7 +85,10 @@ mod tests {
 
     #[test]
     fn test_update_offer() {
-        let op = ManageOfferOperation { offer_id: 12345, ..base_op() };
+        let op = ManageOfferOperation {
+            offer_id: 12345,
+            ..base_op()
+        };
         let result = explain_manage_offer(&op);
         assert_eq!(result.action, "update");
         assert!(result.summary.contains("placed an order to sell"));
@@ -97,12 +103,19 @@ mod tests {
         };
         let result = explain_manage_offer(&op);
         assert_eq!(result.action, "cancel");
-        assert!(result.summary.contains("cancelled their existing offer #12345"));
+        assert!(
+            result
+                .summary
+                .contains("cancelled their existing offer #12345")
+        );
     }
 
     #[test]
     fn test_buy_offer() {
-        let op = ManageOfferOperation { offer_type: OfferType::Buy, ..base_op() };
+        let op = ManageOfferOperation {
+            offer_type: OfferType::Buy,
+            ..base_op()
+        };
         let result = explain_manage_offer(&op);
         assert_eq!(result.action, "new");
         assert!(result.summary.contains("placed an order to buy"));

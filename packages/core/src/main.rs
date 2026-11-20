@@ -1,136 +1,184 @@
-mod models;
-mod errors;
-mod services;
-mod explain;
-mod routes;
+#![allow(dead_code)]
+mod analytics;
 mod config;
+mod errors;
+mod explain;
+mod middleware;
+mod models;
+mod routes;
+mod services;
+mod state;
 
 use axum::{
     Router,
+    http::{HeaderValue, Method, header},
+    response::IntoResponse,
+    middleware as axum_middleware,
     routing::get,
-    response::{IntoResponse, Response},
-    http::{HeaderValue, Method, StatusCode, header},
-    Json,
 };
+use std::{env, sync::Arc};
 use tokio::net::TcpListener;
-use tracing::info;
-use std::{sync::Arc, env};
-use serde::Serialize;
 use tower::ServiceBuilder;
-use tower_http::cors::{CorsLayer, AllowOrigin};
-use tower_governor::{
-    governor::GovernorConfigBuilder,
-    GovernorLayer,
-};
+use tower_http::cors::{AllowOrigin, CorsLayer};
+use tracing::info;
+use tracing_subscriber::EnvFilter;
+use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
-use crate::routes::{health::health, ApiDoc};
 use crate::config::network::StellarNetwork;
+use crate::middleware::request_id::request_id_middleware;
+use crate::routes::analytics::{get_analytics_summary, ingest_event};
+use crate::routes::{ApiDoc, health::health};
 use crate::services::horizon::HorizonClient;
 
+fn init_tracing() {
+    let log_format = env::var("LOG_FORMAT").unwrap_or_else(|_| "pretty".to_string());
+    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
-fn rate_limit_layer() -> GovernorLayer {
-    let governor_conf = GovernorConfigBuilder::default()
-        .per_minute(60)
-        .burst_size(60)
-        .use_headers()
-        .finish()
-        .expect("failed to build rate limit config");
-
-    GovernorLayer {
-        config: std::sync::Arc::new(governor_conf),
-        error_handler: Some(Box::new(|_| {
-            Box::pin(async {
-                RateLimitError {
-                    error: "rate_limited",
-                    message: "Too many requests. Please retry later.",
-                }
-                .into_response()
-            })
-        })),
+    if log_format.eq_ignore_ascii_case("json") {
+        tracing_subscriber::fmt()
+            .with_env_filter(env_filter)
+            .with_target(false)
+            .json()
+            .with_current_span(true)
+            .with_span_list(true)
+            .init();
+    } else {
+        tracing_subscriber::fmt()
+            .with_env_filter(env_filter)
+            .with_target(false)
+            .compact()
+            .init();
     }
 }
 
-#[derive(Serialize)]
-struct RateLimitError {
-    error: &'static str,
-    message: &'static str,
+async fn not_found_fallback() -> impl IntoResponse {
+    errors::AppError::NotFound("Route not found".to_string())
 }
 
-impl IntoResponse for RateLimitError {
-    fn into_response(self) -> Response {
-        (
-            StatusCode::TOO_MANY_REQUESTS,
-            Json(self),
-        )
-            .into_response()
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        let _ = tokio::signal::ctrl_c().await;
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        if let Ok(mut sig) =
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+        {
+            sig.recv().await;
+        } else {
+            std::future::pending::<()>().await;
+        }
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
     }
+    info!("shutdown_signal_received");
 }
 
 #[tokio::main]
 async fn main() {
     dotenvy::dotenv().ok();
-    tracing_subscriber::fmt().init();
+    init_tracing();
 
-    // ── Network config ─────────────────────────────────────────
     let network = StellarNetwork::from_env();
-    let horizon_url = env::var("HORIZON_URL")
-        .unwrap_or_else(|_| network.horizon_url().to_string());
+    let horizon_url = env::var("HORIZON_URL").unwrap_or_else(|_| network.horizon_url().to_string());
 
-    info!("Network: {:?}", network);
-    info!("Using Horizon URL: {}", horizon_url);
+    info!(network = ?network, "network_selected");
+    info!(horizon_url = %horizon_url, "horizon_url_selected");
 
-    // ── CORS ────────────────────────────────────────────────────
-    let cors_origin = env::var("CORS_ORIGIN")
-        .unwrap_or_else(|_| "http://localhost:3000".to_string());
+    let cors_origin =
+        env::var("CORS_ORIGIN").unwrap_or_else(|_| "http://localhost:3000".to_string());
 
-    info!("Allowing CORS from: {}", cors_origin);
+    info!(cors_origin = %cors_origin, "cors_origin_selected");
 
-    let allowed_origin: HeaderValue = cors_origin
-        .parse()
-        .expect("CORS_ORIGIN is not valid");
+    let mut allowed_origins: Vec<HeaderValue> = Vec::new();
+    for origin in cors_origin.split(',').map(str::trim).filter(|o| !o.is_empty()) {
+        match origin.parse::<HeaderValue>() {
+            Ok(v) => allowed_origins.push(v),
+            Err(err) => {
+                tracing::error!(cors_origin = %origin, error = %err, "invalid CORS_ORIGIN; must be a comma-separated list of valid origins");
+                std::process::exit(1);
+            }
+        }
+    }
+    if allowed_origins.is_empty() {
+        tracing::error!(cors_origin = %cors_origin, "invalid CORS_ORIGIN; no origins specified");
+        std::process::exit(1);
+    }
 
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::exact(allowed_origin))
+        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+        .allow_headers([header::CONTENT_TYPE, header::ACCEPT, header::AUTHORIZATION]);
+        .allow_origin(AllowOrigin::list(allowed_origins))
         .allow_methods([Method::GET, Method::OPTIONS])
         .allow_headers([header::CONTENT_TYPE, header::ACCEPT]);
 
-    // ── App State ──────────────────────────────────────────────
     let horizon_client = Arc::new(HorizonClient::new(horizon_url));
 
-    // Generate OpenAPI spec once
     let openapi = ApiDoc::openapi();
 
-    // ── Router ─────────────────────────────────────────────────
     let app = Router::new()
         .route("/health", get(health))
-        .route("/tx/:hash", get(routes::tx::get_tx_explanation))
-
-        // OpenAPI JSON
+        .route("/analytics/events", axum::routing::post(ingest_event))
         .route(
-            "/openapi.json",
-            get({
-                let openapi = openapi.clone();
-                move || async move { Json(openapi) }
-            }),
+            "/analytics/summary",
+            axum::routing::get(get_analytics_summary),
         )
-
-        // Swagger UI
-        .merge(
-            SwaggerUi::new("/docs")
-                .url("/openapi.json", openapi),
+        .route("/tx/:hash", get(routes::tx::get_tx_explanation))
+        .route(
+            "/account/:address",
+            get(routes::account::get_account_explanation),
         )
-
+        .route(
+            "/account/:address/history",
+            get(routes::account::get_account_transactions),
+        )
+        .merge(SwaggerUi::new("/docs").url("/openapi.json", openapi))
+        .fallback(not_found_fallback)
         .with_state(horizon_client)
         .layer(cors)
-        .layer(
-            ServiceBuilder::new()
-                .layer(rate_limit_layer())
-        );
+        .layer(ServiceBuilder::new().layer(axum_middleware::from_fn(request_id_middleware)));
 
-    let addr = "0.0.0.0:4000";
-    info!("Stellar Explain backend running on {}", addr);
+    // Rate limiting (tower_governor) removed for local dev.
+    // PeerIpKeyExtractor cannot extract IPs from loopback connections
+    // and returns "Unable To Extract Key!". Re-add behind a reverse
+    // proxy in production where X-Forwarded-For is available.
 
-    let listener = TcpListener::bind(addr).await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    let host = env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0".to_string());
+    let port = match env::var("PORT") {
+        Ok(raw) => match raw.trim().parse::<u16>() {
+            Ok(p) => p,
+            Err(err) => {
+                tracing::error!(port = %raw, error = %err, "invalid PORT; must be a valid port number");
+                std::process::exit(1);
+            }
+        },
+        Err(_) => 4000,
+    };
+    let addr = format!("{host}:{port}");
+    info!(bind_addr = %addr, "server_starting");
+
+    let listener = match TcpListener::bind(&addr).await {
+        Ok(listener) => listener,
+        Err(err) => {
+            tracing::error!(bind_addr = %addr, error = %err, "failed to bind listener");
+            std::process::exit(1);
+        }
+    };
+
+    if let Err(err) = axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await
+    {
+        tracing::error!(bind_addr = %addr, error = %err, "server terminated with an error");
+        std::process::exit(1);
+    }
 }

@@ -5,104 +5,90 @@
  * so the Rust backend URL never reaches the browser.
  */
 
-// ── Types ──────────────────────────────────────────────────────────────────
+import type {
+  TransactionExplanation,
+  AccountExplanation,
+  AccountHistoryResponse,
+  HealthResponse,
+  ApiError,
+} from "@/types";
 
-export interface PaymentExplanation {
-  summary: string;
-  from: string;
-  to: string;
-  asset: string;
-  amount: string;
-}
+export type {
+  TransactionExplanation,
+  AccountExplanation,
+  AccountHistoryResponse,
+  AccountHistoryTransaction,
+  HealthResponse,
+  ApiError,
+  PaymentExplanation,
+} from "@/types";
 
-export interface TransactionExplanation {
-  transaction_hash: string;
-  successful: boolean;
-  summary: string;
-  payment_explanations: PaymentExplanation[];
-  skipped_operations: number;
-  memo_explanation: string | null;
-  fee_explanation: string | null;
-}
-
-export interface AccountExplanation {
-  address: string;
-  summary: string;
-  xlm_balance: string;
-  asset_count: number;
-  signer_count: number;
-  home_domain: string | null;
-  org_name: string | null;
-}
-
-export interface HealthResponse {
-  status: string;
-  network: string;
-  horizon_reachable: boolean;
-  version: string;
-}
-
-export interface ApiError {
-  error: {
-    code: string;
-    message: string;
-  };
-}
+import { apiError, isTrackableApiError } from "@/lib/apiErrorTracking";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 export function isApiError(value: unknown): value is ApiError {
   return (
-    typeof value === 'object' &&
+    typeof value === "object" &&
     value !== null &&
-    'error' in value &&
-    typeof (value as ApiError).error?.code === 'string'
+    "error" in value &&
+    typeof (value as ApiError).error?.code === "string"
   );
 }
 
 export function getErrorMessage(error: unknown): string {
   if (isApiError(error)) return error.error.message;
   if (error instanceof Error) return error.message;
-  return 'Something went wrong. Please try again.';
+  return "Something went wrong. Please try again.";
 }
 
 async function handleResponse<T>(res: Response): Promise<T> {
   const data = await res.json();
-  if (!res.ok) throw data as ApiError;
+  if (!res.ok) {
+    if (isTrackableApiError(res.status)) {
+      apiError(new URL(res.url).pathname, res.status);
+    }
+    throw data as ApiError;
+  }
   return data as T;
 }
 
 // ── Fetch Functions ────────────────────────────────────────────────────────
 
-/**
- * Fetch a transaction explanation by hash.
- * Calls: GET /api/tx/:hash → proxied to Rust GET /tx/:hash
- */
-export async function fetchTransaction(hash: string): Promise<TransactionExplanation> {
+export async function fetchTransaction(
+  hash: string
+): Promise<TransactionExplanation> {
   const res = await fetch(`/api/tx/${hash}`, {
-    headers: { Accept: 'application/json' },
+    headers: { Accept: "application/json" },
   });
   return handleResponse<TransactionExplanation>(res);
 }
 
-/**
- * Fetch an account explanation by Stellar address.
- * Calls: GET /api/account/:address → proxied to Rust GET /account/:address
- */
-export async function fetchAccount(address: string): Promise<AccountExplanation> {
+export async function fetchAccount(
+  address: string
+): Promise<AccountExplanation> {
   const res = await fetch(`/api/account/${address}`, {
-    headers: { Accept: 'application/json' },
+    headers: { Accept: "application/json" },
   });
   return handleResponse<AccountExplanation>(res);
 }
 
-/**
- * Fetch backend health status.
- * Calls: GET /api/health → proxied to Rust GET /health
- */
 export async function fetchHealth(): Promise<HealthResponse> {
-  const res = await fetch('/api/health', {
-    headers: { Accept: 'application/json' },
+  const res = await fetch("/api/health", {
+    headers: { Accept: "application/json" },
   });
   return handleResponse<HealthResponse>(res);
+}
+
+export async function fetchAccountHistory(
+  address: string,
+  limit = 10,
+  cursor?: string
+): Promise<AccountHistoryResponse> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (cursor) params.set("cursor", cursor);
+  const res = await fetch(`/api/account/${address}/history?${params}`, {
+    headers: { Accept: "application/json" },
+  });
+  return handleResponse<AccountHistoryResponse>(res);
 }

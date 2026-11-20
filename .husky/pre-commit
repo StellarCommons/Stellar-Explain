@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+
+(cd packages/cli && npx lint-staged)
+
+(cd packages/analytics && npx lint-staged)

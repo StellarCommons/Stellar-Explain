@@ -5,6 +5,12 @@ import { registerCacheCommands } from './commands/cache.js';
 import { registerExplainCommands } from './commands/explain.js';
 import { registerHealthCommand } from './commands/health.js';
 import { registerVersionCommand } from './commands/version.js';
+import { CLI_VERSION, DEFAULT_BASE_URL, isUpdateCheckDisabled } from './config/env.js';
+import { ApiClient } from './client/api.js';
+import { cacheGet, cacheSet, createScopedCacheKey } from './utils/cache.js';
+import { checkForUpdate, getUpdateNotice } from './utils/update-check.js';
+import { printError } from './utils/errors.js';
+import { ExitCode, exitProcess } from './utils/exit.js';
 
 const program = new Command();
 
@@ -22,3 +28,123 @@ registerHealthCommand(program);
 registerVersionCommand(program);
 
 program.parse(process.argv);
+program
+  .command('tx <hash>')
+  .description('Explain a transaction by hash')
+  .action(async (hash: string, opts: { parent: { opts: { url: string } } }) => {
+    try {
+      const client = new ApiClient(baseUrl);
+      const baseUrl = opts.parent.opts.url;
+      const cacheKey = createScopedCacheKey('tx', hash, baseUrl);
+      const cached = cacheGet<unknown>(cacheKey);
+      if (cached) {
+        console.log(JSON.stringify(cached, null, 2));
+        return;
+      }
+      const data = await client.explainTx(hash);
+      cacheSet(cacheKey, data, 5 * 60 * 1000);
+      console.log(JSON.stringify(data, null, 2));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      printError(msg);
+      exitProcess(ExitCode.API_ERROR);
+    }
+  });
+
+program
+  .command('account <address>')
+  .description('Explain an account by address')
+  .action(async (address: string, opts: { parent: { opts: { url: string } } }) => {
+    try {
+      const client = new ApiClient(baseUrl);
+      const baseUrl = opts.parent.opts.url;
+      const cacheKey = createScopedCacheKey('account', address, baseUrl);
+      const cached = cacheGet<unknown>(cacheKey);
+      if (cached) {
+        console.log(JSON.stringify(cached, null, 2));
+        return;
+      }
+      const data = await client.explainAccount(address);
+      cacheSet(cacheKey, data, 5 * 60 * 1000);
+      console.log(JSON.stringify(data, null, 2));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      printError(msg);
+      exitProcess(ExitCode.API_ERROR);
+    }
+  });
+
+program
+  .command('health')
+  .description('Check backend health')
+  .action(async (opts: { parent: { opts: { url: string } } }) => {
+    try {
+      const client = new ApiClient(opts.parent.opts.url);
+      const data = await client.health();
+      console.log(JSON.stringify(data, null, 2));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      printError(msg);
+      exitProcess(ExitCode.API_ERROR);
+    }
+  });
+
+program
+  .command('batch <file>')
+  .description('Process a batch of lookups from a JSON file')
+  .action(async (file: string, opts: { parent: { opts: { url: string } } }) => {
+    const fs = await import('node:fs');
+    let content: string;
+    try {
+      content = fs.readFileSync(file, 'utf-8');
+    } catch {
+      exitProcess(ExitCode.INPUT_ERROR, `Cannot read file: ${file}`);
+    }
+    let items: Array<{ type: string; identifier: string }>;
+    try {
+      items = JSON.parse(content) as Array<{ type: string; identifier: string }>;
+    } catch {
+      exitProcess(ExitCode.INPUT_ERROR, `Invalid JSON in ${file}`);
+    }
+    if (!Array.isArray(items)) {
+      exitProcess(ExitCode.INPUT_ERROR, 'Input must be a JSON array');
+    }
+    for (const item of items) {
+      if (!item || typeof item.type !== 'string' || typeof item.identifier !== 'string') {
+        exitProcess(ExitCode.INPUT_ERROR, 'Each batch item must have string "type" and "identifier" fields');
+      }
+    }
+    const client = new ApiClient(opts.parent.opts.url);
+    let failures = 0;
+    for (const item of items) {
+      try {
+        let data: unknown;
+        if (item.type === 'tx') {
+          data = await client.explainTx(item.identifier);
+        } else if (item.type === 'account') {
+          data = await client.explainAccount(item.identifier);
+        } else {
+          printError(`Unknown type: ${item.type}`);
+          failures++;
+          continue;
+        }
+        console.log(JSON.stringify({ type: item.type, identifier: item.identifier, result: data }, null, 2));
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        printError(`Failed: ${item.type} ${item.identifier}: ${msg}`);
+        failures++;
+      }
+    }
+    if (failures > 0) {
+      exitProcess(ExitCode.API_ERROR, `${failures} batch item(s) failed`);
+    }
+  });
+
+if (program.opts().updateCheck && !isUpdateCheckDisabled()) {
+  checkForUpdate().then(() => {
+    const notice = getUpdateNotice();
+    if (notice) console.error(notice);
+  });
+}
+
+program.parse();
