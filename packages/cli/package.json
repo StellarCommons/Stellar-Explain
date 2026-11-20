@@ -5,6 +5,9 @@
   "bin": {
     "stellar-explain": "./bin/stellar-explain"
   },
+  "engines": {
+    "node": ">=18"
+  },
   "files": [
     "dist",
     "bin",
