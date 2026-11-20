@@ -1,5 +1,5 @@
 import { fetchAccount, isApiError } from "@/lib/api";
-import { formatBalance } from "@/lib/utils";
+import { formatBalance } from "@/lib/formatters";
 
 interface Props {
   params: Promise<{ address: string }>;

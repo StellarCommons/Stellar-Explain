@@ -1,11 +1,11 @@
-// Fix: add unit tests for formatBalance, shortAddr, formatLedgerTime (#1309)
+// Unit tests for formatBalance, shortAddr, formatLedgerTime (#1309)
 import { formatBalance, shortAddr, formatLedgerTime } from '../formatters';
 describe('formatBalance', () => {
-  it('formats stroops to XLM', () => {
-    expect(formatBalance('10000000')).toBe('1.0000000 XLM');
+  it('passes through the backend XLM string', () => {
+    expect(formatBalance('1.0000000')).toBe('1.0000000');
   });
-  it('returns 0 XLM for falsy input', () => {
-    expect(formatBalance('')).toBe('0 XLM');
+  it('returns 0 for falsy input', () => {
+    expect(formatBalance('')).toBe('0');
   });
 });
 describe('shortAddr', () => {
