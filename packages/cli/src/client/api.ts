@@ -1,4 +1,6 @@
 import { warnInsecureUrl } from '../config/validate.js';
+import { CliError } from '../utils/errors.js';
+import { ExitCode } from '../utils/exit.js';
 
 export interface ApiResponse<T> {
   success: boolean;
@@ -6,6 +8,17 @@ export interface ApiResponse<T> {
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000;
+
+const TX_HASH_RE = /^[0-9a-f]{64}$/i;
+const ACCOUNT_RE = /^G[A-Z2-7]{55}$/;
+
+export function isValidTxHash(hash: string): boolean {
+  return TX_HASH_RE.test(hash);
+}
+
+export function isValidAccountAddress(address: string): boolean {
+  return ACCOUNT_RE.test(address);
+}
 
 export class ApiClient {
   private baseUrl: string;
@@ -69,10 +82,16 @@ export class ApiClient {
   }
 
   async explainTx(hash: string): Promise<unknown> {
-    return this.get(`/tx/${hash}`);
+    if (!isValidTxHash(hash)) {
+      throw new CliError(`Invalid transaction hash: expected 64 hex characters.`, ExitCode.INPUT_ERROR);
+    }
+    return this.get(`/tx/${encodeURIComponent(hash)}`);
   }
 
   async explainAccount(address: string): Promise<unknown> {
-    return this.get(`/account/${address}`);
+    if (!isValidAccountAddress(address)) {
+      throw new CliError(`Invalid account address: expected a 56-character Stellar address starting with G.`, ExitCode.INPUT_ERROR);
+    }
+    return this.get(`/account/${encodeURIComponent(address)}`);
   }
 }

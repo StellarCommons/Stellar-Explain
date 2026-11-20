@@ -63,4 +63,26 @@ describe('ApiClient', () => {
     const client = new ApiClient(BASE_URL, 10_000);
     await expect(client.health()).rejects.toThrow('API error: 503');
   });
+
+  it('rejects invalid tx hashes and addresses without hitting the network', async () => {
+    const spy = vi.spyOn(globalThis, 'fetch');
+    const client = new ApiClient(BASE_URL, 10_000);
+    await expect(client.explainTx('../health')).rejects.toThrow('Invalid transaction hash');
+    await expect(client.explainTx('a?b')).rejects.toThrow('Invalid transaction hash');
+    await expect(client.explainAccount('../health')).rejects.toThrow('Invalid account address');
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('requests valid tx hash and address paths', async () => {
+    const spy = vi.spyOn(globalThis, 'fetch').mockImplementation(
+      async () => new Response(JSON.stringify({ success: true, data: {} }))
+    );
+    const client = new ApiClient(BASE_URL, 10_000);
+    const hash = 'a'.repeat(64);
+    const addr = 'G' + 'A'.repeat(55);
+    await client.explainTx(hash);
+    await client.explainAccount(addr);
+    expect(spy).toHaveBeenNthCalledWith(1, `${BASE_URL}/tx/${hash}`, expect.anything());
+    expect(spy).toHaveBeenNthCalledWith(2, `${BASE_URL}/account/${addr}`, expect.anything());
+  });
 });

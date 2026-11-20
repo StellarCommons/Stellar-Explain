@@ -1,6 +1,7 @@
 import { Command } from 'commander';
-import { ApiClient } from '../client/api.js';
+import { ApiClient, isValidTxHash, isValidAccountAddress } from '../client/api.js';
 import { cacheGet, cacheSet } from '../utils/cache.js';
+import { ExitCode, exitProcess } from '../utils/exit.js';
 import { saveToHistory, HistoryEntry } from '../utils/history.js';
 
 export function registerExplainCommands(program: Command): void {
@@ -9,6 +10,9 @@ export function registerExplainCommands(program: Command): void {
     .description('Explain a transaction by hash')
     .option('--save-to-history', 'Save this lookup to local history', false)
     .action(async (hash: string, opts: { parent: { opts: { url: string } }; saveToHistory: boolean }) => {
+      if (!isValidTxHash(hash)) {
+        exitProcess(ExitCode.INPUT_ERROR, 'Invalid transaction hash: expected 64 hex characters.');
+      }
       const client = new ApiClient(opts.parent.opts.url);
       const cacheKey = `tx:${hash}`;
       const cached = cacheGet<unknown>(cacheKey);
@@ -32,6 +36,9 @@ export function registerExplainCommands(program: Command): void {
     .description('Explain an account by address')
     .option('--save-to-history', 'Save this lookup to local history', false)
     .action(async (address: string, opts: { parent: { opts: { url: string } }; saveToHistory: boolean }) => {
+      if (!isValidAccountAddress(address)) {
+        exitProcess(ExitCode.INPUT_ERROR, 'Invalid account address: expected a 56-character Stellar address starting with G.');
+      }
       const client = new ApiClient(opts.parent.opts.url);
       const cacheKey = `account:${address}`;
       const cached = cacheGet<unknown>(cacheKey);
