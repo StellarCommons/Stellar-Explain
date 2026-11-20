@@ -9,3 +9,13 @@ export async function maybeCheckForUpdates(
   if (skip) return;
   await checkFn();
 }
+
+let updateNotice: string | null = null;
+
+export async function checkForUpdate(): Promise<void> {
+  updateNotice = null;
+}
+
+export function getUpdateNotice(): string | null {
+  return updateNotice;
+}
