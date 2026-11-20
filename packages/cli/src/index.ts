@@ -18,9 +18,9 @@ program
 program
   .command('tx <hash>')
   .description('Explain a transaction by hash')
-  .action(async (hash: string, opts: { parent: { opts: { url: string } } }) => {
+  .action(async (hash: string) => {
     try {
-      const client = new ApiClient(opts.parent.opts.url);
+      const client = new ApiClient(program.opts().url as string);
       const cacheKey = `tx:${hash}`;
       const cached = cacheGet<unknown>(cacheKey);
       if (cached) {
@@ -40,9 +40,9 @@ program
 program
   .command('account <address>')
   .description('Explain an account by address')
-  .action(async (address: string, opts: { parent: { opts: { url: string } } }) => {
+  .action(async (address: string) => {
     try {
-      const client = new ApiClient(opts.parent.opts.url);
+      const client = new ApiClient(program.opts().url as string);
       const cacheKey = `account:${address}`;
       const cached = cacheGet<unknown>(cacheKey);
       if (cached) {
@@ -62,9 +62,9 @@ program
 program
   .command('health')
   .description('Check backend health')
-  .action(async (opts: { parent: { opts: { url: string } } }) => {
+  .action(async () => {
     try {
-      const client = new ApiClient(opts.parent.opts.url);
+      const client = new ApiClient(program.opts().url as string);
       const data = await client.health();
       console.log(JSON.stringify(data, null, 2));
     } catch (err: unknown) {
@@ -77,7 +77,7 @@ program
 program
   .command('batch <file>')
   .description('Process a batch of lookups from a JSON file')
-  .action(async (file: string, opts: { parent: { opts: { url: string } } }) => {
+  .action(async (file: string) => {
     const fs = await import('node:fs');
     let content: string;
     try {
@@ -99,7 +99,7 @@ program
         exitProcess(ExitCode.INPUT_ERROR, 'Each batch item must have string "type" and "identifier" fields');
       }
     }
-    const client = new ApiClient(opts.parent.opts.url);
+    const client = new ApiClient(program.opts().url as string);
     let failures = 0;
     for (const item of items) {
       try {
