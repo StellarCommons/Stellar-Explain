@@ -1,10 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { TabSwitcher } from "@/components/TabSwitcher";
 import AppShell from "@/components/AppShell";
 import { SearchBar } from "@/components/SearchBar";
+import { TX_HASH_RE, ACCOUNT_ADDRESS_RE } from "@/lib/validation";
+
+const ERROR_ID = "search-error";
 
 export default function AppPage() {
   const router = useRouter();
@@ -12,6 +15,7 @@ export default function AppPage() {
   const [txInput, setTxInput] = useState("");
   const [accountInput, setAccountInput] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
 
   const input = tab === "tx" ? txInput : accountInput;
   const setInput = tab === "tx" ? setTxInput : setAccountInput;
@@ -22,17 +26,17 @@ export default function AppPage() {
     setError(null);
 
     if (tab === "tx") {
-      if (trimmed.length !== 64) {
-        setError("Transaction hash must be 64 characters.");
+      if (!TX_HASH_RE.test(trimmed)) {
+        setError("Transaction hash must be 64 hexadecimal characters (0-9, a-f).");
         return;
       }
-      router.push(`/tx/${trimmed}`);
+      startTransition(() => router.push(`/tx/${trimmed}`));
     } else {
-      if (!trimmed.startsWith("G") || trimmed.length !== 56) {
-        setError("Please enter a valid Stellar account address.");
+      if (!ACCOUNT_ADDRESS_RE.test(trimmed)) {
+        setError("Account address must start with G and be 56 characters (A-Z, 2-7).");
         return;
       }
-      router.push(`/account/${trimmed}`);
+      startTransition(() => router.push(`/account/${trimmed}`));
     }
   }
 
@@ -56,14 +60,27 @@ export default function AppPage() {
       <SearchBar
         tab={tab}
         value={input}
-        loading={false}
-        onChange={setInput}
+        loading={isPending}
+        onChange={(v) => {
+          setError(null);
+          setInput(v);
+        }}
         onSubmit={handleExplain}
+        errorId={error ? ERROR_ID : undefined}
       />
 
       {/* Error */}
       {error && (
-        <div className="mb-6 px-4 py-3 rounded-lg bg-red-900/20 border border-red-700/30 text-red-300 text-xs font-mono">
+        <div
+          id={ERROR_ID}
+          role="alert"
+          className="mb-6 px-4 py-3 rounded-lg text-xs font-mono"
+          style={{
+            background: "var(--pill-fail-bg)",
+            border: "1px solid var(--pill-fail-text)",
+            color: "var(--pill-fail-text)",
+          }}
+        >
           {error}
         </div>
       )}

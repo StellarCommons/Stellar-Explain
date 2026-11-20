@@ -9,6 +9,7 @@ interface SearchBarProps {
   loading: boolean;
   onChange: (value: string) => void;
   onSubmit: () => void;
+  errorId?: string;
 }
 
 const PLACEHOLDERS: Record<Tab, string> = {
@@ -16,7 +17,7 @@ const PLACEHOLDERS: Record<Tab, string> = {
   account: "Paste a Stellar account address (G…)",
 };
 
-export function SearchBar({ tab, value, loading, onChange, onSubmit }: SearchBarProps) {
+export function SearchBar({ tab, value, loading, onChange, onSubmit, errorId }: SearchBarProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -56,6 +57,8 @@ export function SearchBar({ tab, value, loading, onChange, onSubmit }: SearchBar
         type="text"
         aria-label={PLACEHOLDERS[tab]}
         value={value}
+        aria-invalid={errorId ? true : undefined}
+        aria-describedby={errorId}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={handleKey}
         placeholder={PLACEHOLDERS[tab]}
