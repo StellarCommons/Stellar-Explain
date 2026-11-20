@@ -1,6 +1,6 @@
 "use client";
 
-import { isApiError } from "@/lib/errors";
+import { isApiError } from "@/lib/api";
 import type { ApiError } from "@/types";
 
 interface Props {

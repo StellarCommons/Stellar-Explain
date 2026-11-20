@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { fetchTransaction, isApiError } from "@/lib/api";
 import { trackNotFound } from "@/lib/analyticsEvents";
-import type { TransactionExplanation } from "@/types";
+import type { ApiError, TransactionExplanation } from "@/types";
 import { TransactionResult } from "@/components/TransactionResult";
 import ErrorDisplay from "@/components/ErrorDisplay";
 import AppShell from "@/components/AppShell";
@@ -22,7 +22,7 @@ function TxPageInner() {
 
   const [data, setData] = useState<TransactionExplanation | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
+  const [error, setError] = useState<ApiError | Error | null>(null);
 
   const load = useCallback(async () => {
     if (!hash) return;
@@ -36,7 +36,7 @@ function TxPageInner() {
       if (isApiError(err) && err.error.code === "NOT_FOUND") {
         trackNotFound("tx", hash);
       }
-      setError(err instanceof Error ? err : new Error(String(err)));
+      setError(isApiError(err) || err instanceof Error ? err : new Error(String(err)));
     } finally {
       setLoading(false);
     }
