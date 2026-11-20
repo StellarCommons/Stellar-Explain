@@ -2,6 +2,7 @@ import type { TransactionExplanation } from "@/types";
 import { Card } from "@/components/Card";
 import { Label } from "@/components/Label";
 import { Pill } from "@/components/Pill";
+import { AddressChip } from "@/components/AddressChip";
 import { formatLedgerTime } from "@/lib/formatters";
 
 interface TransactionResultProps {
@@ -57,7 +58,7 @@ export function TransactionResult({ data }: TransactionResultProps) {
             <div>
               <Label>Ledger</Label>
               <p className="text-sm font-mono" style={{ color: "var(--text-secondary)" }}>
-                #{data.ledger.toLocaleString()}
+                #{data.ledger.toLocaleString("en-US")}
               </p>
             </div>
           )}
@@ -89,16 +90,18 @@ export function TransactionResult({ data }: TransactionResultProps) {
         <div className="space-y-3">
           <Label>Payments ({data.payment_explanations.length})</Label>
           {data.payment_explanations.map((p, i) => (
-            <Card key={i} className="space-y-3">
+            <Card key={`${i}-${p.from}-${p.to}-${p.amount}`} className="space-y-3">
               <div
                 className="flex flex-wrap gap-x-4 gap-y-3 pt-1 border-t"
                 style={{ borderColor: "var(--border-subtle)" }}
               >
                 <div className="min-w-0">
                   <Label>From</Label>
+                  <AddressChip addr={p.from} />
                 </div>
                 <div className="min-w-0">
                   <Label>To</Label>
+                  <AddressChip addr={p.to} />
                 </div>
                 <div className="min-w-0 w-full sm:w-auto">
                   <Label>Amount</Label>
