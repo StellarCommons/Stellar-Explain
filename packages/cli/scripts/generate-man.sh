@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-OUTPUT="${1:-packages/cli/man/stellar-explain.1}"
-CLI_BIN="${2:-node packages/cli/bin/stellar-explain}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PKG_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+OUTPUT="${1:-$PKG_DIR/man/stellar-explain.1}"
+CLI_BIN="${2:-node $PKG_DIR/bin/stellar-explain}"
 
 mkdir -p "$(dirname "$OUTPUT")"
 
@@ -39,12 +42,6 @@ Check the backend API health.
 .TP
 .B batch <file>
 Process a batch of lookups from a JSON file.
-.TP
-.B cache clear
-Clear the local response cache.
-.TP
-.B version
-Show CLI and API versions.
 .SH OPTIONS
 .TP
 .B \-\-url <url>
@@ -72,9 +69,12 @@ Invalid input or configuration error.
 .TP
 .B NO_UPDATE_CHECK
 Set to 1 to disable the background update check.
+.TP
+.B STELLAR_EXPLAIN_NO_UPDATE_CHECK
+Set to 1 to disable the background update check.
 .SH CACHE
-Response data is cached in ~/.stellar-explain/. Cache TTLs are 5 minutes for
-transaction lookups and 60 seconds for account lookups.
+Response data is cached in ~/.stellar-explain/. The cache TTL is 5 minutes for
+both transaction and account lookups.
 .SH BUGS
 Report bugs at https://github.com/StellarCommons/Stellar-Explain/issues
 .SH COPYRIGHT
