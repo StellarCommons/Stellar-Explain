@@ -58,9 +58,8 @@ The app will be available at `http://localhost:3000`.
 | `npm run dev` | Start development server with Turbopack |
 | `npm run build` | Build for production |
 | `npm run start` | Start production server |
-| `npm run lint` | Run ESLint + TypeScript type check |
-| `npm run format` | Format all source files with Prettier |
-| `npm run format:check` | Check formatting without writing changes |
+| `npm run lint` | Run ESLint |
+| `npm run smoke-test` | Run UI smoke tests |
 
 ---
 
@@ -200,6 +199,6 @@ See the root [CONTRIBUTING.md](../../CONTRIBUTING.md) for contribution guideline
 
 Before opening a PR, make sure:
 ```bash
-npm run lint          # No TypeScript or ESLint errors
-npm run format:check  # Code is formatted correctly
+npm run lint
+npm run build
 ```
