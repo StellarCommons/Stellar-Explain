@@ -1,4 +1,5 @@
 import { warnInsecureUrl } from '../config/validate.js';
+import { ExitCode, exitProcess } from '../utils/exit.js';
 
 export interface ApiResponse<T> {
   success: boolean;
@@ -6,6 +7,8 @@ export interface ApiResponse<T> {
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000;
+const TX_HASH_RE = /^[0-9a-f]{64}$/i;
+const ACCOUNT_ADDRESS_RE = /^G[A-Z2-7]{55}$/;
 
 export class ApiClient {
   private baseUrl: string;
@@ -69,10 +72,19 @@ export class ApiClient {
   }
 
   async explainTx(hash: string): Promise<unknown> {
-    return this.get(`/tx/${hash}`);
+    if (!TX_HASH_RE.test(hash)) {
+      exitProcess(ExitCode.INPUT_ERROR, 'Invalid transaction hash. Expected 64 hexadecimal characters.');
+    }
+    return this.get(`/tx/${encodeURIComponent(hash)}`);
   }
 
   async explainAccount(address: string): Promise<unknown> {
-    return this.get(`/account/${address}`);
+    if (!ACCOUNT_ADDRESS_RE.test(address)) {
+      exitProcess(
+        ExitCode.INPUT_ERROR,
+        'Invalid account address. Expected a Stellar public key starting with G (56 characters).'
+      );
+    }
+    return this.get(`/account/${encodeURIComponent(address)}`);
   }
 }
