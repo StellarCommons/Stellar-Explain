@@ -113,8 +113,8 @@ packages/
 | Phase | Feature | Status |
 |-------|---------|--------|
 | 1 | Payment transaction explainability (`GET /tx/:hash`) | ✅ Done |
-| 1 | Account explainability (`GET /account/:address`) | ✅ Done |
-| 2 | Multi-operation transactions | 🚧 Planned |
+| 1 | Account explainability (`GET /account/:address`, history routes) | ✅ Done |
+| 2 | Multi-operation transactions | ✅ Done |
 | 2 | Improved error explanations | 🚧 Planned |
 | 3 | Trustlines, account creation, account merge, offers | 🔲 Future |
 | 4 | Rich frontend experience & educational UI | 🔲 Future |
@@ -168,7 +168,7 @@ configuration, and development guide.
 
 ### How to opt out
 
-Opt-out via the `DNT` header or a CLI `--no-analytics` flag is not implemented yet.
+The `@stellar-explain/analytics` package includes an `OptOutManager` utility, but end-to-end opt-out via the `DNT` header or a CLI `--no-analytics` flag is not wired up yet.
 
 ### Privacy
 
