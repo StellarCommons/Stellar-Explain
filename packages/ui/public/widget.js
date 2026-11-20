@@ -48,7 +48,7 @@
         if (doc && doc.body) {
           iframe.style.minHeight = doc.body.scrollHeight + "px";
         }
-      } catch (e) {
+      } catch {
         // cross-origin, use fallback height
         iframe.style.minHeight = "320px";
       }

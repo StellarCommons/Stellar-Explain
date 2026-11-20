@@ -14,7 +14,6 @@ function defaultTrack(name: string, properties?: Record<string, unknown>): void 
   // of logging a message that will never correspond to a real client event.
   if (typeof window === "undefined") return;
 
-  // eslint-disable-next-line no-console
   console.debug("[analytics]", {
     name,
     properties,
