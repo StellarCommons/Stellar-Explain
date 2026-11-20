@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { CLI_VERSION, DEFAULT_BASE_URL, isUpdateCheckDisabled } from './config/env.js';
 import { ApiClient } from './client/api.js';
-import { cacheGet, cacheSet } from './utils/cache.js';
+import { cacheGet, cacheSet, createScopedCacheKey } from './utils/cache.js';
 import { checkForUpdate, getUpdateNotice } from './utils/update-check.js';
 import { printError } from './utils/errors.js';
 import { ExitCode, exitProcess } from './utils/exit.js';
@@ -20,8 +20,9 @@ program
   .description('Explain a transaction by hash')
   .action(async (hash: string, opts: { parent: { opts: { url: string } } }) => {
     try {
-      const client = new ApiClient(opts.parent.opts.url);
-      const cacheKey = `tx:${hash}`;
+      const client = new ApiClient(baseUrl);
+      const baseUrl = opts.parent.opts.url;
+      const cacheKey = createScopedCacheKey('tx', hash, baseUrl);
       const cached = cacheGet<unknown>(cacheKey);
       if (cached) {
         console.log(JSON.stringify(cached, null, 2));
@@ -42,8 +43,9 @@ program
   .description('Explain an account by address')
   .action(async (address: string, opts: { parent: { opts: { url: string } } }) => {
     try {
-      const client = new ApiClient(opts.parent.opts.url);
-      const cacheKey = `account:${address}`;
+      const client = new ApiClient(baseUrl);
+      const baseUrl = opts.parent.opts.url;
+      const cacheKey = createScopedCacheKey('account', address, baseUrl);
       const cached = cacheGet<unknown>(cacheKey);
       if (cached) {
         console.log(JSON.stringify(cached, null, 2));
