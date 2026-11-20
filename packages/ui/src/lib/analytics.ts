@@ -9,3 +9,7 @@ export function subscribe(listener: Listener): () => void {
   listeners.push(listener);
   return () => { const i = listeners.indexOf(listener); if (i !== -1) listeners.splice(i, 1); };
 }
+/** Fires `account.explained` after a successful account lookup (address is not sent). */
+export function accountExplained(_address: string, durationMs: number): void {
+  emit('account.explained', { durationMs });
+}
