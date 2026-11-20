@@ -13,7 +13,6 @@ export default function NetworkStatusBanner() {
     try {
       const health = await fetchHealth();
       const isOk = health.status === "ok" && health.horizon_reachable;
-    // const isOk = false;
       setDegraded(!isOk);
       // If network recovered, un-dismiss so banner can show again if it degrades later
       if (isOk) setDismissed(false);
