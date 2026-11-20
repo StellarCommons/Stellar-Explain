@@ -185,7 +185,7 @@ The backend is deployed via **Render Blueprint** (`render.yaml` at repo root).
 
 - Runtime: Docker (`packages/core/Dockerfile`)
 - Rust version: 1.88 (required for let-chains)
-- Keep-alive: GitHub Actions cron every 5 min (`.github/workflows/keep-alive.yml`)
+- Keep-alive: best-effort GitHub Actions cron (`.github/workflows/keep-alive.yml`), scheduled every 5 min but GitHub often delays scheduled runs by hours, so it does not guarantee Render stays awake; use an external pinger (UptimeRobot, cron-job.org) hitting `/health` for that
 - Health check: `GET /health`
 
 ---

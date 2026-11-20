@@ -44,7 +44,7 @@ curl https://stellar-explain-core.onrender.com/health
 curl https://stellar-explain-core.onrender.com/tx/b9d0b2292c4e09e8eb22d036171491e87b8d2086bf8b265874c8d182cb9c9020
 ```
 
-> The backend runs on Render's free tier and is kept alive with a GitHub Actions keep-alive cron (every 5 min).
+> The backend runs on Render's free tier and is pinged by a best-effort GitHub Actions keep-alive cron. GitHub does not run `*/5` schedules reliably (runs can be hours apart), so the instance may still spin down after ~15 min idle; use an external pinger (e.g. UptimeRobot, cron-job.org) for a real guarantee.
 
 ---
 

@@ -1,7 +1,13 @@
 name: Keep Backend Alive
 
-# Pings the Render backend every 5 minutes so the free-tier instance
-# does not spin down due to inactivity (Render sleeps after ~15 min).
+# Best-effort ping of the Render backend to reduce free-tier spin-downs
+# (Render sleeps after ~15 min idle).
+#
+# LIMITATION: GitHub Actions does not guarantee scheduled runs. The */5 cron
+# is frequently delayed or skipped (observed gaps of 3-7 hours), so this
+# workflow can NOT keep the instance awake on its own. For a reliable
+# keep-alive, point an external pinger (UptimeRobot, cron-job.org) at
+# <BACKEND_URL>/health every 5 minutes.
 #
 # Setup: add BACKEND_URL as a GitHub Actions variable in the repo:
 #   Settings → Secrets and variables → Actions → Variables → New variable
