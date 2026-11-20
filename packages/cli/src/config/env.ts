@@ -1,7 +1,14 @@
 import * as path from 'node:path';
 import * as os from 'node:os';
+import * as fs from 'node:fs';
 
-export const CLI_VERSION = '0.1.0';
+function readVersion(): string {
+  const pkgPath = path.resolve(__dirname, '../../package.json');
+  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { version: string };
+  return pkg.version;
+}
+
+export const CLI_VERSION = readVersion();
 
 export const DEFAULT_BASE_URL = 'https://stellar-explain-core.onrender.com';
 

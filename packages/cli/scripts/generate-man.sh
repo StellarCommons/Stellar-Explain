@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+PKG_JSON="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/package.json"
+VERSION="$(node -p "require(process.argv[1]).version" "$PKG_JSON")"
+
 OUTPUT="${1:-packages/cli/man/stellar-explain.1}"
 CLI_BIN="${2:-node packages/cli/bin/stellar-explain}"
 
@@ -17,7 +20,7 @@ if command -v help2man &>/dev/null; then
   echo "Generated man page using help2man: $OUTPUT"
 else
   cat > "$OUTPUT" << 'MANEOF'
-.TH STELLAR-EXPLAIN 1 "2026-07-29" "@stellar-explain/cli 0.1.0" "User Commands"
+.TH STELLAR-EXPLAIN 1 "2026-07-29" "@stellar-explain/cli @VERSION@" "User Commands"
 .SH NAME
 stellar-explain \- Query the Stellar Explain backend from your terminal
 .SH SYNOPSIS
@@ -80,5 +83,6 @@ Report bugs at https://github.com/StellarCommons/Stellar-Explain/issues
 .SH COPYRIGHT
 MIT License. See https://github.com/StellarCommons/Stellar-Explain
 MANEOF
+  sed -i.bak "s/@VERSION@/$VERSION/" "$OUTPUT" && rm -f "$OUTPUT.bak"
   echo "Generated man page using template: $OUTPUT"
 fi
