@@ -2,34 +2,26 @@
 
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
-import { EventEmitter, ConsoleSink } from "@stellar-explain/analytics";
-import type { EventName } from "@stellar-explain/analytics";
-
-const emitter = new EventEmitter();
-const sink = new ConsoleSink();
-
-emitter.on("page_view", (event) => sink.send(event));
+import { emit } from "@/lib/analytics";
 
 function normalizePath(path: string): string {
   return (path.split("?")[0] ?? path).split("#")[0] ?? path;
 }
 
-function pageViewed(path: string): void {
-  emitter.track({
-    id: crypto.randomUUID(),
-    name: "page_view" as EventName,
-    timestamp: new Date(),
-    properties: { path },
-  });
+/** True when the browser asks not to be tracked (Do Not Track / Global Privacy Control). */
+function isOptedOut(): boolean {
+  if (typeof navigator === "undefined") return true;
+  const nav = navigator as Navigator & { globalPrivacyControl?: boolean };
+  return nav.doNotTrack === "1" || nav.globalPrivacyControl === true;
 }
 
-/** Fires `page_view` on mount and on every App Router pathname change. */
+/** Fires `page_view` on mount and on every App Router pathname change, unless opted out. */
 export default function AnalyticsPageView() {
   const pathname = usePathname();
 
   useEffect(() => {
-    if (pathname) {
-      pageViewed(normalizePath(pathname));
+    if (pathname && !isOptedOut()) {
+      emit("page_view", { path: normalizePath(pathname) });
     }
   }, [pathname]);
 

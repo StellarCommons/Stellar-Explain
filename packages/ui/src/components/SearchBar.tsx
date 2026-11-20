@@ -25,7 +25,10 @@ export function SearchBar({ tab, value, loading, onChange, onSubmit }: SearchBar
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "/" && document.activeElement !== inputRef.current) {
+      const el = e.target as HTMLElement | null;
+      const editable =
+        !!el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName));
+      if (e.key === "/" && !editable) {
         e.preventDefault();
         handleFocusSearch();
       }
@@ -51,12 +54,13 @@ export function SearchBar({ tab, value, loading, onChange, onSubmit }: SearchBar
       <input
         ref={inputRef}
         type="text"
+        aria-label={PLACEHOLDERS[tab]}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={handleKey}
         placeholder={PLACEHOLDERS[tab]}
         spellCheck={false}
-        className="flex-1 rounded-lg px-4 py-3 text-xs font-mono outline-none transition-all"
+        className="flex-1 rounded-lg px-4 py-3 text-xs font-mono outline-none focus-visible:ring-2 focus-visible:ring-offset-2 transition-all"
         style={{
           background: "var(--bg-card)",
           border: "1px solid var(--border-subtle)",
