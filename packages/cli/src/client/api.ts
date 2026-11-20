@@ -1,10 +1,5 @@
 import { warnInsecureUrl } from '../config/validate.js';
 
-export interface ApiResponse<T> {
-  success: boolean;
-  data: T;
-}
-
 const DEFAULT_TIMEOUT_MS = 30_000;
 
 export class ApiClient {
@@ -53,15 +48,15 @@ export class ApiClient {
     }
 
     const raw = await response.text();
-    let parsed: ApiResponse<T>;
+    let parsed: T;
     try {
-      parsed = JSON.parse(raw) as ApiResponse<T>;
+      parsed = JSON.parse(raw) as T;
     } catch {
       throw new Error(
         `Unexpected response from API at ${url}. Expected JSON but received:\n${raw.slice(0, 300)}`
       );
     }
-    return parsed.data;
+    return parsed;
   }
 
   async health(): Promise<{ status: string; horizon_reachable: boolean; version: string }> {

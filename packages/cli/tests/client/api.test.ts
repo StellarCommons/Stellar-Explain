@@ -8,6 +8,26 @@ describe('ApiClient', () => {
     vi.restoreAllMocks();
   });
 
+  it('returns bare JSON body from /health without unwrapping', async () => {
+    const body = { status: 'ok', horizon_reachable: true, version: '1.0.0' };
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify(body), { status: 200 })
+    );
+
+    const client = new ApiClient(BASE_URL, 10_000);
+    await expect(client.health()).resolves.toEqual(body);
+  });
+
+  it('returns bare JSON body from /tx without unwrapping', async () => {
+    const body = { hash: 'abc', summary: 'Payment of 10 XLM' };
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify(body), { status: 200 })
+    );
+
+    const client = new ApiClient(BASE_URL, 10_000);
+    await expect(client.explainTx('abc')).resolves.toEqual(body);
+  });
+
   it('throws a friendly message when API returns non-JSON response', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response('<html>502 Bad Gateway</html>', {
