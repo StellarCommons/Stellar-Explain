@@ -5,6 +5,19 @@
   "engines": {
     "node": ">=18"
   },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/StellarCommons/Stellar-Explain.git",
+    "directory": "packages/analytics"
+  },
+  "homepage": "https://github.com/StellarCommons/Stellar-Explain#readme",
+  "bugs": {
+    "url": "https://github.com/StellarCommons/Stellar-Explain/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
