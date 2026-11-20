@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { fetchAccount, isApiError } from '@/lib/api';
 import { trackNotFound } from '@/lib/analyticsEvents';
 import { accountExplained } from '@/lib/analytics';
-import type { AccountExplanation } from '@/types';
+import type { AccountExplanation, ApiError } from '@/types';
 import { AccountResult } from '@/components/AccountResult';
 import { TransactionHistoryTab } from '@/components/account/TransactionHistoryTab';
 import ErrorDisplay from '@/components/ErrorDisplay';
@@ -31,7 +31,7 @@ function AccountPageInner() {
 
   const [data, setData] = useState<AccountExplanation | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
+  const [error, setError] = useState<ApiError | Error | null>(null);
   const [activeTab, setActiveTab] = useState<AccountTab>('overview');
 
   // Sync tab with URL hash on mount
@@ -59,7 +59,7 @@ function AccountPageInner() {
       if (isApiError(err) && err.error.code === 'NOT_FOUND') {
         trackNotFound('account', address);
       }
-      setError(err instanceof Error ? err : new Error(String(err)));
+      setError(isApiError(err) || err instanceof Error ? err : new Error(String(err)));
     } finally {
       setLoading(false);
     }

@@ -6,11 +6,19 @@ export interface PaymentExplanation {
   amount: string;
 }
 
+export interface OperationExplanation {
+  index: number;
+  type: string;
+  summary: string;
+  details: unknown;
+}
+
 export interface TransactionExplanation {
   transaction_hash: string;
   successful: boolean;
   summary: string;
   payment_explanations: PaymentExplanation[];
+  operations?: OperationExplanation[];
   skipped_operations: number;
   memo_explanation: string | null;
   fee_explanation: string | null;
