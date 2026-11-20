@@ -2,6 +2,7 @@
 // These commands were implemented but never added to the CLI program.
 
 import { Command } from 'commander';
+import { CLI_VERSION } from '../config/env.js';
 
 export function registerCacheCommand(program: Command) {
   program
@@ -17,7 +18,6 @@ export function registerVersionCommand(program: Command) {
     .command('version')
     .description('Print the CLI version')
     .action(() => {
-      const pkg = require('../../package.json');
-      console.log(pkg.version);
+      console.log(CLI_VERSION);
     });
 }

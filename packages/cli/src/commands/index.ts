@@ -3,7 +3,6 @@
 // networks, cacheTtl, noCacheFlag, history.
 // Removed unused imports; only registered commands remain.
 
-export { txCommand } from './tx';
 export { accountCommand } from './account';
 export { healthCommand } from './health';
 export { batchCommand } from './batch';
