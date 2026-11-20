@@ -1,3 +1,4 @@
+import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getCacheDir } from '../config/env.js';
@@ -19,6 +20,23 @@ function ensureCacheDir(): void {
   }
 }
 
+function cacheFilename(key: string): string {
+  return `${crypto.createHash('sha256').update(key).digest('hex')}.json`;
+}
+
+function normalizeBaseUrl(baseUrl: string): string {
+  return baseUrl.replace(/\/+$/, '');
+}
+
+export function createScopedCacheKey(kind: 'tx' | 'account', identifier: string, baseUrl: string): string {
+  const baseHash = crypto
+    .createHash('sha256')
+    .update(normalizeBaseUrl(baseUrl))
+    .digest('hex')
+    .slice(0, 12);
+  return `${kind}:${baseHash}:${identifier}`;
+}
+
 export function cacheGet<T>(key: string): T | null {
   const memResult = IN_MEMORY_CACHE.get(key);
   if (memResult && memResult.expiry > Date.now()) {
@@ -28,7 +46,7 @@ export function cacheGet<T>(key: string): T | null {
 
   if (!diskCacheAvailable) return null;
 
-  const cachePath = path.join(getCacheDir(), `${sanitizeKey(key)}.json`);
+  const cachePath = path.join(getCacheDir(), cacheFilename(key));
   try {
     if (fs.existsSync(cachePath)) {
       const raw = fs.readFileSync(cachePath, 'utf-8');
@@ -52,14 +70,10 @@ export function cacheSet(key: string, data: unknown, ttlMs: number): void {
   ensureCacheDir();
   if (!diskCacheAvailable) return;
 
-  const cachePath = path.join(getCacheDir(), `${sanitizeKey(key)}.json`);
+  const cachePath = path.join(getCacheDir(), cacheFilename(key));
   try {
     fs.writeFileSync(cachePath, JSON.stringify(entry), 'utf-8');
   } catch {
     // ignore write errors
   }
-}
-
-function sanitizeKey(key: string): string {
-  return key.replace(/[^a-zA-Z0-9_-]/g, '_');
 }

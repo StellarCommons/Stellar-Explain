@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { ApiClient } from '../client/api.js';
-import { cacheGet, cacheSet } from '../utils/cache.js';
+import { cacheGet, cacheSet, createScopedCacheKey } from '../utils/cache.js';
 import { saveToHistory, HistoryEntry } from '../utils/history.js';
 
 export function registerExplainCommands(program: Command): void {
@@ -9,8 +9,9 @@ export function registerExplainCommands(program: Command): void {
     .description('Explain a transaction by hash')
     .option('--save-to-history', 'Save this lookup to local history', false)
     .action(async (hash: string, opts: { parent: { opts: { url: string } }; saveToHistory: boolean }) => {
-      const client = new ApiClient(opts.parent.opts.url);
-      const cacheKey = `tx:${hash}`;
+      const baseUrl = opts.parent.opts.url;
+      const client = new ApiClient(baseUrl);
+      const cacheKey = createScopedCacheKey('tx', hash, baseUrl);
       const cached = cacheGet<unknown>(cacheKey);
       if (cached) {
         console.log(JSON.stringify(cached, null, 2));
@@ -32,8 +33,9 @@ export function registerExplainCommands(program: Command): void {
     .description('Explain an account by address')
     .option('--save-to-history', 'Save this lookup to local history', false)
     .action(async (address: string, opts: { parent: { opts: { url: string } }; saveToHistory: boolean }) => {
-      const client = new ApiClient(opts.parent.opts.url);
-      const cacheKey = `account:${address}`;
+      const baseUrl = opts.parent.opts.url;
+      const client = new ApiClient(baseUrl);
+      const cacheKey = createScopedCacheKey('account', address, baseUrl);
       const cached = cacheGet<unknown>(cacheKey);
       if (cached) {
         console.log(JSON.stringify(cached, null, 2));
