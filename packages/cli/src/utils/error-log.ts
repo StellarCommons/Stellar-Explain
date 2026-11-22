@@ -8,5 +8,9 @@ export function logError(error: unknown, context?: string): void {
   const message = error instanceof Error ? error.message : String(error);
   const prefix = context ? `[${timestamp}] [${context}]` : `[${timestamp}]`;
   const entry = `${prefix} ${message}\n`;
-  try { fs.appendFileSync(LOG_FILE, entry, 'utf8'); } catch { }
+  try {
+    fs.appendFileSync(LOG_FILE, entry, 'utf8');
+  } catch {
+    // Ignore logging failures to avoid masking original errors.
+  }
 }
