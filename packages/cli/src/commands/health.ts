@@ -7,9 +7,10 @@ export function registerHealthCommand(program: Command): void {
   program
     .command('health')
     .description('Check backend health')
-    .action(async (opts: { parent: { opts: { url: string } } }) => {
+    .action(async (_opts: unknown, command: Command) => {
       try {
-        const client = new ApiClient(opts.parent.opts.url);
+        const url = String(command.optsWithGlobals().url);
+        const client = new ApiClient(url);
         const data = await client.health();
         console.log(JSON.stringify(data, null, 2));
       } catch (err) {

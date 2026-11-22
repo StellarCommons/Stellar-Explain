@@ -98,6 +98,9 @@ jobs:
       - name: Check binary size
         run: bash scripts/check-size.sh
 
+      - name: Smoke test
+        run: npm run smoke
+
       - name: Run tests
         run: npm run test
 
